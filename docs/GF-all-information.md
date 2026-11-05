@@ -475,12 +475,12 @@ All apples can be consumed even when the player's hunger bar is completely full.
 ### Giant & Mega Trees
 - **2x2 Giant Tree:**
   - Plant 4 saplings of the same type in a 2x2 square. Requires a 6x6 clear grass base.
-  - Apply exactly **8 bone meal**.
+  - Apply exactly **8 bone meal**. *(DECIDED 2026-11-05, not built yet: change to exactly 8x one sapling's average bone meal for that tree type, e.g. Apple 72, Netherite 352, Galaxium 888.)*
   - Grows an 8–10 block tall trunk with a wide domed canopy.
   - Yields **2.5x more apples** from passive drops and leaf shearing.
 - **3x3 Mega Tree:**
   - Plant 9 saplings of the same type in a 3x3 square. Requires a 7x7 clear grass base.
-  - Apply exactly **24 bone meal**.
+  - Apply exactly **24 bone meal**. *(DECIDED 2026-11-05, not built yet: change to exactly 24x one sapling's average, e.g. Apple 216, Netherite 1,056, Galaxium 2,664.)*
   - Grows a 15–20 block tall trunk with an enormous canopy.
   - Yields **2x more apples** from passive drops.
 - **Fruiting Log:** Giant and Mega trees register the north-west bottom trunk log as the dedicated fruiting origin to coordinate drop cycles.
@@ -648,14 +648,14 @@ Automated checks must pass before producing a release build:
 
 ### In-Game Testing Checklist (Untested in Client)
 The following recently added mechanics pass compilation and unit tests, but require in-game survival verification:
-- [ ] Giant tree 2x2 growth and exact 8 bone meal consumption.
-- [ ] Mega tree 3x3 growth, exact 24 bone meal consumption, and 15–20 trunk height.
+- [x] Giant tree 2x2 growth — works (2026-11-05). CHANGE REQUESTED: bone meal must be 8x one sapling's average (see Giant & Mega Trees).
+- [x] Mega tree 3x3 growth and 15–20 trunk height — works (2026-11-05). CHANGE REQUESTED: bone meal must be 24x one sapling's average.
 - [ ] North-west fruiting-log recovery and passive fruit drop cycles.
-- [ ] Spawner 24-spot raycasting line-of-sight checks preventing wall spawning.
-- [ ] Sneak-right-click on/off toggles on Diamond and Netherite spawners.
+- [x] Spawner 24-spot raycasting line-of-sight checks preventing wall spawning — works (2026-11-05).
+- [x] Sneak-right-click on/off toggles on Diamond and Netherite spawners — works (2026-11-05).
 - [ ] Dispensers correctly firing Galaxium mini-boss spawn eggs.
-- [ ] Bows shooting arrows with the overridden Piercing enchantment.
-- [ ] Omni Nexus instant brewing and 256-block beacon coverage in multiplayer or singleplayer.
+- [x] Bows shooting arrows with the overridden Piercing enchantment — works (2026-11-05).
+- [x] Omni Nexus instant brewing and 256-block beacon coverage — works (2026-11-05).
 
 ## Related pages
 - [Core Forge & Soul System](./core-forge.md) — The core machines built through this pipeline.

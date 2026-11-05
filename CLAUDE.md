@@ -22,6 +22,10 @@ Scope: Genesis Forge only. GTS (Giantess mod) notes in that file are out of scop
 3. Models and designs: smooth, organic curves.
 4. Always say what was verified (compiled / unit tested) vs. not yet tested in the game client.
 
-## Current state (2026-11-05)
-- Awaiting in-game tests: giant 2x2 / mega 3x3 trees (8 / 24 bone meal), fruiting log, spawner 24-spot line-of-sight, T3/T4 sneak toggle, dispensers firing Galaxium eggs, bow Piercing, Nexus brewing + 256-block beacon.
+## Current state (in-game test results 2026-11-05)
+- Passed in game: spawner 24-spot line-of-sight, T3/T4 sneak toggle, bow Piercing, Nexus brewing + 256-block beacon.
+- Trees work, but bone meal must change (DECIDED): giant 2x2 = exactly 8x and mega 3x3 = exactly 24x the bone meal one sapling of that type needs on average.
+  One sapling ~ round(2 x slowness / 0.45): Apple 9, Iron 13, Golden/Emerald/Diamond 22, Netherite 44, Galaxium 111 (enchanted: from each tier's own slowness).
+  So giant/mega: Apple 72/216, Iron 104/312, Gold/Emerald/Diamond 176/528, Netherite 352/1,056, Galaxium 888/2,664. Fixed count, not random. Not built yet (source code not in this repo).
+- Not tested yet (user unsure how): fruiting log / passive apple drops under giant+mega trees; dispensers firing Galaxium mini-boss eggs.
 - New ideas (not built): Galaxium final boss (summon after 8 mini-bosses), 10th Omni Nexus tab, new Galaxium weapon/tool, more enchantment reworks (e.g. Unbreaking, Efficiency, Fortune, Thorns).
