@@ -29,4 +29,5 @@ Scope: Genesis Forge only. GTS (Giantess mod) notes in that file are out of scop
   So giant/mega: Apple 72/216, Iron 104/312, Gold/Emerald/Diamond 176/528, Netherite 352/1,056, Galaxium 888/2,664. Fixed count, not random. Not built yet (source code not in this repo).
 - Not tested yet: dispensers firing Galaxium mini-boss eggs.
 - Enchantment overview for reworks: `docs/GF-Enchantments.pdf` (21 reworked, 2 partly, 19 untouched; max = 10x vanilla normal gear, 50x capped 255 Galaxium).
+- BUG (found in game 2026-11-05): Galaxium Crossbow Multishot stops at 5, should follow the 50x rule = 50 (DECIDED). Other enchantments may have the same wrong cap; to find them, read the jar (user will upload `genesisforge-1.0.0.jar`). Watch for lag: Multishot 50 = 101 arrows per shot.
 - New ideas (not built): Galaxium final boss (summon after 8 mini-bosses), 10th Omni Nexus tab, new Galaxium weapon/tool, more enchantment reworks (e.g. Unbreaking, Efficiency, Fortune, Thorns).
