@@ -22,8 +22,8 @@ Status: collecting ideas. Nothing built.
 ## Aqua Affinity
 - +0.75% damage reduction per level while fully underwater (decided).
 - Max values: normal 10 = 7.5%, Galaxium 50 = 37.5%, 100x set 100 = 75%.
-- STACKS on top of other damage reduction, multiplied (decided). Example from Zeven: 75% + 75% = 93.75% (only 25% x 25% = 6.25% of the damage gets through).
-  With the 80% armor cap: 95%. With Protection at 99%: 99.75%.
+- Applied AFTER all other damage reduction (decided): it takes its % off the damage that is left.
+  Example: 100 damage -> 80% armor -> 20 left -> Aqua 75% -> 5 taken (95% total). With Protection 99%: 99.75% total.
 - Open: helmet only? Keep vanilla underwater mining speed?
 
 ## Multishot (bug)
