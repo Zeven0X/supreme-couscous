@@ -1,0 +1,104 @@
+GENESIS FORGE (GF) - SESSION SUMMARY - 2026-11-05
+==================================================
+
+ABOUT THE MOD
+-------------
+- Genesis Forge is my custom NeoForge mod in CurseForge modpack instance 5423.
+- Minecraft 1.21.1, NeoForge 21.1.262, Java 21. Jar: genesisforge-1.0.0.jar (~26.8 MB, must stay under 30 MB).
+- Main parts: Genesis Forge block + soul orbs, 4 spawner tiers, Soul Balls, Abyssal storage, Block Drill,
+  Omni Nexus (9-tab station, enchants up to high levels), Galaxium gear (tier above Netherite),
+  8 Galaxium mini-bosses, 13 apple trees, many enchantment reworks.
+- Enchant max levels (Omni Nexus): normal gear = 10x the vanilla max, Galaxium gear = 50x (was capped at 255).
+
+1. BUG FOUND
+------------
+- Multishot stops at level 5 on the Galaxium Crossbow.
+- It should follow the 50x rule = level 50 (DECIDED).
+- Other enchantments may have the same wrong cap. Plan: read the mod jar, list every enchantment that
+  stops too early, show the list, then fix.
+- Lag warning: Multishot 50 = 101 arrows per shot (the crossbow fires up to 6 rounds per second).
+
+2. IN-GAME TEST RESULTS
+-----------------------
+T1 Giant 2x2 / mega 3x3 apple trees ......... WORKS, but bone meal amount must change (see 3)
+T2 Apples dropping under big trees ........... WORKS
+T3 Spawner 24-spot line-of-sight check ....... WORKS
+T4 Tier 3/4 spawner sneak on/off toggle ...... WORKS
+T5 Dispensers firing Galaxium mini-boss eggs . NOT TESTED YET
+T6 Piercing on normal bows ................... WORKS
+T7 Omni Nexus brewing + 256-block beacon ..... WORKS
+
+3. TREE BONE MEAL CHANGE (DECIDED, NOT BUILT)
+---------------------------------------------
+Giant 2x2 tree = exactly 8x, mega 3x3 tree = exactly 24x the average bone meal ONE sapling of that type needs.
+Fixed count, not random. One sapling average = round(2 x slowness / 0.45).
+
+Tree                        1 sapling   Giant 2x2   Mega 3x3
+Apple                           9           72         216
+Iron                           13          104         312
+Golden / Emerald / Diamond     22          176         528
+Netherite                      44          352       1,056
+Galaxium                      111          888       2,664
+Enchanted trees: same rule, using each tier's own growth slowness.
+
+4. ENCHANTMENT OVERVIEW (PDF MADE)
+----------------------------------
+- PDF of all 42 vanilla enchantments: 21 reworked by GF, 2 partly changed (Efficiency, Loyalty: only
+  Galaxium items react to them), 19 untouched. Shows vanilla max, normal max (10x), Galaxium max (50x).
+- The max levels in the PDF come from the 10x/50x rule, NOT checked in the code. Multishot proves at least
+  one is wrong, so the PDF will be corrected after reading the jar.
+- Reworked (21): Protection, Respiration, Depth Strider, Frost Walker, Soul Speed, Swift Sneak, Mending,
+  Sharpness, Bane of Arthropods, Fire Aspect, Sweeping Edge, Looting, Power, Flame, Infinity, Piercing,
+  Quick Charge, Riptide, Channeling, Wind Burst, Lure.
+- Untouched (19): Fire Protection, Blast Protection, Projectile Protection, Feather Falling, Aqua Affinity,
+  Thorns, Curse of Binding, Curse of Vanishing, Smite, Knockback, Silk Touch, Fortune, Unbreaking, Punch,
+  Multishot, Impaling, Density, Breach, Luck of the Sea.
+  (Smite, Knockback and Aqua Affinity now have reworks planned, see 6.)
+
+5. GEAR TIERS AND LEVEL LIMIT (DECIDED)
+---------------------------------------
+- Normal gear 10x vanilla max, Galaxium 50x.
+- Two FUTURE gear sets (not created yet): 75x and 100x vanilla max.
+- Minecraft 1.21.1 only stores enchantment levels 1-255. DECIDED: raise the limit above 255
+  (patch how items save enchantment levels).
+- Risky: back up the jar, test in a COPY of the world first, check /enchant, tooltips, and that items
+  keep their levels after save and reload.
+
+6. ENCHANTMENT REWORKS (DECIDED, NOT BUILT)
+-------------------------------------------
+SMITE
+- Every hit on ANY mob heals the attacker 0.005 HP per level.
+- Keeps the vanilla extra damage against undead (+2.5 per level).
+- Normal max 50 = 0.25 HP | Galaxium 250 = 1.25 HP | 100x set 500 = 2.5 HP.
+
+KNOCKBACK
+- +0.05 blocks of reach per level, for attacking AND breaking/placing blocks.
+- Still pushes mobs back like vanilla.
+- Adds on top of the Galaxium tools' +75% reach.
+- Normal max 20 = +1 block | Galaxium 100 = +5 blocks | 100x set 200 = +10 blocks.
+
+AQUA AFFINITY
+- Helmet only.
+- While fully underwater: takes 0.75% per level off the damage that is left AFTER all other damage reduction.
+- Keeps the vanilla faster mining underwater.
+- Normal max 10 = 7.5% | Galaxium 50 = 37.5% | 100x set 100 = 75%.
+- Example: 100 damage -> 80% armor -> 20 left -> Aqua Affinity 75% -> 5 damage taken (95% total).
+
+7. STILL OPEN / TO DO
+---------------------
+1. Knockback reach order (not answered yet). Normal attack reach is 3 blocks, Knockback +10:
+   a) +75% first, then Knockback: 3 x 1.75 + 10 = 15.25 blocks
+   b) Knockback first, then +75%: (3 + 10) x 1.75 = 22.75 blocks
+2. More enchantment reworks still to come.
+3. Upload genesisforge-1.0.0.jar so the fixes can be made (source code was not available).
+   Nothing above is built yet.
+4. Test T5: dispensers firing Galaxium mini-boss eggs.
+5. Other GF ideas (not built): Galaxium final boss (summoned after beating all 8 mini-bosses),
+   a 10th Omni Nexus tab, a new Galaxium weapon or tool, more enchantment reworks.
+
+8. RULES FOR WORKING ON THIS MOD
+--------------------------------
+- Show concepts/previews and ask when numbers or requirements are unclear. No unreviewed design overhauls.
+- Galaxium textures: no seams, tiling lines or mirrored faces. Designs: smooth, organic curves.
+- Always say what was only compiled/unit-tested vs. actually tested in the game.
+- Never replace the jar while Minecraft is running. Back up before installing.
