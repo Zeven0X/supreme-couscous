@@ -650,7 +650,7 @@ Automated checks must pass before producing a release build:
 The following recently added mechanics pass compilation and unit tests, but require in-game survival verification:
 - [x] Giant tree 2x2 growth — works (2026-11-05). CHANGE REQUESTED: bone meal must be 8x one sapling's average (see Giant & Mega Trees).
 - [x] Mega tree 3x3 growth and 15–20 trunk height — works (2026-11-05). CHANGE REQUESTED: bone meal must be 24x one sapling's average.
-- [ ] North-west fruiting-log recovery and passive fruit drop cycles.
+- [x] North-west fruiting-log recovery and passive fruit drop cycles — works (2026-11-05).
 - [x] Spawner 24-spot raycasting line-of-sight checks preventing wall spawning — works (2026-11-05).
 - [x] Sneak-right-click on/off toggles on Diamond and Netherite spawners — works (2026-11-05).
 - [ ] Dispensers correctly firing Galaxium mini-boss spawn eggs.
