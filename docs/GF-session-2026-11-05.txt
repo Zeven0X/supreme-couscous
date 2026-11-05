@@ -69,19 +69,19 @@ Enchanted trees: same rule, using each tier's own growth slowness.
 SMITE
 - Every hit on ANY mob heals the attacker 0.005 HP per level.
 - Keeps the vanilla extra damage against undead (+2.5 per level).
-- Normal max 50 = 0.25 HP | Galaxium 250 = 1.25 HP | 100x set 500 = 2.5 HP.
+- Normal max 50 = 0.25 HP | Galaxium 250 = 1.25 HP | 75x set 375 = 1.875 HP | 100x set 500 = 2.5 HP.
 
 KNOCKBACK
 - +0.05 blocks of reach per level, for attacking AND breaking/placing blocks.
 - Still pushes mobs back like vanilla.
 - Adds on top of the Galaxium tools' +75% reach.
-- Normal max 20 = +1 block | Galaxium 100 = +5 blocks | 100x set 200 = +10 blocks.
+- Normal max 20 = +1 block | Galaxium 100 = +5 blocks | 75x set 150 = +7.5 blocks | 100x set 200 = +10 blocks.
 
 AQUA AFFINITY
 - Helmet only.
 - While fully underwater: takes 0.75% per level off the damage that is left AFTER all other damage reduction.
 - Keeps the vanilla faster mining underwater.
-- Normal max 10 = 7.5% | Galaxium 50 = 37.5% | 100x set 100 = 75%.
+- Normal max 10 = 7.5% | Galaxium 50 = 37.5% | 75x set 75 = 56.25% | 100x set 100 = 75%.
 - Example: 100 damage -> 80% armor -> 20 left -> Aqua Affinity 75% -> 5 damage taken (95% total).
 
 7. STILL OPEN / TO DO

@@ -11,17 +11,17 @@ Status: Smite, Knockback, Aqua Affinity fully decided. More reworks coming. Noth
 
 ## Smite
 - Each hit on ANY mob heals the attacker 0.005 HP per level (decided).
-- Max values: normal 50 = 0.25 HP, Galaxium 250 = 1.25 HP, 100x set 500 = 2.5 HP (needs >255).
+- Max values: normal 50 = 0.25 HP, Galaxium 250 = 1.25 HP, 75x set 375 = 1.875 HP, 100x set 500 = 2.5 HP (needs >255).
 - Keeps vanilla +2.5 damage per level vs undead (decided).
 
 ## Knockback
 - +0.05 blocks reach per level, for attacking AND breaking/placing blocks (decided).
-- Max values: normal 20 = +1, Galaxium 100 = +5, 100x set 200 = +10 blocks.
+- Max values: normal 20 = +1, Galaxium 100 = +5, 75x set 150 = +7.5, 100x set 200 = +10 blocks.
 - Still pushes mobs back as vanilla (decided). Adds on top of the Galaxium tools' +75% reach (decided).
 
 ## Aqua Affinity
 - +0.75% damage reduction per level while fully underwater (decided).
-- Max values: normal 10 = 7.5%, Galaxium 50 = 37.5%, 100x set 100 = 75%.
+- Max values: normal 10 = 7.5%, Galaxium 50 = 37.5%, 75x set 75 = 56.25%, 100x set 100 = 75%.
 - Applied AFTER all other damage reduction (decided): it takes its % off the damage that is left.
   Example: 100 damage -> 80% armor -> 20 left -> Aqua 75% -> 5 taken (95% total). With Protection 99%: 99.75% total.
 - Helmet only (decided). Keeps vanilla faster underwater mining (decided).
