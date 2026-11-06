@@ -55,7 +55,14 @@ Status: Smite, Knockback, Aqua Affinity fully decided. More reworks coming. Noth
 - From level 50: fishing in Nether lava (Nether dimension only) catches Nether loot.
 - Needs a NEW item: Galaxium Fishing Rod (normal rods max at 30).
   Look chosen 2026-11-06: concept B (glowing violet line + comet bobber) on the vanilla rod shape, 128px Galaxium texture
-  (preview: docs/concepts/galaxium-fishing-rod-B.png). Recipe and abilities still open.
+  (preview: docs/concepts/galaxium-fishing-rod-B.png; in-hand: docs/concepts/galaxium-fishing-rod-hand-*.png).
+  Abilities (decided 2026-11-06):
+  - 2.5x faster catches. 5x casting distance.
+  - Durability = 5x a normal fishing rod (vanilla 64 -> 320). Not unbreakable.
+  - Usual Galaxium protection (fire/lava/explosion proof, never despawns); bobber floats on lava.
+  - Strong pull on hooked mobs.
+  - Item settings menu switch: PULL MOBS to the player, or PULL THE PLAYER to the bobber (grappling hook).
+  Recipe still open.
 - Loot, 10% each: blaze rod, magma cream, ghast tear, Nether quartz, glowstone dust, gold nugget,
   netherite scrap, ancient debris. Plus Netherite Apple Tree sapling 2.5%, Enchanted Netherite Apple Tree sapling 0.5%.
   The remaining 17% = empty catch for now (slots kept for future loot).
