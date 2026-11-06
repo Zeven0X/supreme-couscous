@@ -62,7 +62,13 @@ Status: Smite, Knockback, Aqua Affinity fully decided. More reworks coming. Noth
   - Usual Galaxium protection (fire/lava/explosion proof, never despawns); bobber floats on lava.
   - Strong pull on hooked mobs.
   - Item settings menu switch: PULL MOBS to the player, or PULL THE PLAYER to the bobber (grappling hook).
-  Recipe still open.
+  Pull details (decided 2026-11-06):
+  - Grapple mode: the bobber sticks to any block it hits (walls, ceilings, cliffs) and pulls the player to it.
+  - NO fall-damage protection from the grapple (normal Galaxium Boots fall protection still applies).
+  - Mob pull is strong: brings the mob all the way to the player in one pull.
+  - Works on any mob that can be pulled (no extra exclusions decided; bosses and players only if they can be moved normally).
+  - Lure stacks with the 2.5x faster catches.
+  Recipe (decided): smithing table = normal Fishing Rod + Galaxium Ingot + Galaxium Upgrade Template.
 - Loot, 10% each: blaze rod, magma cream, ghast tear, Nether quartz, glowstone dust, gold nugget,
   netherite scrap, ancient debris. Plus Netherite Apple Tree sapling 2.5%, Enchanted Netherite Apple Tree sapling 0.5%.
   The remaining 17% = empty catch for now (slots kept for future loot).
