@@ -75,6 +75,19 @@ Status: Smite, Knockback, Aqua Affinity fully decided. More reworks coming. Noth
 - Higher levels give better chances for the rare loot; exact numbers to be redesigned later, once more
   (future) items are added to the list.
 
+## Fire / Blast / Projectile Protection and Feather Falling (decided 2026-11-06, details marked ASSUMED)
+Max levels: 40 / 200 / 300 / 400 (normal / Galaxium / 75x / 100x). Full effect at level 400 (100x set).
+- Fire Protection: burning damage taken is slowed, up to 4x slower at level 400. Applies to ALL fire types,
+  including Purple Cosmic Fire. ASSUMED: linear, slow factor = 1 + 0.0075 x level
+  (40 = 1.3x | 200 = 2.5x | 300 = 3.25x | 400 = 4x).
+- Blast Protection: extra damage reduction vs explosions, up to 90% at level 400, stacks with all other
+  reduction (applied after). ASSUMED: 0.225% per level (40 = 9% | 200 = 45% | 300 = 67.5% | 400 = 90%).
+- Projectile Protection: same, vs projectiles, up to 90% at 400, stacks. Same per-level numbers.
+- Feather Falling: +0.25 blocks of safe falling per level, up to +100 blocks at level 400
+  (40 = +10 | 200 = +50 | 300 = +75 | 400 = +100), on top of the normal safe fall.
+- Open: does level 400 count per armor piece or summed over all 4 pieces; does Feather Falling add to Galaxium Boots'
+  15 safe blocks; does Fire Protection also slow lava damage?
+
 ## Multishot (bug)
 - Galaxium Crossbow stops at 5; must follow the 50x rule = 50. Waiting for the jar upload.
 
