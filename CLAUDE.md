@@ -31,4 +31,5 @@ Scope: Genesis Forge only. GTS (Giantess mod) notes in that file are out of scop
 - Enchantment overview for reworks: `docs/GF-Enchantments.pdf` (21 reworked, 2 partly, 19 untouched; max = 10x vanilla normal gear, 50x capped 255 Galaxium).
 - BUG (found in game 2026-11-05): Galaxium Crossbow Multishot stops at 5, should follow the 50x rule = 50 (DECIDED). Other enchantments may have the same wrong cap; to find them, read the jar (user will upload `genesisforge-1.0.0.jar`). Watch for lag: Multishot 50 = 101 arrows per shot.
 - Planned gear tiers: two future sets at 75x and 100x vanilla enchant max (not created). Enchant reworks in `docs/enchantment-rework-plan.md`.
+- New item needed: Galaxium Fishing Rod (for the Luck of the Sea rework; design not done).
 - New ideas (not built): Galaxium final boss (summon after 8 mini-bosses), 10th Omni Nexus tab, new Galaxium weapon/tool, more enchantment reworks (e.g. Unbreaking, Efficiency, Fortune, Thorns).

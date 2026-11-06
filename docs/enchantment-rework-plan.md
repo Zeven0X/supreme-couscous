@@ -26,23 +26,38 @@ Status: Smite, Knockback, Aqua Affinity fully decided. More reworks coming. Noth
   Example: 100 damage -> 80% armor -> 20 left -> Aqua 75% -> 5 taken (95% total). With Protection 99%: 99.75% total.
 - Helmet only (decided). Keeps vanilla faster underwater mining (decided).
 
-## Punch (idea 2026-11-06, questions open)
-- Each level lowers gravity on the arrow, up to 80% less gravity.
-- Max levels: 20 / 100 / 150 / 200.
+## Punch (decided 2026-11-06)
+- Each level lowers gravity on the projectile by 0.4%, up to 80% less gravity at level 200 (100x set).
+  Normal 20 = 8% | Galaxium 100 = 40% | 75x 150 = 60% | 100x 200 = 80%.
+- Keeps the vanilla arrow knockback.
+- Punch can now also go on crossbows (arrows and fireworks).
+- Open: all crossbows, or only the Galaxium Crossbow?
 
-## Multishot (idea 2026-11-06, questions open)
-- From level 75 (75x set): shooting up at the sky makes the arrow vanish, then arrows fall fast onto mobs within 25 blocks.
-- +1 block radius per level above 75, up to 50 blocks at level 100 (100x set).
-- Max levels: 10 / 50 / 75 / 100.
+## Multishot (decided 2026-11-06)
+- Below level 75: vanilla, +2 arrows per level, NO cap (Zeven's choice; lvl 50 = 101 arrows, lvl 100 = 201: watch for lag).
+- From level 75 (75x and 100x sets only; Galaxium max 50 never gets it): shooting 75 degrees or more upward
+  makes the arrow vanish, and about 1 second later arrows fall fast onto every target within 25 blocks.
+- +1 block radius per level above 75, up to 50 blocks at level 100.
+- ONE arrow per target. Each arrow does the crossbow's normal damage, with Power, Flame and cosmic fire.
+- Hits everyone NOT tamed by the shooter: hostile mobs, animals, villagers, other players.
+  Skips the shooter's own tamed pets (and Super Soul Ball companions, assumed).
 
-## Fortune (idea 2026-11-06, questions open)
-- From level 200 (75x set and up): ores are smelted instantly, and Fortune still multiplies the drops.
-- Ancient debris is affected too and drops a lot of netherite scrap.
-- Max levels: 30 / 150 / 225 / 300.
+## Fortune (decided 2026-11-06)
+- From level 200 (75x and 100x sets only): every smeltable ore is smelted instantly, 100% of the time,
+  including copper and other mods' ores. Ores that already drop an item (diamond, coal...) are unchanged.
+- Fortune still multiplies the smelted drops. Smelting XP is given.
+- Ancient debris drops netherite scrap with the same Fortune maths as diamond ore
+  (vanilla: 1 x random 1..level+1, so about 100 scrap per block on average at level 200).
+- All of it can be switched on/off in the Galaxium item settings menu.
+  Assumed default: if Silk Touch is also on, Silk Touch wins (block drops itself).
 
-## Luck of the Sea (idea 2026-11-06, questions open)
-- From level 50: fishing in Nether lava gives Nether loot and netherite scrap, plus future loot added later.
-- Max levels: 30 / 150 / 225 / 300 (a normal rod can't reach 50; there is no Galaxium fishing rod yet).
+## Luck of the Sea (decided 2026-11-06)
+- From level 50: fishing in Nether lava (Nether dimension only) catches Nether loot.
+- Needs a NEW item: Galaxium Fishing Rod (normal rods max at 30). Design still to do (stats, recipe, texture).
+- Loot, 10% each: blaze rod, magma cream, ghast tear, Nether quartz, glowstone dust, gold nugget,
+  netherite scrap, ancient debris. (8 x 10% = 80%; open: what fills the other 20%?)
+- Higher levels give better chances for the rare loot; exact numbers to be redesigned later, once more
+  (future) items are added to the list.
 
 ## Multishot (bug)
 - Galaxium Crossbow stops at 5; must follow the 50x rule = 50. Waiting for the jar upload.
@@ -52,6 +67,6 @@ Max levels: normal 10x / Galaxium 50x / 75x set / 100x set.
 - Levels do nothing (on/off only): Silk Touch (10/50/75/100), Curse of Binding (10/50/75/100), Curse of Vanishing (10/50/75/100).
 - Stop helping early: Fire Protection, Blast Protection, Projectile Protection, Feather Falling (all 40/200/300/400; vanilla 80% cap, nothing past ~lvl 7-10),
   Breach (40/200/300/400; full armor ignore at 7), Thorns (30/150/225/300; chance full at 7, damage never grows).
-- Grow forever, may break the game: Multishot (10/50/75/100; lag + cap bug), Punch (20/100/150/200; mobs fly away),
-  Fortune (30/150/225/300; huge drop piles), Unbreaking (30/150/225/300; almost unbreakable), Luck of the Sea (30/150/225/300; all treasure).
+- Grow forever, may break the game: Unbreaking (30/150/225/300; almost unbreakable).
+  (Multishot, Punch, Fortune and Luck of the Sea now have reworks, see above.)
 - Work fine as they are (damage keeps growing): Impaling (50/250/375/500), Density (50/250/375/500).
