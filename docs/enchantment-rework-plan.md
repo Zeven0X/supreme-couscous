@@ -102,3 +102,13 @@ Max levels: normal 10x / Galaxium 50x / 75x set / 100x set.
 - Grow forever, may break the game: Unbreaking (30/150/225/300; almost unbreakable).
   (Multishot, Punch, Fortune and Luck of the Sea now have reworks, see above.)
 - Work fine as they are (damage keeps growing): Impaling (50/250/375/500), Density (50/250/375/500).
+
+## Decisions on the last untouched enchantments (2026-11-06)
+- Curse of Binding, Curse of Vanishing, Unbreaking, Density: NO rework needed (Zeven).
+- Breach, Thorns: Zeven says they were already reworked, but there is no record of it in the docs or in this session. To check.
+
+## Silk Touch (idea 2026-11-06, questions open)
+- Increases player reach, up to +10 blocks at level 100 (0.1 blocks per level). Max levels 10 / 50 / 75 / 100.
+
+## Impaling (idea 2026-11-06, questions open)
+- Trident damage +0.5 per level. Max levels 5->50 / 250 / 375 / 500 = +25 / +125 / +187.5 / +250 damage.
