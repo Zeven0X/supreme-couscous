@@ -75,18 +75,21 @@ Status: Smite, Knockback, Aqua Affinity fully decided. More reworks coming. Noth
 - Higher levels give better chances for the rare loot; exact numbers to be redesigned later, once more
   (future) items are added to the list.
 
-## Fire / Blast / Projectile Protection and Feather Falling (decided 2026-11-06, details marked ASSUMED)
-Max levels: 40 / 200 / 300 / 400 (normal / Galaxium / 75x / 100x). Full effect at level 400 (100x set).
-- Fire Protection: burning damage taken is slowed, up to 4x slower at level 400. Applies to ALL fire types,
-  including Purple Cosmic Fire. ASSUMED: linear, slow factor = 1 + 0.0075 x level
-  (40 = 1.3x | 200 = 2.5x | 300 = 3.25x | 400 = 4x).
-- Blast Protection: extra damage reduction vs explosions, up to 90% at level 400, stacks with all other
-  reduction (applied after). ASSUMED: 0.225% per level (40 = 9% | 200 = 45% | 300 = 67.5% | 400 = 90%).
-- Projectile Protection: same, vs projectiles, up to 90% at 400, stacks. Same per-level numbers.
-- Feather Falling: +0.25 blocks of safe falling per level, up to +100 blocks at level 400
-  (40 = +10 | 200 = +50 | 300 = +75 | 400 = +100), on top of the normal safe fall.
-- Open: does level 400 count per armor piece or summed over all 4 pieces; does Feather Falling add to Galaxium Boots'
-  15 safe blocks; does Fire Protection also slow lava damage?
+## Fire / Blast / Projectile Protection and Feather Falling (decided 2026-11-06)
+Max levels per piece: 40 / 200 / 300 / 400 (normal / Galaxium / 75x / 100x).
+- The levels of all 4 armor pieces ADD UP. Maximum value needs 1600 total (400 on each of the 4 pieces).
+  So the numbers below are for a full set with the same level on every piece (one piece gives a quarter).
+- Fire Protection: burning damage is slowed up to 4x at 1600 total. Each hit stays the same size; the
+  INTERVAL between damage ticks gets longer (up to 4x). Applies to all fire, including Purple Cosmic Fire
+  (still 5% of max health per hit, but only every 4 s instead of every 1 s at max).
+  ASSUMED linear: interval = 1 + 3 x (total / 1600).
+  Full set: 40 each = 1.3x | 200 each = 2.5x | 300 each = 3.25x | 400 each = 4x.
+- Blast Protection: extra reduction vs explosions, 90% at 1600 total, applied after all other reduction (stacks).
+  ASSUMED linear. Full set: 9% | 45% | 67.5% | 90% (per level per piece: 0.05625%).
+- Projectile Protection: same, vs projectiles.
+- Feather Falling (boots only, so 400 on the boots is the max): +0.25 safe-fall blocks per level, up to +100 at 400
+  (+10 | +50 | +75 | +100). Adds on top of the normal 3 and the Galaxium Boots' 15 (max 3 + 15 + 100 = 118 blocks).
+- Open: does the longer interval also apply to lava damage? (Zeven answered "increase the interval between damages".)
 
 ## Multishot (bug)
 - Galaxium Crossbow stops at 5; must follow the 50x rule = 50. Waiting for the jar upload.
