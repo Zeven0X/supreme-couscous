@@ -112,7 +112,7 @@ Max levels: normal 10x / Galaxium 50x / 75x set / 100x set.
   = +1 / +5 / +7.5 / +10 blocks.
 - Only on tools; only the item in the hand counts. Does NOT stack with Knockback reach (a Knockback sword and a Silk Touch
   pickaxe each give reach only while held).
-- Combines with the Galaxium +75% reach the same way Knockback does (order still open, see Knockback).
+- Reach order (decided): Galaxium +75% first, then add the enchantment reach: 3 x 1.75 + 10 = 15.25 blocks (same for Knockback).
 
 ## Impaling (decided 2026-11-06, one point ASSUMED)
 - +0.5 damage per level against EVERY mob, for thrown and melee. Max levels 50 / 250 / 375 / 500
