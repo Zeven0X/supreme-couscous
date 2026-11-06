@@ -89,7 +89,7 @@ Max levels per piece: 40 / 200 / 300 / 400 (normal / Galaxium / 75x / 100x).
 - Projectile Protection: same, vs projectiles.
 - Feather Falling (boots only, so 400 on the boots is the max): +0.25 safe-fall blocks per level, up to +100 at 400
   (+10 | +50 | +75 | +100). Adds on top of the normal 3 and the Galaxium Boots' 15 (max 3 + 15 + 100 = 118 blocks).
-- Open: does the longer interval also apply to lava damage? (Zeven answered "increase the interval between damages".)
+- Applies to ALL fire-related damage, lava included (decided).
 
 ## Multishot (bug)
 - Galaxium Crossbow stops at 5; must follow the 50x rule = 50. Waiting for the jar upload.
