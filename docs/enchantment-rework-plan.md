@@ -107,8 +107,14 @@ Max levels: normal 10x / Galaxium 50x / 75x set / 100x set.
 - Curse of Binding, Curse of Vanishing, Unbreaking, Density: NO rework needed (Zeven).
 - Breach, Thorns: Zeven says they were already reworked, but there is no record of it in the docs or in this session. To check.
 
-## Silk Touch (idea 2026-11-06, questions open)
-- Increases player reach, up to +10 blocks at level 100 (0.1 blocks per level). Max levels 10 / 50 / 75 / 100.
+## Silk Touch (decided 2026-11-06)
+- +0.1 blocks of reach per level, for attacking AND breaking/placing blocks. Max levels 10 / 50 / 75 / 100
+  = +1 / +5 / +7.5 / +10 blocks.
+- Only on tools; only the item in the hand counts. Does NOT stack with Knockback reach (a Knockback sword and a Silk Touch
+  pickaxe each give reach only while held).
+- Combines with the Galaxium +75% reach the same way Knockback does (order still open, see Knockback).
 
-## Impaling (idea 2026-11-06, questions open)
-- Trident damage +0.5 per level. Max levels 5->50 / 250 / 375 / 500 = +25 / +125 / +187.5 / +250 damage.
+## Impaling (decided 2026-11-06, one point ASSUMED)
+- +0.5 damage per level against EVERY mob, for thrown and melee. Max levels 50 / 250 / 375 / 500
+  = +25 / +125 / +187.5 / +250 damage.
+- ASSUMED: vanilla +2.5 per level against aquatic mobs stays (not replaced), so aquatic mobs get +3 per level.
