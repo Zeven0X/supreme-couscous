@@ -26,6 +26,24 @@ Status: Smite, Knockback, Aqua Affinity fully decided. More reworks coming. Noth
   Example: 100 damage -> 80% armor -> 20 left -> Aqua 75% -> 5 taken (95% total). With Protection 99%: 99.75% total.
 - Helmet only (decided). Keeps vanilla faster underwater mining (decided).
 
+## Punch (idea 2026-11-06, questions open)
+- Each level lowers gravity on the arrow, up to 80% less gravity.
+- Max levels: 20 / 100 / 150 / 200.
+
+## Multishot (idea 2026-11-06, questions open)
+- From level 75 (75x set): shooting up at the sky makes the arrow vanish, then arrows fall fast onto mobs within 25 blocks.
+- +1 block radius per level above 75, up to 50 blocks at level 100 (100x set).
+- Max levels: 10 / 50 / 75 / 100.
+
+## Fortune (idea 2026-11-06, questions open)
+- From level 200 (75x set and up): ores are smelted instantly, and Fortune still multiplies the drops.
+- Ancient debris is affected too and drops a lot of netherite scrap.
+- Max levels: 30 / 150 / 225 / 300.
+
+## Luck of the Sea (idea 2026-11-06, questions open)
+- From level 50: fishing in Nether lava gives Nether loot and netherite scrap, plus future loot added later.
+- Max levels: 30 / 150 / 225 / 300 (a normal rod can't reach 50; there is no Galaxium fishing rod yet).
+
 ## Multishot (bug)
 - Galaxium Crossbow stops at 5; must follow the 50x rule = 50. Waiting for the jar upload.
 
