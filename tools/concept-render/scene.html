@@ -1,0 +1,210 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js"}}</script>
+</head><body>
+<script type="module">
+import * as THREE from 'three';
+
+const P = new URLSearchParams(location.search);
+const v0 = (k, d) => { const t = JSON.parse(P.get('t') || '{}'); return t[k] !== undefined ? t[k] : d; };
+const VIEW = P.get('view') || 'fp';        // fp_idle | fp_cast | tp_cast
+const T = JSON.parse(P.get('t') || '{}');  // tuning overrides
+const W = 1280, H = 720;
+
+const renderer = new THREE.WebGLRenderer({antialias: true, preserveDrawingBuffer: true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(W, H);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const FOG = new THREE.Color(0x3a0c0c);
+scene.background = FOG;
+scene.fog = new THREE.Fog(FOG, 6, 46);
+scene.add(new THREE.HemisphereLight(0xffb38a, 0x401010, 1.25));
+scene.add(new THREE.AmbientLight(0xffffff, v0('amb', 1.1)));
+const sun = new THREE.DirectionalLight(0xffd0b0, 1.0); sun.position.set(3, 6, 4); scene.add(sun);
+
+function rngf(seed){ let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+
+function canvasTex(w, h, fn) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); fn(g, w, h);
+  const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
+  t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const r = rngf(7);
+const netherrack = canvasTex(16, 16, (g) => {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const v = r(); const c = v < .25 ? [92, 28, 28] : v < .6 ? [116, 38, 38] : v < .9 ? [138, 52, 50] : [160, 70, 66];
+    g.fillStyle = `rgb(${c})`; g.fillRect(x, y, 1, 1);
+  }
+});
+const lavaTex = canvasTex(64, 64, (g) => {
+  for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
+    const v = 0.5 + 0.25 * Math.sin(x / 5 + Math.sin(y / 7) * 2) + 0.25 * Math.sin((x + y) / 9);
+    g.fillStyle = `rgb(${Math.round(210 + 45 * v)},${Math.round(70 + 100 * v)},${Math.round(10 + 25 * v)})`;
+    g.fillRect(x, y, 1, 1);
+  }
+});
+lavaTex.wrapS = lavaTex.wrapT = THREE.RepeatWrapping; lavaTex.repeat.set(40, 40);
+
+// lava ocean + netherrack shore + far cliffs
+const lava = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({map: lavaTex}));
+lava.rotation.x = -Math.PI / 2; lava.position.y = -0.12; scene.add(lava);
+const blockGeo = new THREE.BoxGeometry(1, 1, 1);
+const rackMat = new THREE.MeshLambertMaterial({map: netherrack});
+function block(x, y, z) { const m = new THREE.Mesh(blockGeo, rackMat); m.position.set(x + .5, y + .5, z + .5); scene.add(m); }
+const rb = rngf(3);
+for (let x = -14; x < 14; x++) for (let z = -1; z < 6; z++) { block(x, -1, z); if (z > 2 + Math.floor(rb() * 3)) block(x, 0, z); }
+for (let i = 0; i < 26; i++) { const x = -40 + i * 3.3, h = 4 + Math.floor(rb() * 10);
+  for (let y = 0; y < h; y++) for (let k = 0; k < 3; k++) block(Math.floor(x) + k, y, -38 - Math.floor(rb() * 4)); }
+for (let i = 0; i < 18; i++) { const x = 18 + Math.floor(rb() * 6), z = -30 + i * 2, h = 3 + Math.floor(rb() * 8);
+  for (let y = 0; y < h; y++) block(x, y, z); }
+
+// ---- the Galaxium Fishing Rod as a real extruded item (like Minecraft's generated item model) ----
+async function loadPixels(url) {
+  const img = new Image(); img.src = url; await img.decode();
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+  return {w: img.width, h: img.height, d: g.getImageData(0, 0, img.width, img.height).data};
+}
+function extrude(px) {
+  const n = px.w, cells = [];
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const i = (y * n + x) * 4; if (px.d[i + 3] > 40) cells.push([x, y, px.d[i], px.d[i + 1], px.d[i + 2]]);
+  }
+  const s = 1 / n; // item = 1 block wide, 1/16 block thick
+  const geo = new THREE.BoxGeometry(s, s, 1 / 16);
+  const mat = new THREE.MeshLambertMaterial({emissive: 0x221133});
+  const mesh = new THREE.InstancedMesh(geo, mat, cells.length);
+  const m = new THREE.Matrix4(), col = new THREE.Color();
+  cells.forEach(([x, y, R, G, B], k) => {
+    m.makeTranslation((x + .5) * s - .5, (n - y - .5) * s - .5, 0); mesh.setMatrixAt(k, m);
+    col.setRGB(R / 255, G / 255, B / 255, THREE.SRGBColorSpace); mesh.setColorAt(k, col);
+  });
+  const g = new THREE.Group(); g.add(mesh);
+  return g;
+}
+const TIP_UV = [108 / 128, 14 / 128]; // rod tip in the 128px texture
+function tipLocal() { return new THREE.Vector3(TIP_UV[0] - .5, .5 - TIP_UV[1], 0); }
+
+function bobberSprite() {
+  const t = canvasTex(32, 32, (g) => {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+      const d2 = (x - 15.5) ** 2 + (y - 15.5) ** 2;
+      const c = d2 < 20 ? '#fff8e6' : d2 < 60 ? '#ffcd60' : d2 < 95 ? '#aa6e23' : d2 < 130 ? '#06061a' : null;
+      if (c) { g.fillStyle = c; g.fillRect(x, y, 1, 1); }
+    }
+  });
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: t, fog: false})); sp.scale.set(.32, .32, 1);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({map: canvasTex(64, 64, (g) => {
+    const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,220,140,0.9)'); gr.addColorStop(.4, 'rgba(230,110,210,0.35)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }), blending: THREE.AdditiveBlending, depthWrite: false, fog: false}));
+  glow.scale.set(1.1, 1.1, 1);
+  const grp = new THREE.Group(); grp.add(glow); grp.add(sp);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(.28, .33, 48), new THREE.MeshBasicMaterial({color: 0xffe6a0, transparent: true, opacity: .7, side: THREE.DoubleSide, fog: false}));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = -.1; grp.add(ring);
+  const ring2 = ring.clone(); ring2.scale.setScalar(1.8); ring2.material = ring.material.clone(); ring2.material.opacity = .35; grp.add(ring2);
+  return grp;
+}
+
+function fishingLine(a, b, sag) {
+  const pts = [];
+  for (let i = 0; i <= 64; i++) { const t = i / 64; const p = a.clone().lerp(b, t); p.y -= Math.sin(Math.PI * t) * sag; pts.push(p); }
+  const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 128, 0.006, 6, false);
+  const core = new THREE.Mesh(tube, new THREE.MeshBasicMaterial({color: 0xd9b8ff, fog: false}));
+  const glow = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 128, 0.016, 6, false),
+    new THREE.MeshBasicMaterial({color: 0x8a4fe0, transparent: true, opacity: .35, fog: false}));
+  const g = new THREE.Group(); g.add(core); g.add(glow); return g;
+}
+
+// generic blocky player (plain outfit, not any existing skin)
+function skinBox(w, h, d, color, faceTex) {
+  const mats = Array(6).fill(0).map(() => new THREE.MeshLambertMaterial({color}));
+  if (faceTex) mats[4] = new THREE.MeshLambertMaterial({map: faceTex});
+  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats);
+}
+const SKIN = 0xd9a07a, SHIRT = 0x2b2350, PANTS = 0x3b3b46, HAIR = 0x2a1a12;
+function arm(withSleeve = true) {
+  const g = new THREE.Group();
+  const upper = skinBox(.25, .75, .25, SKIN);
+  upper.position.y = -.375; g.add(upper);
+  if (withSleeve) { const sl = skinBox(.27, .3, .27, SHIRT); sl.position.y = -.15; g.add(sl); }
+  return g;
+}
+
+const camera = new THREE.PerspectiveCamera(70, W / H, 0.02, 200);
+scene.add(camera);
+
+const idle = extrude(await loadPixels('rod-item-128.png'));
+const cast = extrude(await loadPixels('rod-cast-128.png'));
+const v = (k, d) => (T[k] !== undefined ? T[k] : d);
+
+if (VIEW.startsWith('fp')) {
+  camera.position.set(0, 1.62, 1.2); camera.rotation.set(v('pitch', -0.12), 0, 0);
+  // right arm + item live in camera space, like the first-person renderer
+  const armG = arm(true);
+  armG.position.set(v('ax', .56), v('ay', -.52), v('az', -.62));
+  armG.rotation.set(v('arx', -1.15), v('ary', .25), v('arz', .35));
+  camera.add(armG);
+  const rod = VIEW === 'fp_idle' ? idle : cast;
+  armG.visible = v('arm', 1) > 0;
+  camera.add(rod);
+  rod.position.set(v('rx', .34), v('ry', -.18), v('rz', -.62));
+  rod.rotation.set(v('rrx', 0), v('rry', -1.2), v('rrz', .25), 'YXZ');
+  rod.scale.setScalar(v('rs', .9));
+  // put the hand exactly on the rod handle
+  rod.updateMatrix();
+  const handle = new THREE.Vector3(-.33, -.36, 0).applyMatrix4(rod.matrix);
+  armG.updateMatrix();
+  const reach = new THREE.Vector3(0, -.68, 0).applyQuaternion(armG.quaternion);
+  armG.position.copy(handle).sub(reach);
+  if (VIEW === 'fp_cast') {
+    scene.updateMatrixWorld(true);
+    const tip = rod.localToWorld(tipLocal());
+    const bob = new THREE.Vector3(-.6, -.04, -8.5);
+    scene.add(fishingLine(tip, bob, v('sag', .3)));
+    const b = bobberSprite(); b.position.copy(bob); scene.add(b);
+  }
+} else {
+  // third person: player on the shore facing the lava, fishing
+  const player = new THREE.Group();
+  const face = canvasTex(8, 8, (g) => {
+    g.fillStyle = '#d9a07a'; g.fillRect(0, 0, 8, 8);
+    g.fillStyle = '#2a1a12'; g.fillRect(0, 0, 8, 2);
+    g.fillStyle = '#ffffff'; g.fillRect(1, 4, 2, 1); g.fillRect(5, 4, 2, 1);
+    g.fillStyle = '#5b3fd0'; g.fillRect(2, 4, 1, 1); g.fillRect(5, 4, 1, 1);
+    g.fillStyle = '#9a5a44'; g.fillRect(3, 6, 2, 1);
+  });
+  const head = skinBox(.5, .5, .5, SKIN, face); head.position.y = 1.75; player.add(head);
+  const hair = skinBox(.52, .14, .52, HAIR); hair.position.y = 1.96; player.add(hair);
+  const body = skinBox(.5, .75, .25, SHIRT); body.position.y = 1.125; player.add(body);
+  for (const sx of [-.125, .125]) { const leg = skinBox(.25, .75, .25, PANTS); leg.position.set(sx, .375, 0); player.add(leg); }
+  const lArm = arm(true); lArm.position.set(.375, 1.5, 0); lArm.rotation.x = .05; player.add(lArm);
+  const rArm = arm(true); rArm.position.set(-.375, 1.5, 0); rArm.rotation.set(v('tarx', -.75), 0, v('tarz', 0)); player.add(rArm);
+  const holder = new THREE.Group(); holder.position.set(0, -.72, .06); rArm.add(holder);
+  cast.position.set(v('trx', 0), v('try', .3), v('trz', .3));
+  cast.rotation.set(v('trrx', .2), v('trry', -1.5708), v('trrz', .55));
+  cast.scale.setScalar(v('trs', 1.1));
+  cast.updateMatrix();
+  const hp = new THREE.Vector3(-.33, -.36, 0).applyMatrix4(cast.matrix).sub(cast.position);
+  cast.position.set(-hp.x, -hp.y, -hp.z);
+  holder.add(cast);
+  player.position.set(0, 0, 2.2);
+  player.rotation.y = Math.PI; // face -z (the lava)
+  scene.add(player);
+  scene.updateMatrixWorld(true);
+  const tip = cast.localToWorld(tipLocal());
+  const bob = new THREE.Vector3(-.4, -.04, -5.5);
+  scene.add(fishingLine(tip, bob, .7));
+  const b = bobberSprite(); b.position.copy(bob); scene.add(b);
+  camera.position.set(v('cx', 4.6), v('cy', 2.6), v('cz', 3.4));
+  camera.lookAt(v('lx', -.6), v('ly', 1.4), v('lz', -.6));
+}
+
+renderer.render(scene, camera);
+window.__done = true;
+</script></body></html>
