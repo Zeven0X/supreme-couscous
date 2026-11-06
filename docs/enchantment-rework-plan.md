@@ -53,7 +53,9 @@ Status: Smite, Knockback, Aqua Affinity fully decided. More reworks coming. Noth
 
 ## Luck of the Sea (decided 2026-11-06)
 - From level 50: fishing in Nether lava (Nether dimension only) catches Nether loot.
-- Needs a NEW item: Galaxium Fishing Rod (normal rods max at 30). Design still to do (stats, recipe, texture).
+- Needs a NEW item: Galaxium Fishing Rod (normal rods max at 30).
+  Look chosen 2026-11-06: concept B (glowing violet line + comet bobber) on the vanilla rod shape, 128px Galaxium texture
+  (preview: docs/concepts/galaxium-fishing-rod-B.png). Recipe and abilities still open.
 - Loot, 10% each: blaze rod, magma cream, ghast tear, Nether quartz, glowstone dust, gold nugget,
   netherite scrap, ancient debris. Plus Netherite Apple Tree sapling 2.5%, Enchanted Netherite Apple Tree sapling 0.5%.
   The remaining 17% = empty catch for now (slots kept for future loot).
