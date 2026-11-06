@@ -31,7 +31,7 @@ Status: Smite, Knockback, Aqua Affinity fully decided. More reworks coming. Noth
   Normal 20 = 8% | Galaxium 100 = 40% | 75x 150 = 60% | 100x 200 = 80%.
 - Keeps the vanilla arrow knockback.
 - Punch can now also go on crossbows (arrows and fireworks).
-- Open: all crossbows, or only the Galaxium Crossbow?
+- Only the Galaxium Crossbow can take Punch (decided). Normal crossbows stay vanilla.
 
 ## Multishot (decided 2026-11-06)
 - Below level 75: vanilla, +2 arrows per level, NO cap (Zeven's choice; lvl 50 = 101 arrows, lvl 100 = 201: watch for lag).
@@ -49,13 +49,14 @@ Status: Smite, Knockback, Aqua Affinity fully decided. More reworks coming. Noth
 - Ancient debris drops netherite scrap with the same Fortune maths as diamond ore
   (vanilla: 1 x random 1..level+1, so about 100 scrap per block on average at level 200).
 - All of it can be switched on/off in the Galaxium item settings menu.
-  Assumed default: if Silk Touch is also on, Silk Touch wins (block drops itself).
+  If Silk Touch is also on, Silk Touch wins (block drops itself) (decided).
 
 ## Luck of the Sea (decided 2026-11-06)
 - From level 50: fishing in Nether lava (Nether dimension only) catches Nether loot.
 - Needs a NEW item: Galaxium Fishing Rod (normal rods max at 30). Design still to do (stats, recipe, texture).
 - Loot, 10% each: blaze rod, magma cream, ghast tear, Nether quartz, glowstone dust, gold nugget,
-  netherite scrap, ancient debris. (8 x 10% = 80%; open: what fills the other 20%?)
+  netherite scrap, ancient debris. Plus Netherite Apple Tree sapling 2.5%, Enchanted Netherite Apple Tree sapling 0.5%.
+  The remaining 17% = empty catch for now (slots kept for future loot).
 - Higher levels give better chances for the rare loot; exact numbers to be redesigned later, once more
   (future) items are added to the list.
 
