@@ -28,3 +28,12 @@ Status: Smite, Knockback, Aqua Affinity fully decided. More reworks coming. Noth
 
 ## Multishot (bug)
 - Galaxium Crossbow stops at 5; must follow the 50x rule = 50. Waiting for the jar upload.
+
+## Still need a rework (16 untouched enchantments)
+Max levels: normal 10x / Galaxium 50x / 75x set / 100x set.
+- Levels do nothing (on/off only): Silk Touch (10/50/75/100), Curse of Binding (10/50/75/100), Curse of Vanishing (10/50/75/100).
+- Stop helping early: Fire Protection, Blast Protection, Projectile Protection, Feather Falling (all 40/200/300/400; vanilla 80% cap, nothing past ~lvl 7-10),
+  Breach (40/200/300/400; full armor ignore at 7), Thorns (30/150/225/300; chance full at 7, damage never grows).
+- Grow forever, may break the game: Multishot (10/50/75/100; lag + cap bug), Punch (20/100/150/200; mobs fly away),
+  Fortune (30/150/225/300; huge drop piles), Unbreaking (30/150/225/300; almost unbreakable), Luck of the Sea (30/150/225/300; all treasure).
+- Work fine as they are (damage keeps growing): Impaling (50/250/375/500), Density (50/250/375/500).
