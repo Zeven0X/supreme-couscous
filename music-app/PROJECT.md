@@ -29,6 +29,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: Star filter moved to the top of the Filters panel.
 - 2026-11-23: **Stars 1–10** (song cards, save windows, Filters → Stars: or more / exactly / or less) and **information inside saved files** (label, track number, stars, blacklist / favourite, plays; read back on upload). M4A saves now keep the label.
 - 2026-11-23: **Smart shuffle** (playlists + library) and **Save a playlist** (new window, one file per song or one big MP3/M4A with chapters). Fixed: the Library page didn't fill its panel; shuffle could bounce between 2 songs; the "ask where to save" setting works again in the new save windows.
 - 2026-11-23: **Playlists tab** in the Library: make playlists, add songs (right-click, drag cards, Add files), drag to reorder, Play, Shuffle, picture, rename, delete.

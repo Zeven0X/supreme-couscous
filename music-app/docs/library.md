@@ -96,7 +96,7 @@ The Library page holds all your songs: upload, search, tabs, filters, picture si
   - Save song: a **Stars** row (big stars) and a new **Track number** box.
   - Save playlist / many songs: small stars on each song in the list.
   - Stars changed there are kept on the song.
-- **Star filter:** Filters → **Stars** (bottom of the panel). Click a number of stars, then **or more** / **exactly** / **or less**. Example: 6 stars + "or more" = **6⭐+**. Songs without stars are hidden while the star filter is on. **Clear** at the top of Filters turns it off. Click the same star again to turn the filter off.
+- **Star filter:** Filters → **Stars** (the first group at the top of the panel). Click a number of stars, then **or more** / **exactly** / **or less**. Example: 6 stars + "or more" = **6⭐+**. Songs without stars are hidden while the star filter is on. **Clear** at the top of Filters turns it off. Click the same star again to turn the filter off.
 
 ### Checked
 - Automatic test: 6⭐ or more / 4⭐ or less / exactly 6⭐, unrated hidden.
@@ -104,6 +104,7 @@ The Library page holds all your songs: upload, search, tabs, filters, picture si
 - **Not yet tried by you.**
 
 ### History
+- 🔄 2026-11-23: Star filter moved to the **top** of the Filters panel. Before: at the bottom, you had to scroll to find it. Your words: "Star filter should be in the filter section."
 - 2026-11-23: Built. Your words: "in any save menu, the user can rate the song from 1-10 stars so in the library can select the songs to listen to with the amount of stars. For example 6⭐️+ or 4⭐️-".
 
 ## Information inside saved files — current state ✅ part 5 of 5 (2026-11-23)
