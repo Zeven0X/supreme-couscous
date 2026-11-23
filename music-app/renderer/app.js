@@ -1,5 +1,5 @@
 'use strict';
-/* global ICONS, tf, TFStudio, TFSaveName, TFPlaylists */
+/* global ICONS, tf, TFStudio, TFSaveName, TFPlaylists, TFShuffle */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 function h(tag, attrs = {}, ...kids) {
@@ -209,11 +209,16 @@ const skip = (s) => seek(audio.currentTime + s);
 function loadTrack(id, { autoplay = false, keepQueue = true, stop = null } = {}) {
   const t = S.byId.get(id);
   if (!t) return;
+  countPlay(); // the song that was playing: did you hear enough of it to count?
   S.currentId = id;
+  S.heardId = id; S.heard = 0;
   if (!stop && window.TFMap) window.TFMap.stopPlay(); // a normal song was started: the map stops leading
   S.playStop = stop; // set when a song is played from the map: { fx, title, save }
   S.playFx = stop ? stop.fx : null;
-  if (!keepQueue || !S.queue.includes(id)) S.queue = makeQueue(id);
+  if (stop) { /* a map song: the map leads, the library / playlist order stays as it was */ }
+  else if (!keepQueue || !S.queue.includes(id)) { S.queue = makeQueue(id); S.qPos = 0; }
+  else if (S.queue[S.qPos] !== id) S.qPos = S.queue[(S.qPos ?? -1) + 1] === id ? (S.qPos ?? -1) + 1 : S.queue.lastIndexOf(id);
+  if (!stop) topUpShuffle();
   audio.src = t.mediaUrl;
   audio.load();
   TFStudio.update(deck, id, liveFx(), { fresh: true });
@@ -231,17 +236,63 @@ function loadTrack(id, { autoplay = false, keepQueue = true, stop = null } = {})
   drawWave();
   if (autoplay) play();
 }
-// The order songs play in: the library as shown, or shuffled (Settings → Playing). The chosen song goes first.
+// The order songs play in: the library as shown, or smart shuffle (Settings → Playing). The chosen song goes first.
 function makeQueue(id) {
   const ids = visibleTracks().map((x) => x.id);
-  if (!S.settings.shuffle) { if (!ids.includes(id)) ids.unshift(id); return ids; }
-  const rest = ids.filter((x) => x !== id);
-  for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
-  return [id, ...rest];
+  if (!S.settings.shuffle) { S.shufflePool = null; if (!ids.includes(id)) ids.unshift(id); return ids; }
+  return startShuffle(ids, id);
+}
+// Smart shuffle (shuffle.js): the next songs are picked one by one by weighted luck, always 3 ahead.
+function startShuffle(poolIds, firstId) {
+  S.shufflePool = poolIds.slice();
+  S.queue = [firstId];
+  S.qPos = -1; // the first song is not loaded yet
+  topUpShuffle();
+  return S.queue;
+}
+function topUpShuffle() {
+  if (!S.shufflePool) return;
+  const pool = S.shufflePool.map((id) => S.byId.get(id)).filter(Boolean);
+  if (!pool.length) return;
+  const i = Math.max(0, qPos());
+  while (S.queue.length - 1 - i < 3) {
+    const t = TFShuffle.pick(pool, S.queue, S.playClock || 0);
+    if (!t) break;
+    S.queue.push(t.id);
+  }
+  if (S.queue.length > 300) { const cut = S.queue.length - 200; S.queue = S.queue.slice(cut); S.qPos = Math.max(0, (S.qPos || 0) - cut); }
+}
+// A song counts as "played" for smart shuffle once you heard at least 30 s of it (or half, if shorter).
+function countPlay() {
+  const id = S.heardId, secs = S.heard || 0;
+  S.heard = 0; S.heardId = null;
+  const t = id && S.byId.get(id);
+  if (!t || secs < Math.min(30, (t.duration || 60) / 2)) return;
+  tf.trackPlayed(id).then((r) => { if (r) { upsertTrack(r.track); S.playClock = r.clock; markSongs(); } }).catch(() => {});
+}
+async function setMark(ids, mark, pool = S.tracks.length) {
+  const list = await guard(() => tf.trackMark(ids, mark, pool));
+  if (!list) return;
+  for (const t of list) upsertTrack(t);
+  markSongs();
+  const n = ids.length === 1 ? `"${S.byId.get(ids[0]).title}"` : `${ids.length} songs`;
+  toast(mark === 'black' ? `${n} will play much less in shuffle (about 1 in 10) for the next ${TFShuffle.windowOf(pool)} songs.`
+    : mark === 'fav' ? `${n} will play more often in shuffle for the next ${TFShuffle.windowOf(pool)} songs.` : `${n} is back to normal.`, { type: 'ok', ms: 4000 });
+}
+// Little marks on song cards and playlist rows: 🚫 blacklisted, ♥ favourite, ↓ played a lot lately.
+function markSongs() {
+  const n = S.tracks.length;
+  for (const c of $$('#grid .card')) {
+    const t = S.byId.get(c.dataset.id);
+    const b = t ? TFShuffle.badge(t, S.playClock || 0, n) : '';
+    c.dataset.mark = b;
+  }
+  TFPlaylists.render();
 }
 function playTrack(id) {
   S.playlistId = null; // a library song: the library order, not a playlist
   S.queue = makeQueue(id);
+  S.qPos = -1;
   loadTrack(id, { autoplay: true });
 }
 // Next / previous song (also used by the keyboard).
@@ -252,8 +303,8 @@ function nextSong() {
 }
 function prevSong() {
   if (audio.currentTime > 3 || (window.TFMap && window.TFMap.playing)) { seek(0); return; }
-  const i = S.queue.indexOf(S.currentId);
-  if (i > 0) loadTrack(S.queue[i - 1], { autoplay: true }); else seek(0);
+  const i = qPos();
+  if (i > 0) { S.qPos = i - 1; loadTrack(S.queue[i - 1], { autoplay: true }); } else seek(0);
 }
 // Blend library songs (Settings → Playing): start the next song a little before this one ends.
 setInterval(() => {
@@ -265,8 +316,14 @@ setInterval(() => {
   if (!n || left > Math.min(secs, audio.duration / 2) || left < 0.15) return;
   if (beginCrossfade(left)) loadTrack(n.id, { autoplay: true });
 }, 100);
+// Where the playing song is in the play order. A song can be in the order more than once (shuffle),
+// so the exact place is remembered (S.qPos) instead of searching for the song.
+function qPos() {
+  if (S.queue[S.qPos] === S.currentId) return S.qPos;
+  return S.queue.lastIndexOf(S.currentId);
+}
 function upNext() {
-  const i = S.queue.indexOf(S.currentId);
+  const i = qPos();
   return S.queue.slice(i + 1).map((id) => S.byId.get(id)).filter(Boolean);
 }
 
@@ -274,6 +331,8 @@ onAudio('loadedmetadata', () => { applyFx(); drawWave(); });
 onAudio('play', () => setPlayIcon(true));
 onAudio('pause', () => setPlayIcon(false));
 onAudio('ended', () => {
+  countPlay(); // heard to the end: counts for smart shuffle
+  S.heardId = S.currentId; // (a repeat of the same song counts again)
   if (window.TFMap && window.TFMap.onEnded()) return; // a map is playing: it picks the next song itself
   if (S.playFx) { setPlayIcon(false); return; }
   if (S.settings.whenEnds === 'repeat') { audio.currentTime = 0; play(); return; }
@@ -292,7 +351,7 @@ function setPlayIcon(playing) {
 }
 // steady UI tick (waveform playhead, time, fades)
 setInterval(() => {
-  if (!audio.paused) { updateGain(false); drawWave(); }
+  if (!audio.paused) { updateGain(false); drawWave(); S.heard = (S.heard || 0) + 0.04 * (audio.playbackRate || 1); }
 }, 40);
 
 // ---------------------------------------------------------------- effect cards
@@ -566,6 +625,7 @@ function renderGrid() {
   }
   markSelection();
   markPlaying();
+  markSongs();
   updateDatalists();
 }
 function markSelection() {
@@ -681,6 +741,13 @@ function showCardMenu(x, y, id) {
     [many ? `Add ${S.selected.length} songs to playlist…` : 'Add to playlist…', () => TFPlaylists.pickFor(many ? [...S.selected] : [id])],
     null,
     ['Save song…', () => openSaveModal(id)],
+    null,
+    S.byId.get(id).mark === 'black' && TFShuffle.badge(S.byId.get(id), S.playClock || 0, S.tracks.length) === 'black'
+      ? ['Back to normal in shuffle', () => setMark(many ? [...S.selected] : [id], null)]
+      : ['🚫 Blacklist: play much less in shuffle', () => setMark(many ? [...S.selected] : [id], 'black')],
+    S.byId.get(id).mark === 'fav' && TFShuffle.badge(S.byId.get(id), S.playClock || 0, S.tracks.length) === 'fav'
+      ? ['Back to normal in shuffle', () => setMark(many ? [...S.selected] : [id], null)]
+      : ['♥ Favourite: play more in shuffle', () => setMark(many ? [...S.selected] : [id], 'fav')],
     many ? [`Save ${S.selected.length} songs as album / one file…`, () => openAlbumModal()] : null,
     null,
     ['Show original file', () => tf.showItem(S.byId.get(id).srcPath)],
@@ -769,6 +836,7 @@ async function forgetTracks(ids) {
   }
   S.tracks = S.tracks.filter((t) => !ids.includes(t.id));
   S.queue = S.queue.filter((id) => !ids.includes(id));
+  S.qPos = S.queue.lastIndexOf(S.currentId);
   S.selected = [];
   if (!S.tabs.includes(S.activeTab)) S.activeTab = S.tabs[0] || null;
   renderAll();
@@ -902,7 +970,7 @@ async function openSaveModal(id) {
       const bytes = type.lossy ? (kbps * 1000 / 8) * secs : (type.id === 'wav' ? 176400 : 176400 * 0.6) * secs;
       qHint.textContent = `${type.lossy ? 'About' : 'Best quality, about'} ${fmtSize(bytes)}`;
       extEl.textContent = `.${type.id}`;
-      dirEl.textContent = dir;
+      dirEl.textContent = S.settings.askWhereToSave ? 'Windows will ask where (Settings → Saving)' : dir;
       dirEl.title = dir;
       saveBtn.textContent = `Save ${type.label}`;
       const hasPic = coverImage || t.coverUrl;
@@ -917,8 +985,9 @@ async function openSaveModal(id) {
       const tags = Object.fromEntries(Object.entries(fields).map(([k, i]) => [k, i.value.trim()]));
       if (!tags.title) tags.title = t.title;
       close();
-      const r = await guard(() => tf.exportTrack(t.id, { tags, coverImage, format: type.id, bitrate: kbps, name: nameIn.value.trim() || tags.title, dir }), 'Save: ');
-      if (r && r.path) Object.assign(S.settings, { format: type.id, bitrate: kbps, exportDir: dir }); // remembered for next time
+      const ask = S.settings.askWhereToSave; // Settings → Saving: Windows asks where to save
+      const r = await guard(() => tf.exportTrack(t.id, { tags, coverImage, format: type.id, bitrate: kbps, name: nameIn.value.trim() || tags.title, dir: ask ? null : dir }), 'Save: ');
+      if (r && r.path) Object.assign(S.settings, { format: type.id, bitrate: kbps, ...(ask ? {} : { exportDir: dir }) }); // remembered for next time
       await afterSave(r);
     };
     const row = (label, ...kids) => [h('span', { class: 'sv-l' }, label), h('div', { class: 'sv-r' }, ...kids)];
@@ -947,69 +1016,122 @@ async function openSaveModal(id) {
   });
 }
 
-// 6.3 save many songs as one big MP3 or as an album
-async function openAlbumModal() {
-  let ids = S.selected.filter((id) => S.byId.has(id));
-  if (ids.length < 2) { toast('Select 2 or more songs first: Ctrl+click or Shift+click them in the library (Ctrl+A selects all).', { ms: 7000 }); return; }
+// 6.3 save many songs (a playlist, or songs picked in the library): one file per song, or one big file
+async function openAlbumModal(idsIn, { playlist = null } = {}) {
+  let ids = (idsIn || S.selected).filter((id) => S.byId.has(id));
+  if (ids.length < 2) { toast(playlist ? 'Add at least 2 songs to the playlist first.' : 'Select 2 or more songs first: Ctrl+click or Shift+click them in the library (Ctrl+A selects all).', { ms: 7000 }); return; }
   let coverImage = null, coverPreview = null;
   let coverTrackId = (ids.map((id) => S.byId.get(id)).find((t) => t.coverUrl) || {}).id || null;
+  const usePlCover = !!(playlist && playlist.coverUrl);
+  let plCover = usePlCover;
+  let mode = S.settings.albumMode === 'single' ? 'single' : 'album';
+  let type = SAVE_TYPES.find((x) => x.id === (S.settings.albumFormat || S.settings.format)) || SAVE_TYPES[0];
+  let kbps = [128, 192, 256, 320].includes(+S.settings.bitrate) ? +S.settings.bitrate : 320;
+  let dir = S.settings.exportDir;
+  let nameTouched = false;
   await modal((box, close) => {
+    box.classList.add('save-win');
     const first = S.byId.get(ids[0]);
-    const inp = (v, ph) => h('input', { value: v || '', placeholder: ph || '', spellcheck: 'false' });
-    const f = { title: inp(first.album || 'My Album'), artist: inp(first.artist), date: inp(first.date), genre: inp(first.genre), label: inp(first.label) };
+    const inp = (v) => h('input', { value: v || '', spellcheck: 'false' });
+    const f = { title: inp(playlist ? playlist.name : (first.album || 'My Album')), artist: inp(playlist ? '' : first.artist), date: inp(first.date), genre: inp(first.genre), label: inp(first.label) };
+    const field = (k, label) => h('label', { class: 'field' }, label, f[k]);
     const art = h('div', { class: 'cover-pick', title: 'Click to choose a picture' });
-    const warn = h('div', { class: 'warn-text' }, 'No picture yet — click the square, or click a song\'s small picture below.');
+    const warn = h('div', { class: 'warn-text' });
     const list = h('div', { class: 'song-list' });
     const renderCover = () => {
       art.innerHTML = '';
       if (coverImage) art.append(coverPreview || h('div', { class: 'ph', style: { background: '#333' } }, h('span', {}, 'New picture chosen')));
+      else if (plCover) art.append(h('img', { class: 'cover-img', src: playlist.coverUrl, alt: '' }));
       else if (coverTrackId) art.append(coverEl(S.byId.get(coverTrackId)));
       else art.append(placeholder({ title: f.title.value || 'Album' }));
-      warn.hidden = !!(coverImage || coverTrackId);
+      art.append(h('span', { class: 'sv-art-tip' }, 'Click to change picture'));
+      update();
     };
     const renderList = () => {
       list.innerHTML = '';
       ids.forEach((id, i) => {
         const t = S.byId.get(id);
-        const mini = h('div', { class: `mini-art${!coverImage && coverTrackId === id ? ' chosen' : ''}`, title: t.coverUrl ? 'Use this picture as the cover' : 'No picture' }, coverEl(t));
-        if (t.coverUrl) mini.addEventListener('click', () => { coverTrackId = id; coverImage = null; renderCover(); renderList(); });
+        const chosen = !coverImage && !plCover && coverTrackId === id;
+        const mini = h('div', { class: `mini-art${chosen ? ' chosen' : ''}`, title: t.coverUrl ? 'Use this picture as the cover' : 'No picture' }, coverEl(t));
+        if (t.coverUrl) mini.addEventListener('click', () => { coverTrackId = id; coverImage = null; plCover = false; renderCover(); renderList(); });
         list.append(h('div', { class: 'song-row' }, h('span', { class: 'n' }, i + 1), mini, h('span', { class: 't' }, t.title, t.artist ? h('span', { class: 'muted' }, ` — ${t.artist}`) : null),
           h('button', { title: 'Move up', html: ICONS.up, disabled: i === 0, onclick: () => { [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]]; renderList(); } }),
           h('button', { title: 'Move down', html: ICONS.down, disabled: i === ids.length - 1, onclick: () => { [ids[i + 1], ids[i]] = [ids[i], ids[i + 1]]; renderList(); } }),
-          h('button', { title: 'Leave out', html: ICONS.close, disabled: ids.length <= 2, onclick: () => { ids = ids.filter((x) => x !== id); if (coverTrackId === id) coverTrackId = null; renderList(); renderCover(); } })));
+          h('button', { title: 'Leave out of this save', html: ICONS.close, disabled: ids.length <= 2, onclick: () => { ids = ids.filter((x) => x !== id); if (coverTrackId === id) coverTrackId = null; renderList(); renderCover(); } })));
       });
+      update();
     };
     art.addEventListener('click', async () => {
       const img = await guard(() => tf.pickImage());
       if (img) { coverImage = img; coverPreview = await chosenPicture(img); renderCover(); renderList(); }
     });
-    f.title.addEventListener('input', () => { if (!coverImage && !coverTrackId) renderCover(); });
-    const radio = (val, title, text, checked) => h('label', { class: 'radio' }, h('input', { type: 'radio', name: 'mode', value: val, checked }), h('div', {}, h('b', {}, title), h('div', { class: 'muted' }, text)));
-    const modes = h('div', {},
-      radio('single', 'One big MP3', 'All songs joined into one file, with a chapter mark at each song.', true),
-      radio('album', 'Album folder', 'One MP3 per song in a new folder, numbered, all with the album name and this picture.', false));
+    // how to save: one file per song, or one big file
+    const modeBox = h('div', { class: 'sv-modes' });
+    const typeSeg = h('div', { class: 'seg' });
+    const typeHint = h('span', { class: 'sv-hint' });
+    const qSeg = h('div', { class: 'seg' });
+    const qHint = h('span', { class: 'sv-hint' });
+    const nameIn = h('input', { class: 'sv-name', spellcheck: 'false' });
+    const extEl = h('span', { class: 'sv-ext' });
+    const dirEl = h('div', { class: 'sv-dir' });
+    const saveBtn = h('button', { class: 'btn primary' });
+    nameIn.addEventListener('input', () => { nameTouched = !!nameIn.value.trim(); update(); });
+    const okTypes = () => (mode === 'single' ? SAVE_TYPES.filter((x) => x.id === 'mp3' || x.id === 'm4a') : SAVE_TYPES);
+    function update() {
+      const title = f.title.value.trim() || 'My Album', artist = f.artist.value.trim();
+      if (!nameTouched) nameIn.value = artist ? `${artist} - ${title}` : title;
+      if (!okTypes().includes(type)) type = SAVE_TYPES[0];
+      modeBox.innerHTML = '';
+      for (const [m, label, text] of [['album', 'One file per song', 'A new folder, songs numbered 01, 02… all with the album name and picture'], ['single', 'One big file', 'All songs joined into one file, with a chapter mark at each song']]) {
+        modeBox.append(h('button', { class: `sv-mode${mode === m ? ' on' : ''}`, onclick: () => { mode = m; update(); } }, h('b', {}, label), h('span', {}, text)));
+      }
+      typeSeg.innerHTML = '';
+      for (const x of SAVE_TYPES) {
+        const off = !okTypes().includes(x);
+        typeSeg.append(h('button', { class: x === type ? 'on' : '', disabled: off, title: off ? 'One big file can only be MP3 or M4A (they hold chapter marks)' : x.hint, onclick: () => { type = x; update(); } }, x.label));
+      }
+      typeHint.textContent = mode === 'single' ? 'One big file: MP3 or M4A' : type.hint;
+      qSeg.innerHTML = '';
+      for (const q of [128, 192, 256, 320]) qSeg.append(h('button', { class: type.lossy && q === kbps ? 'on' : '', disabled: !type.lossy, onclick: () => { kbps = q; update(); } }, q === 320 ? '320 kbps' : String(q)));
+      const secs = ids.reduce((s, id) => { const t = S.byId.get(id); return s + (t.duration || 0) / ((t.fx.speed || 100) / 100); }, 0);
+      const bytes = type.lossy ? (kbps * 1000 / 8) * secs : (type.id === 'wav' ? 176400 : 176400 * 0.6) * secs;
+      qHint.textContent = `${type.lossy ? 'About' : 'Best quality, about'} ${fmtSize(bytes)} · ${fmtTime(secs)} in total`;
+      extEl.textContent = mode === 'single' ? `.${type.id}` : '  (folder)';
+      dirEl.textContent = S.settings.askWhereToSave ? 'Windows will ask where (Settings → Saving)' : dir;
+      dirEl.title = dir;
+      saveBtn.textContent = `Save ${ids.length} songs`;
+      warn.textContent = type.cover ? (coverImage || plCover || coverTrackId ? '' : 'No picture yet: click the square, or a song\'s small picture below.') : `${type.label} files can't hold a picture.`;
+    }
+    for (const k of ['title', 'artist']) f[k].addEventListener('input', () => { if (!coverImage && !plCover && !coverTrackId) renderCover(); else update(); });
     const doSave = async () => {
-      const mode = $('input[name=mode]:checked', box).value;
-      const opts = { mode, title: f.title.value.trim() || 'My Album', artist: f.artist.value.trim(), date: f.date.value.trim(), genre: f.genre.value.trim(), label: f.label.value.trim(), coverImage, coverTrackId: coverImage ? null : coverTrackId };
+      const opts = { mode, title: f.title.value.trim() || 'My Album', artist: f.artist.value.trim(), date: f.date.value.trim(), genre: f.genre.value.trim(), label: f.label.value.trim(),
+        coverImage, coverTrackId: coverImage || plCover ? null : coverTrackId, format: type.id, bitrate: kbps, name: nameIn.value.trim(), dir: S.settings.askWhereToSave ? null : dir };
+      if (plCover && !coverImage) opts.coverPlaylistId = playlist.id;
       close();
-      await afterSave(await guard(() => tf.exportMany(ids, opts), 'Save: '));
+      const r = await guard(() => tf.exportMany(ids, opts), 'Save: ');
+      if (r && r.path) Object.assign(S.settings, { ...(S.settings.askWhereToSave ? {} : { exportDir: dir }), bitrate: kbps, albumFormat: type.id, albumMode: mode }); // remembered for next time
+      await afterSave(r);
     };
+    const row = (label, ...kids) => [h('span', { class: 'sv-l' }, label), h('div', { class: 'sv-r' }, ...kids)];
+    box.append(
+      h('h2', {}, playlist ? `Save playlist "${playlist.name}"` : `Save ${ids.length} songs together`),
+      h('div', { class: 'sv-sub' }, 'Each song keeps its own speed, pitch, volume and fades.'),
+      h('div', { class: 'sv-top' },
+        h('div', { class: 'sv-left' }, art, warn),
+        h('div', { class: 'sv-right' },
+          h('div', { class: 'sv-grid sv-grid-top' }, field('title', 'Album'), field('artist', 'Album artist'), field('date', 'Date'), field('genre', 'Genre'), field('label', 'Label')))),
+      h('div', { class: 'sv-songs' }, h('div', { class: 'sv-l' }, `Order (${ids.length} songs, numbered when saved)`), list),
+      h('div', { class: 'sv-opts' },
+        ...row('Save as', modeBox),
+        ...row('Type', typeSeg, typeHint),
+        ...row('Quality', qSeg, qHint),
+        ...row('Name', h('div', { class: 'sv-namebox' }, nameIn, extEl)),
+        ...row('Save in', dirEl, h('button', { class: 'btn', onclick: async () => { const d = await guard(() => tf.pickDir(dir)); if (d) { dir = d; update(); } } }, 'Change…'))),
+      h('div', { class: 'foot' }, h('span', { class: 'muted' }), h('button', { class: 'btn', onclick: () => close() }, 'Cancel'), saveBtn),
+    );
+    saveBtn.addEventListener('click', doSave);
     renderCover();
     renderList();
-    box.append(
-      h('h2', {}, `Save ${ids.length} songs together`),
-      h('div', { class: 'ed' },
-        h('div', {}, art, warn),
-        h('div', {},
-          h('div', { class: 'form' },
-            h('label', { class: 'field full' }, 'Album / file name', f.title),
-            h('label', { class: 'field' }, 'Artist', f.artist), h('label', { class: 'field' }, 'Date', f.date),
-            h('label', { class: 'field' }, 'Genre', f.genre), h('label', { class: 'field' }, 'Label', f.label)),
-          modes)),
-      h('p', { class: 'muted', style: { margin: '14px 0 6px' } }, 'Order (each song keeps its own speed, pitch, volume and fades):'),
-      list,
-      h('div', { class: 'foot' }, h('span', { class: 'muted' }, saveTargetText()), h('button', { class: 'btn', onclick: () => close() }, 'Cancel'), h('button', { class: 'btn primary', onclick: doSave }, 'Save')),
-    );
   });
 }
 $('#btn-save').addEventListener('click', () => openSaveModal());
@@ -1191,6 +1313,7 @@ tf.onLog(({ level, msg, time }) => addLog(level, msg, time));
   const st = await tf.state();
   setTracks(st.tracks);
   TFPlaylists.setAll(st.playlists);
+  S.playClock = st.playClock || 0;
   S.settings = st.settings;
   setMaster(S.settings.rememberMaster === false ? 100 : (S.settings.master ?? 100), false);
   S.limits = st.limits;

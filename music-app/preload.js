@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('tf', {
   studioSize: () => call('studio-size'),
   studioClear: () => call('studio-clear'),
   exportTrack: (id, opts) => call('export-track', id, opts),
+  trackPlayed: (id) => call('track-played', id),
+  trackMark: (ids, mark, n) => call('track-mark', ids, mark, n),
   playlistCreate: (name, trackIds) => call('playlist-create', name, trackIds),
   playlistUpdate: (id, patch) => call('playlist-update', id, patch),
   playlistDelete: (id) => call('playlist-delete', id),

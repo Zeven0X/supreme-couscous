@@ -10,14 +10,14 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: **Playlists part 1** built (Playlists tab, add by right-click / drag / Add files, reorder, shuffle, picture, rename, delete). Next: part 2, smart shuffle (play counts + blacklist / favourite, back to normal after songs × 4 plays). Then save a playlist, stars 1–10, information inside saved files.
+- 2026-11-23: Playlists parts 2 + 3 built: **smart shuffle** (played a lot = less, 🚫 blacklist, ♥ favourite, back to normal after songs × 4 plays) and **Save a playlist** (one file per song or one big file, album name filled in). Next: part 4, star ratings 1–10 + star filter. Then part 5, all information inside saved files.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
 2. [Settings and keyboard shortcuts](docs/settings.md): 9 sections, 7 looks, 46 shortcuts you can change, map undo/redo.
 3. [Sound panel](docs/sound-panel.md): pitch (studio quality, Natural voice), speed, volume, fades.
 4. [Saving songs](docs/saving.md): the save window, Fill from name, file types.
-5. [Library](docs/library.md): Clear all music, Playlists (part 1); smart shuffle, playlist saving and stars planned.
+5. [Library](docs/library.md): Clear all music, Playlists, smart shuffle, saving a playlist; stars and info-in-files planned.
 6. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
 
 ## Top bar buttons
@@ -29,6 +29,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: **Smart shuffle** (playlists + library) and **Save a playlist** (new window, one file per song or one big MP3/M4A with chapters). Fixed: the Library page didn't fill its panel; shuffle could bounce between 2 songs; the "ask where to save" setting works again in the new save windows.
 - 2026-11-23: **Playlists tab** in the Library: make playlists, add songs (right-click, drag cards, Add files), drag to reorder, Play, Shuffle, picture, rename, delete.
 - 2026-11-23: **Clear all** button in the Library toolbar (songs leave Tonix, files stay on your PC, maps kept).
 - 2026-11-23: **Speed fixed while listening.** It used the player's own simple speed control (the bad sound you heard); now the studio tool makes the copy at the new speed too. Pitch checks 21/21.

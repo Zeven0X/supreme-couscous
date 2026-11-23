@@ -31,7 +31,7 @@
     if (k === 'blur') document.body.style.setProperty('--blur', `${Math.round((S.settings.blur ?? 70) * 0.32)}px`);
     if (k === 'animations') document.body.classList.toggle('no-anim', S.settings.animations === false);
     if (k === 'volumeLimit') applyVolumeLimit(true);
-    if (k === 'shuffle' && cur()) { S.queue = makeQueue(S.currentId); renderNext(); }
+    if (k === 'shuffle' && cur()) { S.queue = makeQueue(S.currentId); S.qPos = 0; renderNext(); }
     if (k === 'videoBadge') renderGrid();
     if (['pathLabels', 'mapFollow', 'mapDot'].includes(k) && window.TFMap) window.TFMap.actions.refresh();
   }
@@ -147,7 +147,7 @@
   function playing() {
     return card('playing', 'Playing',
       row('When a song ends in the library', '', seg('whenEnds', [['next', 'Next song'], ['repeat', 'Repeat it'], ['stop', 'Stop']])),
-      row('Shuffle the library', 'Play library songs in a random order', tog('shuffle', false)),
+      row('Smart shuffle in the library', 'Random order; songs played a lot come less often, ♥ favourites more, 🚫 blacklisted much less', tog('shuffle', false)),
       row('Blend library songs', 'Crossfade from one library song to the next (0 = off)', slider('libraryBlend', 0, 12, 0.5, (v) => (v ? `${v.toFixed(1)} s` : 'Off'))),
       row('Volume safety limit', 'The Volume card can go up to this. Protects ears and speakers', seg('volumeLimit', [[200, '200%'], [300, '300%'], [500, '500%']])),
       row('Remember main volume', 'Keep the bottom-right volume between starts', tog('rememberMaster')));

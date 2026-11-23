@@ -29,6 +29,8 @@ const DEFAULT_SETTINGS = {
   rememberMaster: true,
   // Saving
   format: 'mp3',
+  albumFormat: 'mp3', // saving many songs remembers its own type
+  albumMode: 'album', // saving many songs: 'album' (one file per song) or 'single' (one big file)
   fileNames: 'artist-title', // 'artist-title' | 'title' | 'title-artist'
   // Library
   videoBadge: true,
@@ -50,13 +52,14 @@ class Library {
     this.coverDir = path.join(dataDir, 'covers');
     this.peakDir = path.join(dataDir, 'waveforms');
     for (const d of [dataDir, this.mediaDir, this.coverDir, this.peakDir]) fs.mkdirSync(d, { recursive: true });
-    this.data = { tracks: [], settings: { ...DEFAULT_SETTINGS }, playlists: [] };
+    this.data = { tracks: [], settings: { ...DEFAULT_SETTINGS }, playlists: [], playClock: 0 };
     if (fs.existsSync(this.file)) {
       try {
         const loaded = JSON.parse(fs.readFileSync(this.file, 'utf8'));
         this.data.tracks = Array.isArray(loaded.tracks) ? loaded.tracks : [];
         this.data.settings = { ...DEFAULT_SETTINGS, ...(loaded.settings || {}) };
         this.data.playlists = Array.isArray(loaded.playlists) ? loaded.playlists : [];
+        this.data.playClock = Number.isFinite(loaded.playClock) ? loaded.playClock : 0;
       } catch (e) {
         // Keep the broken file so nothing is lost, start fresh.
         fs.copyFileSync(this.file, `${this.file}.broken-${Date.now()}`);
@@ -99,6 +102,33 @@ class Library {
     this.data.tracks = this.data.tracks.filter((t) => !set.has(t.id));
     for (const pl of this.data.playlists) pl.trackIds = pl.trackIds.filter((id) => !set.has(id)); // gone from playlists too
     this.save();
+  }
+
+  // ---- smart shuffle: the play clock counts every song heard; each song remembers when it played.
+  get playClock() { return this.data.playClock; }
+  played(id) {
+    const t = this.byId(id);
+    if (!t) return null;
+    this.data.playClock += 1;
+    t.stamps = [...(t.stamps || []), this.data.playClock].slice(-60);
+    t.plays = (t.plays || 0) + 1;
+    this.save();
+    return t;
+  }
+  // mark: 'black' (plays much less), 'fav' (plays more) or null (normal). Ends by itself after
+  // (n songs x 4) plays, n = the songs in the playlist or library where it was marked. One save for all.
+  mark(ids, mark, n = this.data.tracks.length) {
+    const out = [];
+    for (const id of [].concat(ids)) {
+      const t = this.byId(id);
+      if (!t) continue;
+      t.mark = mark === 'black' || mark === 'fav' ? mark : null;
+      t.markAt = this.data.playClock;
+      t.markUntil = t.mark ? this.data.playClock + Math.max(4, Math.round(n) * 4) : null;
+      out.push(t);
+    }
+    this.save();
+    return out;
   }
 
   // ---- playlists: { id, name, trackIds (in order), cover, coverVersion, shuffle, createdAt }

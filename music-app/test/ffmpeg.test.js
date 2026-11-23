@@ -168,3 +168,15 @@ test('save as every file type: right codec, tags, picture where the type can hol
     assert.strictEqual(info.coverStream !== null, ff.FORMATS[fmt].cover, `${fmt} picture`);
   }
 });
+
+test('one big M4A file holds chapter marks too', async () => {
+  const a = path.join(tmp, 'c1.wav'), b = path.join(tmp, 'c2.wav');
+  await makeTone(a, 300, 2); await makeTone(b, 500, 2);
+  const dest = path.join(tmp, 'big.m4a');
+  const r = await ff.exportCombined({ items: [{ src: a, fx: {}, duration: 2, title: 'One' }, { src: b, fx: {}, duration: 2, title: 'Two' }], dest, tags: { title: 'Mix', album: 'Mix' }, format: 'm4a', bitrate: 192, tmpDir: tmp });
+  assert.strictEqual(r.duration, 4);
+  const { info } = await ff.probe(dest);
+  assert.strictEqual(info.audioCodec, 'aac');
+  const { stderr } = await ff.run(['-i', dest, '-f', 'null', '-']);
+  assert.match(stderr, /title\s*:\s*Two/);
+});

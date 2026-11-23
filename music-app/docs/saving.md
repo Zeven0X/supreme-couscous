@@ -45,5 +45,10 @@ Type, quality and folder are remembered for next time (your choice, 2026-11-23).
 - 2026-11-23: Right-click menu (Cut / Copy / Paste) added to all typing boxes. Before: right-click did nothing.
 - Fixed at the same time: OGG songs you import now keep their title and artist (Tonix looked for them in the wrong place).
 
-## Save album window — 🎨 next (part 2)
-Will get the same new style. Not built yet.
+## Save playlist / many songs window — ✅ (2026-11-23)
+See [Library → Save a playlist](library.md). Same style as the Save song window.
+
+## Fixes 2026-11-23
+- "Ask where to save every time" (Settings → Saving) works again in the save windows: "Save in" then says "Windows will ask where".
+- Choices are only remembered after a save worked.
+- Folder names like "Vol. 2" stay right when the name is taken ("Vol. 2 (2)").

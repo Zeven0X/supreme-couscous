@@ -33,6 +33,7 @@ The Library page holds all your songs: upload, search, tabs, filters, picture si
 - **Playing:** the playlist plays in its order and Next follows it. With **Shuffle on**, it plays in a random order but the list itself stays as it is (your choice A2). Smart shuffle comes in part 2.
 - Removing a song from the library (or Clear all) also takes it out of every playlist. Deleting a playlist never removes songs.
 - Playlists are kept in the library file and stay after a restart.
+- The playlist buttons: ▶ Play and 🔀 Shuffle on top; 📂 Add files, 💾 Save, 🗑 Delete below.
 - The toolbar hides "Save album" and the picture-size slider on the Playlists tab. On smaller windows, "Upload folder" and "Save album" show only their icon (hover for the name).
 
 ### Checked
@@ -43,8 +44,52 @@ The Library page holds all your songs: upload, search, tabs, filters, picture si
 ### History
 - 2026-11-23: Part 1 built. Your request: "the player can create a playlist that he can add the songs that he wants. And the user can organize them…", plus "add a button for opening files" and "shuffle mode".
 
+## Smart shuffle — current state ✅ part 2 of 5 (2026-11-23)
+- **Where:** a playlist's **🔀 Shuffle on**, and Settings → Playing → **Smart shuffle in the library**.
+- **How it works (simple words):** every song gets "lottery tickets". The next song is drawn by luck, but songs with more tickets win more often. Tonix always lines up the next 3 songs (you see them under "Up next").
+  - **Played a lot lately** → fewer tickets, down to about 1 in 10. Tonix does this by itself (a small **↓** shows on the song).
+  - **Hardly played lately** → more tickets (up to 3×), so forgotten songs come back.
+  - **🚫 Blacklist** (your mark) → about 1 in 10 as often.
+  - **♥ Favourite** (your mark) → more often. In tests it played about 1.7× as often; it can't reach the full 3× because a song never comes back too soon.
+  - A song never plays twice in a row. The songs that just played are skipped (the last third of the playlist).
+- **"Lately" = the last (number of songs × 4) plays** (your rule). In a 10-song playlist that's 40 songs. After that many plays, marks end by themselves and everything is back to normal. The end of a mark is fixed when you set it, so it is the same in the library and in playlists.
+- **What counts as "played":** you heard at least 30 seconds (or half of a short song). Quick skips don't count.
+- **Where to mark:**
+  - Right-click songs → **🚫 Blacklist** / **♥ Favourite** / **Back to normal**. Works for many songs at once.
+  - In a playlist, hover a song → **♥** or **🚫**. A switched-on mark stays visible.
+  - Song cards show **🚫**, **♥** or **↓** in the corner.
+- Songs from the **Map** don't change your library or playlist order.
+
+### Checked
+- Automatic tests: tickets (played a lot = fewer, never = more, 4 plays = normal), marks end after songs × 4 plays, never the same song twice. In 6,000 test picks from 10 songs: blacklisted 62, a normal song about 610, favourite 1,030.
+- In the real app on the build computer (11/11): marks set and shown; 3 songs lined up; 40 songs played: never twice in a row, every song got a turn, the blacklisted song played 0 times while blacklisted and 5 of 18 afterwards; a 5-second listen doesn't count; kept after a restart.
+- **Not yet tried by you.**
+
+### History
+- 2026-11-23: Part 2 built. Your words: "Make it smarter. If a song appears so much, it should be blacklisted and appear much less. Vice versa", "they can return back to normal after a while", "after the amount of songs × 4".
+- 2026-11-23: Fixed while building: when a song came up a second time in shuffle, Tonix looked for its first place in the order and kept bouncing between 2 songs. Now Tonix remembers its exact place.
+
+## Save a playlist — current state ✅ part 3 of 5 (2026-11-23)
+- **Where:** a playlist's **💾 Save** button. (Library → select songs → **Save album** opens the same window.)
+- **The window** (same style as Save song):
+  - Picture: the playlist's picture, or click a song's small picture, or choose a new one.
+  - **Album** = the playlist name, filled in for you. Also Album artist, Date, Genre, Label.
+  - **Order:** the songs, numbered. You can move or leave out songs for this save only (the playlist itself doesn't change).
+  - **Save as** (you choose each time, your choice C3):
+    - **One file per song:** a new folder; files named "01 - Song", "02 - Song"…; every file gets the album name, its track number ("1/12") and the picture; a cover.jpg goes in the folder too.
+    - **One big file:** all songs joined, with a chapter mark at each song. Only MP3 or M4A can hold chapter marks, so the other types are greyed out.
+  - **Type**, **Quality** (with size and total time), **Name**, **Save in** + Change…
+  - Last choices are remembered (one file per song or one big file, type, quality, folder). Saving many songs has its own remembered type, so it doesn't change the Save song window.
+- If **Settings → Saving → Ask where to save every time** is on, the "Save in" row says "Windows will ask where", and Windows asks.
+
+### Checked
+- Automatic tests: one big M4A with chapter marks.
+- In the real app (9/9): album name = playlist name; songs in playlist order; one file per song as FLAC → "Night drive" folder with "01 - Iron Heart.flac"… + cover.jpg, right title / album / picture inside; choices remembered; one big file allows only MP3 / M4A; one big M4A with a chapter for each song.
+- **Not yet tried by you.**
+
+### History
+- 2026-11-23: Part 3 built (replaces the old "Save N songs together" window). Your words: "can save them all and in this save menu it can automatically save the album name" and "I choose each time".
+
 ## Coming next (your order)
-2. **Smart shuffle:** songs that played a lot come up less often, and rarely played songs more often. You can also mark **blacklist** (about 1 in 10 as often) or **favourite** (more often). Everything goes back to normal after **(number of songs × 4)** songs have played (your rule).
-3. **Save a playlist:** you choose one file per song or one big file. The playlist name becomes the album name and the songs are numbered.
 4. **Star ratings 1–10** in every save window and on each song card, plus a star filter (6⭐ or more, 4⭐ or less).
 5. **Information inside saved files:** label, track number, stars, blacklist, favourite and more. Tonix reads it back when you upload the file again.

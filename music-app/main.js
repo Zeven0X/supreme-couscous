@@ -90,11 +90,12 @@ function safeName(name, fallback = 'Untitled') {
   let n = String(name || '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/, '').trim();
   if (!n) n = fallback;
   if (/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(n)) n = `_${n}`;
-  return n.slice(0, 150);
+  return n.slice(0, 150).replace(/[. ]+$/, '') || fallback; // Windows names can't end in a dot or space
 }
-function uniquePath(p) {
+// A free name: "Song.mp3" -> "Song (2).mp3". Folders have no extension ("Vol. 2" stays "Vol. 2 (2)").
+function uniquePath(p, isDir = false) {
   if (!fs.existsSync(p)) return p;
-  const { dir, name, ext } = path.parse(p);
+  const { dir, name, ext } = isDir ? { dir: path.dirname(p), name: path.basename(p), ext: '' } : path.parse(p);
   for (let i = 2; ; i++) { const c = path.join(dir, `${name} (${i})${ext}`); if (!fs.existsSync(c)) return c; }
 }
 function collectFiles(paths) {
@@ -133,7 +134,7 @@ function playlistForUi(p) {
   return { ...p, coverUrl: p.cover ? `${baseUrl}/plcover/${p.id}?v=${p.coverVersion || 0}` : null };
 }
 function state() {
-  return { playlists: lib.playlists.map(playlistForUi), tracks: lib.tracks.map(trackForUi), settings: { ...lib.settings, exportDir: exportDir() }, baseUrl, libraryDir: lib.dataDir, limits: ff.LIMITS, defaults: ff.DEFAULT_FX };
+  return { playClock: lib.playClock, playlists: lib.playlists.map(playlistForUi), tracks: lib.tracks.map(trackForUi), settings: { ...lib.settings, exportDir: exportDir() }, baseUrl, libraryDir: lib.dataDir, limits: ff.LIMITS, defaults: ff.DEFAULT_FX };
 }
 async function setCoverFromImage(t, imagePath) {
   const name = `${t.id}.jpg`;
@@ -207,9 +208,9 @@ async function chooseDest(defaultName, ext) {
   return r.canceled ? null : r.filePath;
 }
 async function chooseDir(defaultName) {
-  if (!lib.settings.askWhereToSave) return uniquePath(path.join(exportDir(), safeName(defaultName)));
+  if (!lib.settings.askWhereToSave) return uniquePath(path.join(exportDir(), safeName(defaultName)), true);
   const r = await dialog.showOpenDialog(win, { title: 'Choose where to put the album folder', defaultPath: exportDir(), properties: ['openDirectory', 'createDirectory'] });
-  return r.canceled ? null : uniquePath(path.join(r.filePaths[0], safeName(defaultName)));
+  return r.canceled ? null : uniquePath(path.join(r.filePaths[0], safeName(defaultName)), true);
 }
 
 function tagsOf(t) { return { title: t.title, artist: t.artist, album: t.album, date: t.date, genre: t.genre, label: t.label }; }
@@ -225,7 +226,6 @@ async function exportTrack(id, opts = {}) {
   if (opts.dir) { // the save window chose the folder and the file name
     fs.mkdirSync(opts.dir, { recursive: true });
     dest = uniquePath(path.join(opts.dir, `${safeName(opts.name || fileName(t))}.${format}`));
-    lib.setSettings({ format, bitrate, exportDir: opts.dir }); // remembered for next time
   } else dest = await chooseDest(fileName(t), format);
   if (!dest) return { canceled: true };
   log('info', `Saving "${t.title}" (speed ${t.fx.speed}%, pitch ${t.fx.pitch}%, volume ${t.fx.volume}%, fade in ${t.fx.fadeIn}s, fade out ${t.fx.fadeOut}s)...`);
@@ -236,6 +236,7 @@ async function exportTrack(id, opts = {}) {
     onProgress: (p) => send('export-progress', { p, label: t.title }),
   });
   send('export-progress', { p: 1, label: t.title });
+  lib.setSettings({ format, bitrate, ...(opts.dir ? { exportDir: opts.dir } : {}) }); // saved fine: remembered for next time
   log('ok', `Saved ${dest} in ${((Date.now() - started) / 1000).toFixed(1)} s`);
   return { path: dest, track: trackForUi(t) };
 }
@@ -251,32 +252,42 @@ async function exportMany(ids, opts) {
     tmpCover = path.join(os.tmpdir(), `tonix-cover-${Date.now()}.jpg`);
     await ff.imageToJpg(opts.coverImage, tmpCover);
     coverPath = tmpCover;
+  } else if (opts.coverPlaylistId) { // the playlist's own picture
+    const pl = lib.playlistById(opts.coverPlaylistId);
+    if (pl && pl.cover) coverPath = path.join(lib.coverDir, pl.cover);
   } else if (opts.coverTrackId) coverPath = lib.coverPath(lib.byId(opts.coverTrackId));
   const albumTags = { album: title, albumArtist: opts.artist, date: opts.date, genre: opts.genre, label: opts.label };
+  let format = ff.formatOf(opts.format || 'mp3');
+  if (opts.mode === 'single' && !ff.FORMATS[format].chapters) format = 'mp3'; // one big file: only types that hold chapter marks
+  const bitrate = [128, 192, 256, 320].includes(+opts.bitrate) ? +opts.bitrate : lib.settings.bitrate;
+  const baseName = safeName(opts.name || (opts.artist ? `${opts.artist} - ${title}` : title));
+  if (opts.dir) fs.mkdirSync(opts.dir, { recursive: true });
+  const remember = () => lib.setSettings({ albumFormat: format, bitrate, albumMode: opts.mode === 'single' ? 'single' : 'album', ...(opts.dir ? { exportDir: opts.dir } : {}) });
   try {
     if (opts.mode === 'single') {
-      const dest = await chooseDest(opts.artist ? `${opts.artist} - ${title}` : title, 'mp3');
+      const dest = opts.dir ? uniquePath(path.join(opts.dir, `${baseName}.${format}`)) : await chooseDest(baseName, format);
       if (!dest) return { canceled: true };
-      log('info', `Joining ${tracks.length} songs into one MP3...`);
+      log('info', `Joining ${tracks.length} songs into one ${format.toUpperCase()}...`);
       await ff.exportCombined({
         items: tracks.map((t) => ({ src: t.mediaPath, fx: t.fx, duration: t.duration, title: t.title })),
-        dest, tags: { ...albumTags, title, artist: opts.artist }, coverPath, bitrate: lib.settings.bitrate, tmpDir: os.tmpdir(),
+        dest, tags: { ...albumTags, title, artist: opts.artist }, coverPath, bitrate, format, tmpDir: os.tmpdir(),
         onProgress: (p) => send('export-progress', { p, label: title }),
       });
       send('export-progress', { p: 1, label: title });
+      remember();
       log('ok', `Saved ${dest}`);
       return { path: dest };
     }
-    const dir = await chooseDir(opts.artist ? `${opts.artist} - ${title}` : title);
+    const dir = opts.dir ? uniquePath(path.join(opts.dir, baseName), true) : await chooseDir(baseName);
     if (!dir) return { canceled: true };
     fs.mkdirSync(dir, { recursive: true });
     log('info', `Saving album "${title}" (${tracks.length} songs) to ${dir}...`);
     const pad = String(tracks.length).length < 2 ? 2 : String(tracks.length).length;
     for (let i = 0; i < tracks.length; i++) {
       const t = tracks[i];
-      const dest = path.join(dir, `${String(i + 1).padStart(pad, '0')} - ${safeName(t.title)}.mp3`);
+      const dest = path.join(dir, `${String(i + 1).padStart(pad, '0')} - ${safeName(t.title)}.${format}`);
       await ff.exportOne({
-        src: t.mediaPath, dest, fx: t.fx, duration: t.duration, bitrate: lib.settings.bitrate,
+        src: t.mediaPath, dest, fx: t.fx, duration: t.duration, bitrate, format,
         tags: { ...tagsOf(t), ...Object.fromEntries(Object.entries(albumTags).filter(([, v]) => v)), track: `${i + 1}/${tracks.length}` },
         coverPath: coverPath || lib.coverPath(t),
         onProgress: (p) => send('export-progress', { p: (i + p) / tracks.length, label: `${title}: ${t.title}` }),
@@ -284,6 +295,7 @@ async function exportMany(ids, opts) {
     }
     if (coverPath) fs.copyFileSync(coverPath, path.join(dir, 'cover.jpg'));
     send('export-progress', { p: 1, label: title });
+    remember();
     log('ok', `Saved album to ${dir}`);
     return { path: dir };
   } finally {
@@ -474,6 +486,8 @@ function registerIpc() {
   handle('studio-cancel', (group) => { studio.cancel(group); return true; });
   handle('studio-size', () => studio.size());
   handle('studio-clear', () => { studio.clear(); return true; });
+  handle('track-played', (id) => { const t = lib.played(id); return t ? { track: trackForUi(t), clock: lib.playClock } : null; });
+  handle('track-mark', (ids, mark, n) => lib.mark(ids, mark, n).map(trackForUi));
   handle('playlist-create', (name, trackIds) => playlistForUi(lib.createPlaylist(name, trackIds)));
   handle('playlist-update', (id, patch) => { const p = lib.updatePlaylist(id, patch); if (!p) throw new Error('Playlist not found'); return playlistForUi(p); });
   handle('playlist-delete', (id) => lib.deletePlaylist(id));

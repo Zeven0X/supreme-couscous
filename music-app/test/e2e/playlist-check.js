@@ -40,7 +40,8 @@ const launch = () => _electron.launch({ executablePath: 'node_modules/electron/d
   ok('4 songs in order', (await w.locator('.pl-row').count()) === 4);
   // reorder: drag row 4 above row 1
   const before = await ev(() => TFPlaylists.list[0].trackIds.slice());
-  await w.locator('.pl-row').nth(3).dragTo(w.locator('.pl-row').nth(0), { targetPosition: { x: 100, y: 5 } }); await wait(500);
+  await w.locator('.pl-row').nth(3).scrollIntoViewIfNeeded(); await w.locator('.pl-row').nth(0).scrollIntoViewIfNeeded();
+  await w.locator('.pl-row').nth(3).locator('.pl-grip').dragTo(w.locator('.pl-row').nth(0), { targetPosition: { x: 100, y: 5 } }); await wait(500);
   const after = await ev(() => TFPlaylists.list[0].trackIds.slice());
   ok('drag to reorder', after[0] === before[3] && after.length === 4, JSON.stringify(after.map((x) => before.indexOf(x))));
   // play in order, next song follows the playlist

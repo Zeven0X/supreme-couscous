@@ -229,8 +229,8 @@ function coverOutArgs(streamIndex) {
 
 // File types a song can be saved as. lossy = has a quality (kbps); cover = can hold a picture.
 const FORMATS = {
-  mp3: { label: 'MP3', lossy: true, cover: true, codec: (b) => ['-c:a', 'libmp3lame', '-b:a', bitrateArg(b), '-id3v2_version', '3'] },
-  m4a: { label: 'M4A', lossy: true, cover: true, codec: (b) => ['-c:a', 'aac', '-b:a', bitrateArg(b), '-movflags', '+faststart'] },
+  mp3: { label: 'MP3', lossy: true, cover: true, chapters: true, codec: (b) => ['-c:a', 'libmp3lame', '-b:a', bitrateArg(b), '-id3v2_version', '3'] },
+  m4a: { label: 'M4A', lossy: true, cover: true, chapters: true, codec: (b) => ['-c:a', 'aac', '-b:a', bitrateArg(b), '-movflags', '+faststart'] },
   flac: { label: 'FLAC', lossy: false, cover: true, codec: () => ['-c:a', 'flac', '-sample_fmt', 's16'] },
   wav: { label: 'WAV', lossy: false, cover: false, codec: () => ['-c:a', 'pcm_s16le'] },
   ogg: { label: 'OGG', lossy: true, cover: false, codec: (b) => ['-c:a', 'libvorbis', '-b:a', bitrateArg(b)] },
@@ -254,7 +254,8 @@ function exportOne({ src, dest, fx, duration, tags, coverPath, format = 'mp3', b
 function escapeMeta(v) { return String(v).replace(/([=;#\\\n])/g, '\\$1'); }
 
 // Several songs -> one big MP3, each with its own effects, with chapter marks.
-async function exportCombined({ items, dest, tags, coverPath, bitrate = 320, tmpDir, onProgress }) {
+async function exportCombined({ items, dest, tags, coverPath, bitrate = 320, format = 'mp3', tmpDir, onProgress }) {
+  format = FORMATS[format] && FORMATS[format].chapters ? format : 'mp3';
   const args = ['-y'];
   const chains = [];
   const chapters = [];
@@ -277,7 +278,7 @@ async function exportCombined({ items, dest, tags, coverPath, bitrate = 320, tmp
   const graph = chains.join(';') + ';' + items.map((_, i) => `[a${i}]`).join('') + `concat=n=${items.length}:v=0:a=1[out]`;
   args.push('-filter_complex', graph, '-map', '[out]');
   if (withCover) args.push(...coverOutArgs(metaIdx + 1));
-  args.push('-map_metadata', '-1', '-map_chapters', String(metaIdx), ...tagArgs(tags), '-c:a', 'libmp3lame', '-b:a', bitrateArg(bitrate), '-id3v2_version', '3', dest);
+  args.push('-map_metadata', '-1', '-map_chapters', String(metaIdx), ...tagArgs(tags), ...FORMATS[format].codec(bitrate), dest);
   try {
     await run(args, { duration: t, onProgress });
   } finally {

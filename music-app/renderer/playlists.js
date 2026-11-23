@@ -1,5 +1,5 @@
 'use strict';
-/* global S, h, $, $$, tf, guard, toast, coverEl, placeholder, fmtTime, modal, confirmModal, loadTrack, upsertTrack, renderGrid, markSelection, ICONS, hideMenu */
+/* global S, h, $, tf, guard, toast, coverEl, placeholder, fmtTime, modal, confirmModal, loadTrack, upsertTrack, renderGrid, ICONS, TFShuffle, startShuffle, setMark, openAlbumModal */
 // Playlists: a tab in the Library. Each playlist keeps its songs in your order. Songs get in by
 // right-click → Add to playlist, by dragging song cards onto a playlist, or with "Add files".
 window.TFPlaylists = (() => {
@@ -68,14 +68,19 @@ window.TFPlaylists = (() => {
 
   // ---------- playing ----------
   function play(p, startId = null) {
-    let ids = songs(p).map((t) => t.id);
+    const list = songs(p);
+    let ids = list.map((t) => t.id);
     if (!ids.length) { toast('This playlist is empty. Add some songs first.'); return; }
-    if (p.shuffle) { // random order, the list itself stays as it is (smart shuffle comes in part 2)
-      const rest = ids.filter((id) => id !== startId);
-      for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
-      ids = startId ? [startId, ...rest] : rest;
-    } else if (startId) ids = ids.slice(ids.indexOf(startId));
-    S.queue = ids;
+    if (p.shuffle) { // smart shuffle: weighted luck, the list itself stays as it is
+      const first = startId || TFShuffle.pick(list, [], S.playClock || 0).id;
+      startShuffle(ids, first); // (sets the place in the order too)
+      ids = S.queue;
+    } else {
+      S.shufflePool = null;
+      if (startId) ids = ids.slice(ids.indexOf(startId));
+      S.queue = ids;
+      S.qPos = -1;
+    }
     S.playlistId = p.id;
     loadTrack(ids[0], { autoplay: true, keepQueue: true });
     render();
@@ -85,6 +90,7 @@ window.TFPlaylists = (() => {
   function render() {
     const v = view();
     if (!v || S.libTab !== 'playlists') return;
+    if (P.rowDrag) { P.redraw = true; return; } // never redraw under a row that is being dragged
     v.innerHTML = '';
     const side = h('div', { class: 'pl-side' },
       h('button', { class: 'tb pri pl-new', onclick: () => create() }, '+ New playlist'));
@@ -117,8 +123,10 @@ window.TFPlaylists = (() => {
         h('div', { class: 'pl-meta' }, `${list.length} song${list.length === 1 ? '' : 's'} · ${fmtTime(totalTime(p))}`),
         h('div', { class: 'pl-btns' },
           h('button', { class: 'tb pri', onclick: () => play(p), html: `${ICONS.play}<span>Play</span>` }),
-          h('button', { class: `tb pl-shuffle${p.shuffle ? ' on' : ''}`, title: 'Shuffle mode: play in a random order (the list stays as it is)', onclick: () => save(p, { shuffle: !p.shuffle }) }, `🔀 Shuffle ${p.shuffle ? 'on' : 'off'}`),
+          h('button', { class: `tb pl-shuffle${p.shuffle ? ' on' : ''}`, title: 'Smart shuffle: random order, songs played a lot come less often, ♥ more, 🚫 much less (the list stays as it is)', onclick: () => save(p, { shuffle: !p.shuffle }) }, `🔀 Shuffle ${p.shuffle ? 'on' : 'off'}`)),
+        h('div', { class: 'pl-btns pl-btns2' },
           h('button', { class: 'tb', title: 'Add music or video files from your PC to this playlist', onclick: () => addFiles(p) }, '📂 Add files'),
+          h('button', { class: 'tb', title: 'Save the whole playlist: one file per song, or one big file', onclick: () => openAlbumModal(songs(p).map((t) => t.id), { playlist: p }) }, '💾 Save'),
           h('button', { class: 'tb danger', title: 'Delete this playlist (the songs stay in your library)', onclick: () => remove(p) }, '🗑 Delete'))));
     dropTarget(head, p);
     const rows = h('div', { class: 'pl-rows' });
@@ -127,11 +135,12 @@ window.TFPlaylists = (() => {
         h('span', { class: 'pl-grip' }, '⋮⋮'), h('span', { class: 'n' }, i + 1),
         h('div', { class: 'pl-mini' }, coverEl(t)),
         h('div', { class: 'pl-row-t' }, h('b', {}, t.title), h('span', {}, t.artist || 'Unknown artist')),
+        markEl(t, list.length),
         h('span', { class: 'pl-len' }, fmtTime((t.duration || 0) / ((t.fx.speed || 100) / 100))),
         h('button', { class: 'pl-x', title: 'Take out of this playlist (stays in your library)', html: ICONS.close, onclick: (e) => { e.stopPropagation(); save(p, { trackIds: p.trackIds.filter((x) => x !== t.id) }); } }));
       row.addEventListener('dblclick', () => play(p, t.id));
-      row.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/x-tonix-row', t.id); row.classList.add('dragging'); });
-      row.addEventListener('dragend', () => row.classList.remove('dragging'));
+      row.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/x-tonix-row', t.id); row.classList.add('dragging'); P.rowDrag = true; });
+      row.addEventListener('dragend', () => { row.classList.remove('dragging'); P.rowDrag = false; if (P.redraw) { P.redraw = false; render(); } });
       row.addEventListener('dragover', (e) => {
         if (![...e.dataTransfer.types].includes('application/x-tonix-row')) return;
         e.preventDefault();
@@ -144,6 +153,7 @@ window.TFPlaylists = (() => {
         const moving = e.dataTransfer.getData('application/x-tonix-row');
         if (!moving) return;
         e.preventDefault(); e.stopPropagation();
+        P.rowDrag = false;
         const after = row.classList.contains('drop-after');
         row.classList.remove('drop-before', 'drop-after');
         if (moving === t.id) return;
@@ -155,6 +165,15 @@ window.TFPlaylists = (() => {
     });
     if (!list.length) rows.append(h('div', { class: 'pl-hint' }, 'Empty playlist. Add songs: right-click songs in All → Add to playlist, drag song cards onto a playlist name, or use 📂 Add files.'));
     return h('div', { class: 'pl-detail' }, head, rows);
+  }
+  // ♥ / 🚫 for smart shuffle. The mark shows while it counts (songs x 4 plays), then the song is normal again.
+  function markEl(t, n) {
+    const b = TFShuffle.badge(t, S.playClock || 0, n);
+    const btn = (kind, label, tip) => h('button', { class: `pl-mk ${kind}${b === kind ? ' on' : ''}`, title: b === kind ? 'Back to normal in shuffle' : tip,
+      onclick: (e) => { e.stopPropagation(); setMark([t.id], b === kind ? null : kind, n); } }, label);
+    return h('span', { class: 'pl-marks' },
+      b === 'less' ? h('span', { class: 'pl-auto', title: 'Played a lot lately: smart shuffle picks it less for now' }, '↓') : null,
+      btn('fav', '♥', 'Favourite: play more in shuffle'), btn('black', '🚫', 'Blacklist: play much less in shuffle (about 1 in 10)'));
   }
   async function addFiles(p) {
     const paths = await guard(() => tf.pickFiles());

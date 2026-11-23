@@ -36,3 +36,21 @@ test('make, fill, reorder, rename, remove songs, delete, reload', () => {
   again.flush();
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'library.json'), 'utf8')).playlists.length, 1, 'saved to disk');
 });
+
+test('smart shuffle memory: play clock, play stamps, marks', () => {
+  const dir = path.join(tmp, 'lib2');
+  const lib = new Library(dir);
+  const a = lib.add({ id: lib.newId(), title: 'A', srcPath: '/x/A.mp3', mediaPath: '/x/A.mp3' });
+  lib.played(a.id); lib.played(a.id);
+  assert.strictEqual(lib.playClock, 2);
+  assert.deepStrictEqual(lib.byId(a.id).stamps, [1, 2]);
+  assert.strictEqual(lib.byId(a.id).plays, 2);
+  lib.mark([a.id], 'black', 5);
+  assert.deepStrictEqual([lib.byId(a.id).mark, lib.byId(a.id).markAt, lib.byId(a.id).markUntil], ['black', 2, 22], 'counts for 5 songs x 4 plays');
+  lib.mark(a.id, 'nonsense');
+  assert.strictEqual(lib.byId(a.id).mark, null, 'only black / fav / normal');
+  for (let i = 0; i < 70; i++) lib.played(a.id);
+  assert.strictEqual(lib.byId(a.id).stamps.length, 60, 'keeps the last 60 plays only');
+  lib.flush();
+  assert.strictEqual(new Library(dir).playClock, 72, 'the clock is saved');
+});
