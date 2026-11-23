@@ -55,5 +55,6 @@
   I.path = '<svg viewBox="0 0 24 24"><circle cx="5" cy="18" r="2.6" fill="currentColor"/><circle cx="19" cy="6" r="2.6" fill="currentColor"/><path d="M7 16.5C12 15 9 9 16.6 7.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M13.8 5.2l3.4 1.9-1.6 3.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   I.image = '<svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="9.5" r="1.8" fill="currentColor"/><path d="M4 18l5.5-5.5 4 4 2.5-2.5 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
   I.reset = '<svg viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><path d="M4 3.5v4.8h4.8" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  I.speaker = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="M15 9a4 4 0 0 1 0 6M17.5 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   window.ICONS = I;
 })();

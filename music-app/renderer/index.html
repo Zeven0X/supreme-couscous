@@ -188,17 +188,25 @@
   </main>
 
   <footer id="transport">
-    <div class="buttons">
-      <button class="tbtn" id="back30" title="Back 30 s (Shift+←)"></button>
-      <button class="tbtn" id="back5" title="Back 5 s (←)"></button>
-      <button class="play" id="play" title="Play / pause (Space)"></button>
-      <button class="tbtn" id="fwd5" title="Forward 5 s (→)"></button>
-      <button class="tbtn" id="fwd30" title="Forward 30 s (Shift+→)"></button>
+    <div class="ft-song"><div id="ft-cover"></div><div class="ft-meta"><b id="ft-title"></b><span id="ft-artist"></span></div></div>
+    <div class="ft-mid">
+      <div class="buttons">
+        <button class="tbtn" id="back30" data-l="30" title="Back 30 s (Shift+←)"></button>
+        <button class="tbtn" id="back5" data-l="5" title="Back 5 s (←)"></button>
+        <button class="play" id="play" title="Play / pause (Space)"></button>
+        <button class="tbtn" id="fwd5" data-l="5" title="Forward 5 s (→)"></button>
+        <button class="tbtn" id="fwd30" data-l="30" title="Forward 30 s (Shift+→)"></button>
+      </div>
+      <div class="wave-row">
+        <span id="t-cur">0:00</span>
+        <div id="wave-box"><canvas id="wave"></canvas><div id="wave-hover" hidden></div></div>
+        <span id="t-dur">0:00</span>
+      </div>
     </div>
-    <div class="wave-row">
-      <span id="t-cur">0:00</span>
-      <div id="wave-box"><canvas id="wave"></canvas><div id="wave-hover" hidden></div></div>
-      <span id="t-dur">0:00</span>
+    <div class="ft-right" title="Main volume for the whole app. Saved songs are not changed by it.">
+      <span class="vol-ic" id="vol-ic"></span>
+      <input type="range" id="master" min="0" max="100" step="1" value="100">
+      <span id="master-val">100%</span>
     </div>
   </footer>
 

@@ -129,7 +129,7 @@ function updateGain(now) {
   const t = cur();
   const fx = t ? t.fx : S.defaults;
   const dur = audio.duration || (t && t.duration) || 0;
-  const target = S.muted ? 0 : (fx.volume / 100) * envelope(audio.currentTime, fx, dur);
+  const target = S.muted ? 0 : (fx.volume / 100) * ((S.master ?? 100) / 100) * envelope(audio.currentTime, fx, dur);
   if (now) gainNode.gain.setValueAtTime(target, actx.currentTime);
   else gainNode.gain.setTargetAtTime(target, actx.currentTime, 0.015);
 }
@@ -241,6 +241,19 @@ function buildFxCards() {
     wrap.append(card);
   }
 }
+// Main volume for the whole app (0-100%). It only changes what you hear, never saved files.
+let masterTimer = null;
+function setMaster(v, save = true) {
+  v = Math.max(0, Math.min(100, Math.round(+v)));
+  S.master = v;
+  const m = $('#master');
+  m.value = v;
+  m.style.setProperty('--pct', `${v}%`);
+  $('#master-val').textContent = `${v}%`;
+  updateGain(true);
+  if (save) { clearTimeout(masterTimer); masterTimer = setTimeout(() => tf.settings({ master: v }).catch(() => {}), 400); }
+}
+$('#master').addEventListener('input', (e) => setMaster(e.target.value));
 function resetAllFx() {
   const t = cur();
   if (!t) return;
@@ -300,6 +313,12 @@ function renderNow() {
   const c = $('#now-cover');
   c.innerHTML = '';
   c.append(coverEl(t));
+  // the small song info in the player bar
+  const fc = $('#ft-cover');
+  fc.innerHTML = '';
+  fc.append(coverEl(t));
+  $('#ft-title').textContent = t ? t.title : 'Nothing playing';
+  $('#ft-artist').textContent = t ? (t.artist || 'Unknown artist') : '';
   $('#now-title').innerHTML = t
     ? `<div class="np-title">${esc(t.title)}</div><div class="np-artist">${esc([t.artist || 'Unknown artist', t.genre].filter(Boolean).join(' · '))}</div>`
     : '<div class="np-title dim">Nothing playing</div><div class="np-artist">Double-click a song to play it</div>';
@@ -467,7 +486,7 @@ function updateDatalists() {
     if (!top.length) box.append(h('span', { class: 'fnone' }, 'Nothing yet'));
   }
   const nOn = ['artist', 'date', 'label', 'genre'].filter((k) => S.filters[k].trim()).length + (S.filters.q.trim() ? 1 : 0);
-  $('#f-note').textContent = nOn ? `${nOn} filter${nOn === 1 ? '' : 's'} on · ${visibleTracks().length} song${visibleTracks().length === 1 ? '' : 's'} match` : 'Click a name to show only those songs';
+  $('#f-note').textContent = nOn ? `${nOn} filter${nOn === 1 ? '' : 's'} on · ${visibleTracks().length} song${visibleTracks().length === 1 ? '' : 's'} match` : 'Click a name to filter';
 }
 function setFilter(k, v) {
   S.filters[k] = v;
@@ -927,6 +946,7 @@ tf.onLog(({ level, msg, time }) => addLog(level, msg, time));
   const NAV = { library: ['search', 'Library'], map: ['map', 'Map'], editor: ['page', 'Details'], tools: ['caliper', 'Edit'], settings: ['gear', 'Settings'] };
   for (const b of $$('.nav')) { const [ic, label] = NAV[b.dataset.view]; b.innerHTML = `<span class="nav-ic">${ICONS[ic]}</span><span class="nav-l">${label}</span>`; }
   $('#logo').innerHTML = ICONS.note;
+  $('#vol-ic').innerHTML = ICONS.speaker;
   $('#ts-ic').innerHTML = ICONS.search;
   const icon = (sel, name) => { $(sel).innerHTML = ICONS[name]; };
   for (const el of $$('#lib-toolbar .ic')) el.innerHTML = ICONS[el.dataset.icon];
@@ -935,6 +955,7 @@ tf.onLog(({ level, msg, time }) => addLog(level, msg, time));
   const st = await tf.state();
   setTracks(st.tracks);
   S.settings = st.settings;
+  setMaster(S.settings.master ?? 100, false);
   S.limits = st.limits;
   S.defaults = st.defaults;
   $('#set-lib-dir').value = st.libraryDir;

@@ -28,6 +28,7 @@
 - 2026-11-23: App look chosen: **Midnight glass** (dark blue frosted glass, silver highlights) with the improved layout. Not built yet.
 - 2026-11-23: Midnight glass part 1 built: new colors and glass panels, top bar (logo, Library/Map buttons with words, search box), Now playing card, Sound panel (one tidy list, ↺ reset in the middle of each row, Reset all). Waveform and map paths now silver. 
 - 2026-11-23: Midnight glass part 2 built: Library page (title + song count, tabs All / Recently added / From videos, cards with artist names, new toolbar with words, "Save 2 songs" shows how many are picked) and Filters panel (typing box + clickable name chips per group, "Clear", how many songs match).
+- 2026-11-23: Midnight glass part 3 built: player bar (song info on the left; smaller skip buttons labeled 30 / 5 / 5 / 30 with the waveform under them; **main volume** slider 0-100% on the right, remembered between starts, only changes what you hear and never the saved files). Left to restyle: Map toolbar and pop-up windows.
 - Build order decided 2026-11-23: 1) finish the new look (player bar + map page), 2) finish the Map (steps 3–8), 3) the sound editor.
 - 2026-11-23: Sound editor designed (5 tabs, smart connect, 3 save modes).
 - 2026-11-23: Map backgrounds: 20 built-in, your own pictures (tiles), song-name color.
