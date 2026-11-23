@@ -26,7 +26,7 @@ Each song keeps its own settings. A song on a map keeps its own copy (see [Map](
 5. **Changing the pitch while a song plays:** you keep hearing the old sound until the new copy is ready, then it blends over in 0.05 s. No wrong sound in between.
 6. **Pressing play on a song with a changed pitch:** Tonix waits about a second for the clean copy, then starts. It never starts with the wrong sound.
 7. **Next songs are prepared early:** the next library song when a song starts, and on a map every song a path can lead to, 30 seconds before the end.
-8. **Speed** while listening still uses the player's own speed control. It keeps the pitch and only follows the clean copy.
+8. **Speed** uses the same studio tool (since the fix below). The clean copy is made at the new speed and pitch and plays at normal rate. The original song runs silently at the new speed, only as the clock.
 9. Copies are kept on your PC (`%APPDATA%\Tonix\library\studio-pitch`), so the same song with the same pitch starts at once next time. The oldest copies are removed after 2 GB. **Settings → Library → Clean pitch copies** shows the space used and has a **Clear** button.
 
 ### Checked
@@ -35,9 +35,11 @@ Each song keeps its own settings. A song on a map keeps its own copy (see [Map](
 - **Not yet heard by you on your PC.**
 
 ### History
+- 🔄 2026-11-23: **Speed now studio quality while listening too.** Before: listening used the player's own built-in speed control, which smears music (only saved files used the studio tool). You said: "The speed messes the sound up also. Not the pitch", and Natural voice on and off both sounded fine. Now the clean copy is made at the new speed as well. Checked: 0 corrections in 20 s of playing at 80% and 130%, the copy stays within 0.08 s of the song clock.
 - 🔄 2026-11-23: **Studio quality pitch.** Before: listening used a simple live shifter (small 70 ms pieces glued together, which caused the wobble and echo you heard), and saved files used "speed up the tape, then slow it back down" (asetrate + atempo), which also smeared the sound. Both replaced by the Rubber Band tool. Added the Natural voice switch and the status text. Reason: "The pitch is bad and sounds so bad on the music."
 - 2026-11-23: Pitch card made wider, shows semitones.
 
 ## Speed, volume, fades — current state ✅
 - Speed 25–400 %, volume 0–500 %, fade in / out 0–15 s. Exact number boxes, sliders and step buttons. **Reset all** puts everything back to normal (Natural voice back on too).
-- Saved files: speed now uses the same studio tool as pitch (2026-11-23). Before: atempo.
+- Saved files and listening: speed uses the same studio tool as pitch (2026-11-23). Before: atempo for saved files, the player's own speed control for listening.
+- The status ("Preparing clean sound…" / "Studio quality") shows on the Pitch card, also when only the speed is changed.

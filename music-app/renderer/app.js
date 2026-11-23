@@ -403,7 +403,7 @@ function renderStudio() {
   if (!el) return;
   const st = editFx() === liveFx() ? TFStudio.status(deck) : 'off';
   el.dataset.s = st;
-  el.textContent = { preparing: 'Preparing clean pitch…', ready: 'Studio quality', fallback: 'Basic preview (studio tool failed)' }[st] || '';
+  el.textContent = { preparing: 'Preparing clean sound…', ready: 'Studio quality', fallback: 'Basic preview (studio tool failed)' }[st] || '';
 }
 function renderFx(skipSliderKey) {
   const fx = editFx() || S.defaults;

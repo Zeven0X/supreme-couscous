@@ -74,16 +74,16 @@ function buildFilter(fxIn, duration) {
   return { filter: parts.join(','), outDuration };
 }
 
-// A pitched copy of a song for listening (same length and timing as the original; speed stays live).
-// start/len (seconds) render only a part, so a pitch change can be heard within about a second.
-function renderPitched({ src, dest, pitch, natural, start = 0, len = 0, duration, onProgress, onSpawn }) {
+// A copy of a song for listening, at its new speed and pitch (length = original length / tempo).
+// start/len (seconds of the original) render only a part, so a change can be heard within about a second.
+function renderPitched({ src, dest, pitch = 1, tempo = 1, natural, start = 0, len = 0, duration, onProgress, onSpawn }) {
   const args = ['-y'];
   if (start > 0) args.push('-ss', start.toFixed(3));
   if (len > 0) args.push('-t', len.toFixed(3));
   args.push('-i', src, '-map', '0:a:0', '-vn', '-af',
-    `aresample=${OUT_RATE},${rubberband({ pitch, natural })},aformat=sample_fmts=s16:channel_layouts=stereo`,
+    `aresample=${OUT_RATE},${rubberband({ tempo, pitch, natural })},aformat=sample_fmts=s16:channel_layouts=stereo`,
     '-c:a', 'flac', '-compression_level', '0', dest);
-  return run(args, { duration: len || duration, onProgress, onSpawn });
+  return run(args, { duration: (len || duration) / tempo, onProgress, onSpawn });
 }
 
 // ---- parsing ffmpeg's text output ----

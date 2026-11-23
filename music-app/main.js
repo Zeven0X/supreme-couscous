@@ -457,7 +457,7 @@ function registerIpc() {
     const t = lib.byId(id);
     if (!t || !fs.existsSync(t.mediaPath)) throw new Error('Song file not found');
     try {
-      const r = await studio.render({ file: t.mediaPath, duration: t.duration, pitch: opts.pitch, natural: opts.natural !== false, start: opts.start, len: opts.len, group: opts.group });
+      const r = await studio.render({ file: t.mediaPath, duration: t.duration, pitch: opts.pitch, tempo: opts.tempo, natural: opts.natural !== false, start: opts.start, len: opts.len, group: opts.group });
       return { url: `${baseUrl}/studio/${r.name}`, start: r.start, end: r.len ? r.start + r.len : 0 };
     } catch (e) {
       if (e.cancelled) return null;

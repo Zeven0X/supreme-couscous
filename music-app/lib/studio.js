@@ -24,10 +24,10 @@ class Studio {
     for (const f of fs.readdirSync(dir)) if (f.endsWith('.tmp.flac')) rm(path.join(dir, f));
   }
 
-  key(file, { pitch, natural, start = 0, len = 0 }) {
+  key(file, { pitch, tempo = 1, natural, start = 0, len = 0 }) {
     const st = fs.statSync(file);
     return crypto.createHash('sha1')
-      .update([file, st.size, st.mtimeMs, pitch.toFixed(6), natural ? 1 : 0, start.toFixed(2), len.toFixed(2)].join('|'))
+      .update([file, st.size, st.mtimeMs, pitch.toFixed(6), tempo.toFixed(6), natural ? 1 : 0, start.toFixed(2), len.toFixed(2)].join('|'))
       .digest('hex');
   }
 
@@ -47,13 +47,15 @@ class Studio {
   }
 
   // Returns { name, start, len } once the copy is ready. len 0 = the whole song.
-  render({ file, duration, pitch, natural = true, start = 0, len = 0, group }) {
+  // start / len are in seconds of the original song; the copy is len / tempo long.
+  render({ file, duration, pitch, tempo = 1, natural = true, start = 0, len = 0, group }) {
     pitch = Math.min(2, Math.max(0.5, +pitch || 1));
+    tempo = Math.min(4, Math.max(0.25, +tempo || 1));
     start = Math.max(0, +start || 0);
     len = Math.max(0, +len || 0);
     if (len && duration && start + len >= duration - 0.5) len = 0; // part reaches the end: the rest of the song
     const whole = !start && !len;
-    const key = this.key(file, { pitch, natural, start, len });
+    const key = this.key(file, { pitch, tempo, natural, start, len });
     const name = `${key}.flac`;
     const dest = path.join(whole ? this.dir : this.partDir, name);
     const result = { name, start, len };
@@ -64,10 +66,10 @@ class Studio {
     const g = group ? { key, proc: null } : null;
     if (g) this.groups.set(group, g);
     const t0 = Date.now();
-    const job = this.ff.renderPitched({ src: file, dest: tmp, pitch, natural, start, len, duration, onSpawn: (p) => { if (g) g.proc = p; this.procs.add(p); p.on('close', () => this.procs.delete(p)); } })
+    const job = this.ff.renderPitched({ src: file, dest: tmp, pitch, tempo, natural, start, len, duration, onSpawn: (p) => { if (g) g.proc = p; this.procs.add(p); p.on('close', () => this.procs.delete(p)); } })
       .then(() => {
         fs.renameSync(tmp, dest);
-        this.log('info', `Studio pitch ${Math.round(pitch * 1000) / 10}%${whole ? '' : ` (part from ${start.toFixed(1)} s)`} ready in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+        this.log('info', `Studio sound: speed ${Math.round(tempo * 1000) / 10}%, pitch ${Math.round(pitch * 1000) / 10}%${whole ? '' : ` (part from ${start.toFixed(1)} s)`} ready in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
         try { if (whole) this.prune(); else this.prune(PARTS_MAX, this.partDir); } catch (_) { /* tidying can wait */ }
         return result;
       })

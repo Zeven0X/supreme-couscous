@@ -24,7 +24,8 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   ok('you hear 660 Hz (150%)', Math.abs(await freq() - 660) < 8, await freq());
   ok('status text', (await w.textContent('#fx-studio')) === 'Studio quality');
   ok('original is silent', await ev(() => deck.orig.gain.value < 0.01));
-  const drift = await ev(() => { const s = deck.st.on; return Math.abs(s.el.currentTime + s.r.start - audio.currentTime); });
+  const inStep = () => ev(() => { const s = deck.st.on; return Math.abs(s.el.currentTime * s.r.tempo + s.r.start - audio.currentTime); });
+  const drift = await inStep();
   ok('copy plays in step', drift < 0.12, drift.toFixed(3));
   // whole song copy replaces the quick part
   await w.waitForFunction(() => deck.st.on && deck.st.on.r && deck.st.on.r.end === 0, null, { timeout: 20000 });
@@ -32,20 +33,28 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   // jump far ahead: right pitch straight away (whole copy is ready)
   await ev(() => seek(45)); await wait(500);
   ok('after a jump still 660 Hz', Math.abs(await freq() - 660) < 8, await freq());
-  // speed changes live and keeps the pitch
-  await w.fill('.fx[data-key=speed] .fx-val', '80'); await w.press('.fx[data-key=speed] .fx-val', 'Enter'); await wait(800);
+  // speed: the studio tool makes a new copy at 80% speed, played at normal rate
+  await w.fill('.fx[data-key=speed] .fx-val', '80'); await w.press('.fx[data-key=speed] .fx-val', 'Enter');
+  await w.waitForFunction(() => TFStudio.status(deck) === 'ready', null, { timeout: 15000 }); await wait(600);
   ok('speed 80% keeps 660 Hz', Math.abs(await freq() - 660) < 8, await freq());
-  ok('copy follows the speed', await ev(() => deck.st.on.el.playbackRate === audio.playbackRate));
+  ok('speed copy plays at normal rate', await ev(() => deck.st.on.el.playbackRate === 1 && deck.st.on.r.tempo === 0.8));
+  const d3 = await inStep(); ok('speed copy in step with the song clock', d3 < 0.12, d3.toFixed(3));
+  const t3 = await ev(() => audio.currentTime); await wait(2000); const moved = (await ev(() => audio.currentTime)) - t3;
+  ok('song clock moves at 80%', Math.abs(moved - 1.6) < 0.25, moved.toFixed(2));
   // Natural voice switch makes a new copy
   await w.click('#fx-natural'); ok('natural off saved', await ev(() => cur().fx.natural === false));
   await w.waitForFunction(() => TFStudio.status(deck) === 'ready', null, { timeout: 15000 }); await wait(400);
   ok('classic voice still 660 Hz', Math.abs(await freq() - 660) < 8, await freq());
   // pause / play keeps the copy in step
   await ev(() => pause()); await wait(400); await ev(() => play()); await wait(600);
-  const drift2 = await ev(() => { const s = deck.st.on; return Math.abs(s.el.currentTime + s.r.start - audio.currentTime); });
+  const drift2 = await inStep();
   ok('in step after pause', drift2 < 0.12, drift2.toFixed(3));
-  // back to 100%: the original plays again
-  await w.click('.fx[data-key=pitch] .rs'); await wait(400);
+  // pitch back to 100% but speed still 80%: still the studio copy (speed only)
+  await w.click('.fx[data-key=pitch] .rs');
+  await w.waitForFunction(() => TFStudio.status(deck) === 'ready', null, { timeout: 15000 }); await wait(500);
+  ok('speed only: studio copy, 440 Hz', Math.abs(await freq() - 440) < 6 && await ev(() => deck.orig.gain.value < 0.01), await freq());
+  // back to 100% speed too: the original plays again
+  await w.click('.fx[data-key=speed] .rs'); await wait(400);
   ok('100% plays the original', Math.abs(await freq() - 440) < 6 && await ev(() => deck.orig.gain.value > 0.99), await freq());
   // a song that starts with a changed pitch waits for the clean copy instead of playing it wrong
   await w.fill('.fx[data-key=pitch] .fx-val', '75'); await w.press('.fx[data-key=pitch] .fx-val', 'Enter');

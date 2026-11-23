@@ -1,9 +1,10 @@
 'use strict';
 /* global tf */
-// Studio pitch for listening.
+// Studio sound for listening (speed and pitch).
 // Each player ("deck") keeps playing the original song as the clock everyone else reads (time, fades,
-// waveform, map). When the pitch is not 100%, a clean pitched copy made by the studio tool plays in step
-// with it, and the original is silenced. Copies come in two kinds: a short part from where the music is
+// waveform, map). When the speed or pitch is not 100%, a clean copy made by the studio tool (already at
+// the new speed and pitch) plays in step with it at normal rate, and the original is silenced.
+// Copy time = (song time - copy start) / tempo. Copies come in two kinds: a short part from where the music is
 // (ready in about a second) and the whole song (ready a few seconds later, kept on disk for next time).
 window.TFStudio = (() => {
   const PART = 20; // seconds in a quick part
@@ -13,8 +14,14 @@ window.TFStudio = (() => {
   let actx = null, decks = [], hooks = {};
   const cache = new Map(); // "id|pitch|natural" -> entry
 
-  const wantOf = (id, fx) => (id && fx && Math.abs(fx.pitch - 100) > 1e-6 ? { id, pitch: fx.pitch / 100, natural: fx.natural !== false } : null);
-  const keyOf = (w) => (w ? `${w.id}|${w.pitch.toFixed(6)}|${w.natural ? 1 : 0}` : '');
+  const wantOf = (id, fx) => (id && fx && (Math.abs(fx.pitch - 100) > 1e-6 || Math.abs(fx.speed - 100) > 1e-6)
+    ? { id, pitch: fx.pitch / 100, tempo: fx.speed / 100, natural: fx.natural !== false } : null);
+  const keyOf = (w) => (w ? `${w.id}|${w.pitch.toFixed(6)}|${w.tempo.toFixed(6)}|${w.natural ? 1 : 0}` : '');
+  const opts = (w, extra) => ({ pitch: w.pitch, tempo: w.tempo, natural: w.natural, ...extra });
+  const tag = (r, w) => { if (r) { r.key = keyOf(w); r.tempo = w.tempo; } return r; };
+  const copyTime = (s, t) => Math.max(0, (t - s.r.start) / s.r.tempo);
+  // the copy already has the new speed, so it plays at normal rate (1) - unless the speed was just changed
+  const rateOf = (s, el) => { const x = el.playbackRate / s.r.tempo; return Math.abs(x - 1) < 1e-6 ? 1 : x; };
   function entry(w) {
     const k = keyOf(w);
     let e = cache.get(k);
@@ -32,8 +39,8 @@ window.TFStudio = (() => {
   }
   function requestWhole(e, group) {
     if (e.whole || e.wholeP || e.failed >= 2) return;
-    e.wholeP = tf.studioRender(e.w.id, { pitch: e.w.pitch, natural: e.w.natural, group })
-      .then((r) => { e.wholeP = null; if (r) { e.whole = r; kick(); } })
+    e.wholeP = tf.studioRender(e.w.id, opts(e.w, { group }))
+      .then((r) => { e.wholeP = null; if (r) { e.whole = tag(r, e.w); kick(); } })
       .catch((err) => { e.wholeP = null; fail(e, err); });
   }
   function requestPart(e, start, group) {
@@ -42,10 +49,10 @@ window.TFStudio = (() => {
     if (e.parts.some((r) => covers(r, start + 0.3))) return;
     if (e.partP && e.partStart <= start + 0.3 && start < e.partStart + PART - AHEAD) return; // already on its way
     e.partStart = start;
-    const p = e.partP = tf.studioRender(e.w.id, { pitch: e.w.pitch, natural: e.w.natural, start, len: PART, group })
+    const p = e.partP = tf.studioRender(e.w.id, opts(e.w, { start, len: PART, group }))
       .then((r) => {
         if (e.partP === p) e.partP = null;
-        if (r) { e.parts.push(r); if (e.parts.length > 6) e.parts.shift(); kick(); }
+        if (r) { e.parts.push(tag(r, e.w)); if (e.parts.length > 6) e.parts.shift(); kick(); }
       })
       .catch((err) => { if (e.partP === p) e.partP = null; fail(e, err); });
   }
@@ -68,7 +75,7 @@ window.TFStudio = (() => {
         const el = new Audio();
         el.crossOrigin = 'anonymous';
         el.preload = 'auto';
-        el.preservesPitch = true;
+        el.preservesPitch = true; // only used for a moment right after a speed change
         const gain = actx.createGain();
         gain.gain.value = 0;
         actx.createMediaElementSource(el).connect(gain).connect(d.gain);
@@ -92,10 +99,11 @@ window.TFStudio = (() => {
     for (const s of d.st.slots) {
       if (s.switching) continue;
       if (!s.ready || s !== d.st.on) { if (!s.el.paused) s.el.pause(); continue; }
-      if (s.el.playbackRate !== el.playbackRate) s.el.playbackRate = el.playbackRate;
+      const rate = rateOf(s, el);
+      if (s.el.playbackRate !== rate) s.el.playbackRate = rate;
       if (el.paused) { if (!s.el.paused) s.el.pause(); continue; }
-      const want = el.currentTime - s.r.start;
-      if (Math.abs(s.el.currentTime - want) > DRIFT) s.el.currentTime = Math.max(0, want);
+      const want = copyTime(s, el.currentTime);
+      if (Math.abs(s.el.currentTime - want) > DRIFT) s.el.currentTime = want;
       if (s.el.paused) s.el.play().catch(() => {});
     }
   }
@@ -127,11 +135,11 @@ window.TFStudio = (() => {
     }
     s.switching = true;
     try {
-      s.el.playbackRate = d.el.playbackRate;
-      s.el.currentTime = Math.max(0, d.el.currentTime - r.start);
+      s.el.playbackRate = rateOf(s, d.el);
+      s.el.currentTime = copyTime(s, d.el.currentTime);
       if (!d.el.paused) await s.el.play().catch(() => {});
       if (!covers(r, d.el.currentTime) || keyOf(st.want) !== r.key) return;
-      if (Math.abs(s.el.currentTime - (d.el.currentTime - r.start)) > 0.03) s.el.currentTime = Math.max(0, d.el.currentTime - r.start);
+      if (Math.abs(s.el.currentTime - copyTime(s, d.el.currentTime)) > 0.03) s.el.currentTime = copyTime(s, d.el.currentTime);
       audible(d, s);
     } finally { s.switching = false; }
   }
@@ -146,7 +154,6 @@ window.TFStudio = (() => {
     if (main) requestWhole(e, 'whole');
     const b = best(e, pos);
     if (b) {
-      b.key = keyOf(st.want);
       if (st.on && st.on !== 'orig' && st.on.r === b) {
         if (!e.whole && b.end && pos > b.end - AHEAD) requestPart(e, b.end - 2, main ? 'part' : 'oldpart');
         return;
@@ -160,7 +167,7 @@ window.TFStudio = (() => {
     if (!keepOld && st.on !== null) audible(d, null);
   }
 
-  // The app calls this when a song loads (fresh) or its pitch changes.
+  // The app calls this when a song loads (fresh) or its speed or pitch changes.
   function update(d, id, fx, { fresh = false } = {}) {
     if (!d.st) return;
     const st = d.st;

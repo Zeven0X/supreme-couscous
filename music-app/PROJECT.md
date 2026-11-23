@@ -28,6 +28,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: **Speed fixed while listening.** It used the player's own simple speed control (the bad sound you heard); now the studio tool makes the copy at the new speed too. Pitch checks 21/21.
 - 2026-11-23: **New Save song window**: Fill from name (reads artist and title from the original file name), ⇄ Swap, all boxes shown, Type (MP3 / M4A / FLAC / WAV / OGG), Quality with file size, File name, Save in + Change…, last choices remembered. OGG imports now keep their names.
 - 2026-11-23: **Right-click menu** added everywhere you type (Undo, Redo, Cut, Copy, Paste, Delete, Select all) and on selected text (Copy). Before: right-click did nothing. Found by you in the save window. Pitch fixes from the code review: a broken copy no longer leaves the song silent, the song blending out keeps its clean pitch, at most 3 songs are prepared ahead, short parts are tidied up, all jobs stop when Tonix closes.
 - 2026-11-23: **Pitch fixed.** A professional pitch tool (Rubber Band) now does pitch and speed for saved files, and makes a clean pitched copy for listening (first 20 s ready in under a second, whole song a few seconds later, kept for next time). New **Natural voice** switch on the Pitch card. Settings → Library shows the space the copies use, with Clear. Checks: 44 automatic tests, pitch check 18/18, final check 21/21.

@@ -93,6 +93,11 @@ test('listening copy: same length and timing, pitch moves, a part starts where a
   const p = await decode(part);
   assert.ok(Math.abs(p.length / 44100 - 2) < 0.03, `part length ${p.length / 44100}`);
   assert.ok(Math.abs(freqOf(p) - 300) < 5, `part frequency ${freqOf(p)}`);
+  const slow = path.join(tmp, 'p-slow.flac');
+  await ff.renderPitched({ src, dest: slow, pitch: 1, tempo: 0.8, start: 1, len: 2, duration: 5 });
+  const q = await decode(slow);
+  assert.ok(Math.abs(q.length / 44100 - 2.5) < 0.03, `slow part length ${q.length / 44100}`);
+  assert.ok(Math.abs(freqOf(q) - 400) < 5, `slow part keeps the pitch ${freqOf(q)}`);
 });
 
 test('export: volume 50% halves the level, fades start/end silent', async () => {
