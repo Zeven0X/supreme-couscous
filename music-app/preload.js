@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('tf', {
   mapsList: () => call('maps-list'),
   mapGet: (id) => call('map-get', id),
   mapCreate: (name) => call('map-create', name),
+  mapDelete: (id) => call('map-delete', id),
   mapSave: (m) => call('map-save', m),
   mapBgAdd: (mapId, imagePath) => call('map-bg-add', mapId, imagePath),
   mapAssetUrl: () => call('map-asset-url'),

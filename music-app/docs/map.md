@@ -30,7 +30,7 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 3. ✅ Path settings.
 4. ✅ Song settings on the map.
 5. ✅ Playing a map (follow paths by chance, quiet gaps, cut, real crossfades, dot, follow view, choose).
-6. ⬜ Many maps.
+6. ✅ Many maps.
 7. ⬜ Export / Import.
 8. ⬜ Tests + Windows build.
 
@@ -148,6 +148,24 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
   - The map remembers which song it reached (used for "continue" in step 6).
   - For a crossfade, luck has to decide a little early (15 seconds before the song ends). You can still click a path to choose until the blend starts.
 - **History:** 2026-11-23 part 1 added. 2026-11-23 part 2: real crossfades (🔄 before: crossfade played like a cut). 🔄 Before (step 4): double-clicking a map song played only that one song and stopped.
+
+### Many maps
+- **Now:** click the map's name (top left of the map, with ▾) to open **Your maps**.
+  - Each map is a card with its cover (or its background if it has no cover), name, and song/path count.
+  - **Click a card** to open that map. One map is open at a time.
+  - **New map:** makes an empty map, opens it, and lets you type its name right away.
+  - **Rename**, **Cover** (choose a picture) and **Delete** on every card.
+  - Delete asks twice ("Sure? Delete"). The map is not destroyed: its file moves to the library's `maps\trash` folder.
+  - Deleting the open map opens another one first (or a fresh empty one).
+  - The app reopens the map you used last.
+- **History:** 2026-11-23 added. Before: there was only one map.
+
+### Continue where the music stopped
+- **Now:** every map remembers the song it was on and how far into it (saved every 5 seconds while playing, and when you stop or switch maps).
+  - The play button then says **Continue**, and a **From start** button appears next to it.
+  - Works after switching maps and after closing the app.
+  - When a map reaches an END, it forgets the spot and starts from the Start song next time.
+- **History:** 2026-11-23 added.
 
 ## How it works (simple words)
 - The map is a list of stops. Each stop remembers which song it is, where it sits (x, y) and its own effects.

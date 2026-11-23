@@ -185,7 +185,7 @@
     pathPanel();
     syncEdit();
     $('#map-empty').hidden = M.map.stops.length > 0;
-    $('#map-name').textContent = M.map.name;
+    $('#map-name').textContent = `${M.map.name} ▾`;
     const ns = M.map.stops.length, np = M.map.paths.length;
     $('#map-name').dataset.sub = `${ns} song${ns === 1 ? '' : 's'} · ${np} path${np === 1 ? '' : 's'}`;
     $('#map-start').disabled = !M.selected || M.selected === M.map.startId;
@@ -197,7 +197,10 @@
     const playHint = M.play && !M.pathMode && !selP && outsOf(M.play.stopId).length > 1;
     hint.hidden = !M.pathMode && !selP && !playHint;
     $('#map-play').classList.toggle('on', !!M.play);
-    $('#map-play span:last-child').textContent = M.play ? 'Stop map' : 'Play map';
+    const rp = !M.play && resumePoint();
+    $('#map-play span:last-child').textContent = M.play ? 'Stop map' : rp ? 'Continue' : 'Play map';
+    $('#map-play').title = M.play ? 'Stop the map (it remembers where)' : rp ? `Continue where the music stopped: ${(S.byId.get(stopById(rp.stopId).trackId) || {}).title || ''}` : 'Play this map from its Start song';
+    $('#map-restart').hidden = !rp;
     $('#map-play .ic').innerHTML = M.play ? ICONS.stop : ICONS.play;
     $('#map-follow').hidden = !M.play;
     $('#map-follow').classList.toggle('on', !M.noFollow);
@@ -331,25 +334,128 @@
   }
 
 
+
+  // ---------- many maps ----------
+  async function saveNow() {
+    clearTimeout(M.saveTimer);
+    if (M.map) await tf.mapSave(M.map).catch((e) => toast(`Map not saved: ${e.message}`, { type: 'error' }));
+  }
+  // where "Continue" would pick up, or null
+  function resumePoint() {
+    const pr = M.map && M.map.progress;
+    const s = pr && stopById(pr.stopId);
+    if (!s || !S.byId.get(s.trackId)) return null;
+    return (pr.stopId !== M.map.startId || (pr.time || 0) > 3) ? pr : null;
+  }
+  async function openMap(id) {
+    if (M.play) { stopPlay(); pause(); } // remembers where it stopped
+    await saveNow();
+    const m = await guard(() => tf.mapGet(id));
+    if (!m) return;
+    M.map = m;
+    M.map.bg = M.map.bg || { kind: 'builtin', id: 'dots' };
+    M.selected = null; M.selPath = null; M.pathMode = false; M.from = null;
+    if (!M.map.stops.length) M.map.view = { x: board.clientWidth / 2, y: board.clientHeight / 2, zoom: 1 };
+    tf.settings({ lastMapId: id }).catch(() => {});
+    applyView();
+    render();
+  }
+  function openMaps() {
+    modal(async (box, close) => {
+      box.classList.add('wide');
+      const grid = h('div', { class: 'maps-grid' });
+      box.append(h('h2', {}, 'Your maps'), grid,
+        h('div', { class: 'foot' }, h('span', { class: 'muted' }, 'Click a map to open it. Every map saves by itself and remembers where its music stopped.'), h('button', { class: 'btn primary', onclick: () => close() }, 'Done')));
+      await saveNow();
+      let editing = null, sure = null;
+      const change = async (id, fn) => { // change one map (the open one, or another one on disk)
+        if (id === M.map.id) { fn(M.map); await saveNow(); render(); } else { const m = await tf.mapGet(id); fn(m); await tf.mapSave(m); }
+      };
+      const draw = async () => {
+        const list = await guard(() => tf.mapsList());
+        if (!list) return;
+        list.sort((a, b) => (b.id === M.map.id) - (a.id === M.map.id) || b.updatedAt - a.updatedAt);
+        grid.innerHTML = '';
+        for (const m of list) {
+          const t = bgTile(m.bg || { kind: 'builtin', id: 'dots' });
+          const thumb = m.cover ? h('div', { class: 'map-th', style: { backgroundImage: `url('${assetUrl}${m.cover}')`, backgroundSize: 'cover', backgroundPosition: 'center' } })
+            : h('div', { class: 'map-th', style: { backgroundColor: t.color, backgroundImage: t.url, backgroundSize: `${Math.round(t.W * 0.5)}px ${Math.round(t.H * 0.5)}px` } }, h('span', { class: 'map-th-ic', html: ICONS.map }));
+          let nameEl;
+          if (editing === m.id) {
+            nameEl = h('input', { class: 'map-rename', value: m.name, maxlength: '60', spellcheck: 'false' });
+            const done = async (keep) => { if (editing !== m.id) return; editing = null; const v = nameEl.value.trim(); if (keep && v && v !== m.name) await change(m.id, (x) => { x.name = v; }); draw(); };
+            nameEl.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); });
+            nameEl.addEventListener('blur', () => done(true));
+            nameEl.addEventListener('click', (e) => e.stopPropagation());
+            setTimeout(() => { nameEl.focus(); nameEl.select(); }, 0);
+          } else nameEl = h('div', { class: 'map-n' }, m.name);
+          const act = (label, title, fn, cls = '') => h('button', { class: `map-act ${cls}`, title, onclick: (e) => { e.stopPropagation(); fn(); } }, label);
+          grid.append(h('div', { class: `map-card${m.id === M.map.id ? ' on' : ''}`, title: 'Open this map', onclick: async () => { if (m.id !== M.map.id) await openMap(m.id); close(); } },
+            thumb, nameEl,
+            h('div', { class: 'map-s' }, `${m.stops} song${m.stops === 1 ? '' : 's'} · ${m.paths} path${m.paths === 1 ? '' : 's'}${m.id === M.map.id ? ' · open now' : ''}`),
+            h('div', { class: 'map-acts' },
+              act('Rename', 'Change the name', () => { editing = m.id; sure = null; draw(); }),
+              act('Cover', 'Choose a cover picture for this map', async () => {
+                const img = await guard(() => tf.pickImage());
+                if (!img) return;
+                const got = await guard(() => tf.mapBgAdd(m.id, img), 'Picture: ');
+                if (got) { await change(m.id, (x) => { x.cover = got.file; }); draw(); }
+              }),
+              act(sure === m.id ? 'Sure? Delete' : 'Delete', 'Delete this map (a copy is kept in the trash folder)', async () => {
+                if (sure !== m.id) { sure = m.id; draw(); return; }
+                sure = null;
+                if (m.id === M.map.id) { // deleting the open map: open another one first (or a fresh one)
+                  const other = list.find((x) => x.id !== m.id) || await tf.mapCreate('My first map');
+                  await openMap(other.id);
+                }
+                await guard(() => tf.mapDelete(m.id));
+                toast(`“${m.name}” deleted. A copy is kept in the library's maps\\trash folder.`, { ms: 7000 });
+                draw();
+              }, sure === m.id ? 'danger' : ''))));
+        }
+        grid.append(h('div', { class: 'map-card new', title: 'Make a new empty map', onclick: async () => {
+          const names = new Set(list.map((x) => x.name));
+          let n = list.length + 1, name = `Map ${n}`;
+          while (names.has(name)) name = `Map ${++n}`;
+          const m = await guard(() => tf.mapCreate(name));
+          if (m) { await openMap(m.id); editing = m.id; draw(); }
+        } }, h('div', { class: 'map-th plus', html: ICONS.plus }), h('div', { class: 'map-n' }, 'New map'), h('div', { class: 'map-s' }, 'Start with an empty board')));
+      };
+      draw();
+    });
+  }
+  $('#map-name').addEventListener('click', openMaps);
+  // remember where the music is, every few seconds, so "Continue" works even after closing the app
+  setInterval(() => {
+    if (!M.play || M.play.gap || audio.paused || !M.map.progress || M.map.progress.stopId !== M.play.stopId) return;
+    M.map.progress.time = audio.currentTime;
+    save();
+  }, 5000);
+
   // ---------- playing the map ----------
   // M.play = { stopId, chosen (path id the listener clicked), gap (timer while waiting in a quiet gap), token }
   const playable = (p) => { const s = stopById(p.to); return !!(s && S.byId.get(s.trackId)); };
   const outsOf = (id) => pathsFrom(id).filter(playable);
   function redraw() { if (S.view === 'map') render(); }
-  function startMap(stopId) {
+  function startMap(stopId, time = 0) {
     const s = stopById(stopId || M.map.startId) || M.map.stops[0];
     if (!s || !S.byId.get(s.trackId)) { toast('Add a song to the map first, then press Play map.'); return; }
     clearTimeout(M.play && M.play.gap);
     M.play = { stopId: s.id, chosen: null, gap: null, token: (M.play ? M.play.token : 0) + 1 };
-    M.map.progress = { stopId: s.id };
+    M.map.progress = { stopId: s.id, time };
     save();
     playStop(s);
+    if (time > 0) { // continue in the middle of the song
+      const pl = audio;
+      pl.addEventListener('loadedmetadata', () => { if (time < pl.duration - 1) pl.currentTime = time; }, { once: true });
+    }
     redraw();
     follow(s);
   }
   function stopPlay() {
     if (!M.play) return;
     clearTimeout(M.play.gap);
+    if (M.map.progress && M.map.progress.stopId === M.play.stopId && !M.play.gap && audio.currentTime > 0) { M.map.progress.time = audio.currentTime; save(); }
     M.play = null;
     M.travelPath = null;
     $('#map-dot').hidden = true;
@@ -362,6 +468,9 @@
     if (!outs.length) {
       toast('The map reached an END. The music stops here.');
       stopPlay();
+      M.map.progress = null; // finished: next time it starts from the Start song
+      save();
+      redraw();
       setPlayIcon(false);
       return true;
     }
@@ -450,7 +559,12 @@
     M.play.chosen = M.play.chosen === pathId ? null : pathId;
     render();
   }
-  $('#map-play').addEventListener('click', () => { if (M.play) { stopPlay(); pause(); } else startMap(); });
+  $('#map-play').addEventListener('click', () => {
+    if (M.play) { stopPlay(); pause(); return; }
+    const rp = resumePoint();
+    if (rp) startMap(rp.stopId, rp.time || 0); else startMap();
+  });
+  $('#map-restart').addEventListener('click', () => startMap());
   $('#map-follow').addEventListener('click', () => { M.noFollow = !M.noFollow; render(); });
 
   // ---------- paths ----------
@@ -816,7 +930,8 @@
       M.loaded = true;
       const list = await guard(() => tf.mapsList());
       if (!list) { M.loaded = false; return; }
-      M.map = list.length ? await guard(() => tf.mapGet(list[0].id)) : await guard(() => tf.mapCreate('My first map'));
+      const last = list.find((m) => m.id === S.settings.lastMapId) || list[0]; // the map that was open last time
+      M.map = last ? await guard(() => tf.mapGet(last.id)) : await guard(() => tf.mapCreate('My first map'));
       if (!M.map) { M.loaded = false; return; }
       assetUrl = await tf.mapAssetUrl();
       M.map.bg = M.map.bg || { kind: 'builtin', id: 'dots' };

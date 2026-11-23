@@ -23,13 +23,24 @@ class MapStore {
       if (!f.endsWith('.json')) continue;
       try {
         const m = JSON.parse(fs.readFileSync(path.join(this.dir, f), 'utf8'));
-        out.push({ id: m.id, name: m.name, updatedAt: m.updatedAt || 0, stops: (m.stops || []).length });
+        out.push({ id: m.id, name: m.name, updatedAt: m.updatedAt || 0, stops: (m.stops || []).length, paths: (m.paths || []).length, cover: m.cover || null, bg: m.bg || null });
       } catch (_) { /* skip broken files, never delete them */ }
     }
     return out.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   get(id) { return JSON.parse(fs.readFileSync(this.file(id), 'utf8')); }
+
+  // "Delete" never destroys a map: its file is moved into the trash folder.
+  remove(id) {
+    const f = this.file(id);
+    if (!fs.existsSync(f)) return null;
+    const trash = path.join(this.dir, 'trash');
+    fs.mkdirSync(trash, { recursive: true });
+    const dest = path.join(trash, `${id}-${Date.now()}.json`);
+    fs.renameSync(f, dest);
+    return dest;
+  }
 
   create(name = 'My first map') {
     const m = {

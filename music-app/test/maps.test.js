@@ -51,3 +51,18 @@ test('background, song-name color and own pictures are saved with the map', () =
     assert.strictEqual(store.list().length, 1); // the pictures folder is not counted as a map
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('deleting a map moves it to the trash folder instead of destroying it', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-maps-'));
+  try {
+    const store = new MapStore(dir);
+    const a = store.create('Keep me');
+    const b = store.create('Delete me');
+    const where = store.remove(b.id);
+    assert.deepStrictEqual(store.list().map((m) => m.name), ['Keep me']);
+    assert.ok(where.includes('trash') && fs.existsSync(where)); // still on disk
+    assert.strictEqual(JSON.parse(fs.readFileSync(where, 'utf8')).name, 'Delete me');
+    assert.strictEqual(store.remove(b.id), null); // deleting twice does nothing
+    assert.ok(store.get(a.id));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

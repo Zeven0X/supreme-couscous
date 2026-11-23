@@ -350,6 +350,7 @@ function registerIpc() {
   handle('maps-list', () => maps.list());
   handle('map-get', (id) => maps.get(id));
   handle('map-create', (name) => maps.create(name));
+  handle('map-delete', (id) => maps.remove(id));
   handle('map-save', (m) => ({ updatedAt: maps.save(m).updatedAt }));
   // A picture for a map background: shrunk to at most 1024 px and kept as PNG (so see-through parts stay see-through).
   handle('map-bg-add', async (mapId, imagePath) => {
