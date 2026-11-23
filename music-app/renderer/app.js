@@ -84,29 +84,63 @@ async function guard(fn, errPrefix = '') {
 }
 
 // ---------------------------------------------------------------- audio engine
-const audio = new Audio();
-audio.crossOrigin = 'anonymous';
-audio.preload = 'auto';
-audio.preservesPitch = true;
+// Two players ("decks"). One is the main player. During a crossfade the old song keeps playing on its
+// deck while it fades out, and the other deck becomes the main player for the next song.
+function makePlayer() {
+  const a = new Audio();
+  a.crossOrigin = 'anonymous';
+  a.preload = 'auto';
+  a.preservesPitch = true;
+  return a;
+}
+const decks = [{ el: makePlayer() }, { el: makePlayer() }];
+let deck = decks[0];
+let audio = deck.el; // always the main player
 let actx = null, shifter = null, gainNode = null, engine = null;
+// listen on both players, but only react to the main one
+function onAudio(type, fn) { for (const d of decks) d.el.addEventListener(type, (e) => { if (e.target === audio) fn(e); }); }
 function ensureEngine() {
   if (engine) return engine;
   engine = (async () => {
     actx = new AudioContext({ latencyHint: 'playback' });
-    const src = actx.createMediaElementSource(audio);
-    gainNode = actx.createGain();
-    try {
-      await actx.audioWorklet.addModule('pitch-worklet.js');
-      shifter = new AudioWorkletNode(actx, 'pitch-shifter', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
-      src.connect(shifter).connect(gainNode);
-    } catch (e) {
+    let pitchOk = true;
+    try { await actx.audioWorklet.addModule('pitch-worklet.js'); } catch (e) {
+      pitchOk = false;
       addLog('warn', `Pitch preview not available (${e.message}). Saved files still get the pitch change.`);
-      src.connect(gainNode);
     }
-    gainNode.connect(actx.destination);
+    for (const d of decks) {
+      const src = actx.createMediaElementSource(d.el);
+      d.gain = actx.createGain();
+      if (pitchOk) {
+        d.shifter = new AudioWorkletNode(actx, 'pitch-shifter', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
+        src.connect(d.shifter).connect(d.gain);
+      } else src.connect(d.gain);
+      d.gain.connect(actx.destination);
+    }
+    shifter = deck.shifter || null;
+    gainNode = deck.gain;
     applyFx();
   })();
   return engine;
+}
+// Start a crossfade: the playing song fades out over `secs` on its own deck, and the other deck takes over
+// (the next song loaded after this call fades in over the same time).
+function beginCrossfade(secs) {
+  if (!gainNode || !(secs > 0)) return false;
+  const old = deck, now = actx.currentTime;
+  old.gain.gain.cancelScheduledValues(now);
+  old.gain.gain.setValueAtTime(old.gain.gain.value, now);
+  old.gain.gain.linearRampToValueAtTime(0, now + secs);
+  clearTimeout(old.tail);
+  old.tail = setTimeout(() => old.el.pause(), secs * 1000 + 200);
+  deck = decks[1 - decks.indexOf(old)];
+  clearTimeout(deck.tail);
+  deck.gain.gain.cancelScheduledValues(now);
+  audio = deck.el;
+  shifter = deck.shifter || null;
+  gainNode = deck.gain;
+  S.fadeIn = { t0: now, secs };
+  return true;
 }
 function envelope(t, fx, dur) {
   const sp = fx.speed / 100;
@@ -135,7 +169,9 @@ function updateGain(now) {
   const t = cur();
   const fx = liveFx();
   const dur = audio.duration || (t && t.duration) || 0;
-  const target = S.muted ? 0 : (fx.volume / 100) * ((S.master ?? 100) / 100) * envelope(audio.currentTime, fx, dur);
+  let xf = 1; // fading in during a crossfade
+  if (S.fadeIn) { xf = Math.min(1, (actx.currentTime - S.fadeIn.t0) / S.fadeIn.secs); if (xf >= 1) S.fadeIn = null; }
+  const target = S.muted ? 0 : (fx.volume / 100) * ((S.master ?? 100) / 100) * envelope(audio.currentTime, fx, dur) * xf;
   if (now) gainNode.gain.setValueAtTime(target, actx.currentTime);
   else gainNode.gain.setTargetAtTime(target, actx.currentTime, 0.015);
 }
@@ -146,7 +182,7 @@ async function play() {
   updateGain(true);
   try { await audio.play(); } catch (e) { if (e.name !== 'AbortError') toast(`Can't play this file: ${e.message}`, { type: 'error' }); }
 }
-function pause() { audio.pause(); }
+function pause() { for (const d of decks) d.el.pause(); }
 function togglePlay() {
   if (window.TFMap && window.TFMap.skipGap()) return; // in a quiet gap between two map songs: go on to the next song now
   if (audio.paused) play(); else pause();
@@ -191,16 +227,16 @@ function upNext() {
   return S.queue.slice(i + 1).map((id) => S.byId.get(id)).filter(Boolean);
 }
 
-audio.addEventListener('loadedmetadata', () => { applyFx(); drawWave(); });
-audio.addEventListener('play', () => setPlayIcon(true));
-audio.addEventListener('pause', () => setPlayIcon(false));
-audio.addEventListener('ended', () => {
+onAudio('loadedmetadata', () => { applyFx(); drawWave(); });
+onAudio('play', () => setPlayIcon(true));
+onAudio('pause', () => setPlayIcon(false));
+onAudio('ended', () => {
   if (window.TFMap && window.TFMap.onEnded()) return; // a map is playing: it picks the next song itself
   if (S.playFx) { setPlayIcon(false); return; }
   const n = upNext()[0];
   if (n) loadTrack(n.id, { autoplay: true }); else { setPlayIcon(false); }
 });
-audio.addEventListener('error', () => {
+onAudio('error', () => {
   const t = cur();
   if (t && audio.src) toast(`Can't play "${t.title}". The file may have been moved or deleted.`, { type: 'error', ms: 7000 });
 });

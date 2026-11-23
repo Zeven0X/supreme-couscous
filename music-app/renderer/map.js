@@ -133,7 +133,7 @@
       const w = 2.5 + (p.chance / 100) * 6; // thick line = likely path
       const sel = p.id === M.selPath;
       const live = M.play && p.from === M.play.stopId;
-      const g = el('g', { class: `mpath${sel ? ' selected' : ''}${live ? ' live' : ''}${M.play && (M.play.chosen === p.id || M.play.travelPath === p.id) ? ' chosen' : ''}`, 'data-id': p.id, style: `color:${p.color && p.color !== '#e3923a' ? p.color : 'var(--accent)'}` });
+      const g = el('g', { class: `mpath${sel ? ' selected' : ''}${live ? ' live' : ''}${M.play && (M.play.chosen === p.id || M.travelPath === p.id) ? ' chosen' : ''}`, 'data-id': p.id, style: `color:${p.color && p.color !== '#e3923a' ? p.color : 'var(--accent)'}` });
       const line = el('path', { d: c.d, class: 'line', 'stroke-width': w });
       if (p.style === 'dashed') line.setAttribute('stroke-dasharray', `${w * 2.4} ${w * 2}`);
       if (p.style === 'dotted') line.setAttribute('stroke-dasharray', `0.01 ${w * 2.1}`);
@@ -351,6 +351,7 @@
     if (!M.play) return;
     clearTimeout(M.play.gap);
     M.play = null;
+    M.travelPath = null;
     $('#map-dot').hidden = true;
     redraw();
   }
@@ -364,7 +365,7 @@
       setPlayIcon(false);
       return true;
     }
-    const p = outs.find((x) => x.id === M.play.chosen) || TFChance.pick(outs);
+    const p = outs.find((x) => x.id === M.play.chosen) || outs.find((x) => x.id === M.play.picked) || TFChance.pick(outs);
     const blend = p.blend || { type: 'crossfade', secs: 3 };
     const token = M.play.token;
     const go = () => { if (M.play && M.play.token === token) { M.play.gap = null; startMap(p.to); } };
@@ -380,6 +381,24 @@
     }
     return true;
   }
+  // Crossfade: must start before the song ends, so the two songs overlap. A few times a second we check
+  // how much of the playing song is left. Luck picks its path a little early (15 s before the end).
+  setInterval(() => {
+    if (!M.play || M.play.gap || audio.paused || !(audio.duration > 0)) return;
+    const speed = ((S.playFx && S.playFx.speed) || 100) / 100;
+    const left = (audio.duration - audio.currentTime) / speed; // seconds you will still hear
+    const outs = outsOf(M.play.stopId);
+    if (!outs.length) return;
+    if (!M.play.picked && left <= 15.5) M.play.picked = TFChance.pick(outs).id;
+    const p = outs.find((x) => x.id === M.play.chosen) || outs.find((x) => x.id === M.play.picked);
+    const b = p && (p.blend || { type: 'crossfade', secs: 3 });
+    if (!b || b.type !== 'crossfade' || !(b.secs > 0)) return;
+    const secs = Math.min(b.secs, audio.duration / speed / 2); // never more than half the song
+    if (left <= secs && left > 0.15 && beginCrossfade(left)) {
+      travel(p, left * 1000);
+      startMap(p.to);
+    }
+  }, 100);
   function skipGap() {
     if (!M.play || !M.play.gap) return false;
     clearTimeout(M.play.gap);
@@ -391,7 +410,7 @@
     const dot = $('#map-dot');
     const t0 = performance.now();
     const token = M.play.token;
-    M.play.travelPath = p.id;
+    M.travelPath = p.id;
     const step = (now) => {
       const f = Math.min(1, (now - t0) / ms);
       const line = S.view === 'map' && world.querySelector(`.mpath[data-id="${p.id}"] .line`);
@@ -403,7 +422,7 @@
         dot.style.color = getComputedStyle(line).stroke;
       } else dot.hidden = true;
       if (f < 1 && M.play) requestAnimationFrame(step);
-      else { dot.hidden = true; if (M.play && M.play.travelPath === p.id && M.play.token !== token) M.play.travelPath = null; }
+      else { dot.hidden = true; if (M.travelPath === p.id) { M.travelPath = null; redraw(); } }
     };
     requestAnimationFrame(step);
     redraw();

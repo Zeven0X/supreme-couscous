@@ -29,7 +29,7 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 2b. ✅ Backgrounds: 20 built-in, your own pictures, song-name color.
 3. ✅ Path settings.
 4. ✅ Song settings on the map.
-5. 🧪 Playing a map. Part 1 done (follow paths, quiet gaps, cut, dot, follow view, choose). Part 2 left: real crossfades.
+5. ✅ Playing a map (follow paths by chance, quiet gaps, cut, real crossfades, dot, follow view, choose).
 6. ⬜ Many maps.
 7. ⬜ Export / Import.
 8. ⬜ Tests + Windows build.
@@ -140,13 +140,14 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
   - When a song ends, Tonix picks one of its paths **by chance** (using the percents) and plays the song it leads to.
   - **Choose instead of luck:** click a glowing path. It lights up white and will be taken next. Click it again to leave it to luck.
   - **The glowing dot** travels along the path that was taken.
-  - **Join types:** Silence = the dot travels during the quiet gap, then the next song starts (pressing Play during the gap skips it). Cut = the next song starts right away. **Crossfade is not real yet: it plays like a Cut until part 2.**
+  - **Join types:** Silence = the dot travels during the quiet gap, then the next song starts (pressing Play during the gap skips it). Cut = the next song starts right away. Crossfade = the next song starts **before** the old one ends, so both play together for the blend time: the old one fades out while the new one fades in, and the dot travels during the blend. The blend is never longer than half the song.
   - **Follow** (next to Stop map): the view glides to the playing song when it is near the edge or off screen. Click Follow to turn it off.
   - A song with no paths out is an END: the music stops with a message.
   - Paths to missing songs are skipped.
   - Playing a normal library song stops the map.
   - The map remembers which song it reached (used for "continue" in step 6).
-- **History:** 2026-11-23 part 1 added. 🔄 Before (step 4): double-clicking a map song played only that one song and stopped.
+  - For a crossfade, luck has to decide a little early (15 seconds before the song ends). You can still click a path to choose until the blend starts.
+- **History:** 2026-11-23 part 1 added. 2026-11-23 part 2: real crossfades (🔄 before: crossfade played like a cut). 🔄 Before (step 4): double-clicking a map song played only that one song and stopped.
 
 ## How it works (simple words)
 - The map is a list of stops. Each stop remembers which song it is, where it sits (x, y) and its own effects.
@@ -154,4 +155,5 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 - A drawn path stores a few points measured from its two songs (how far along the way from A to B, and how far to the side). That is why the drawing follows when a song moves. This math is in `renderer/pathshape.js` with 6 tests.
 - The built-in backgrounds are tiny pictures made in code (`renderer/backgrounds.js`), so they add almost nothing to the app's size. Anything near a tile's edge is also drawn on the opposite edge, so the repeated copies meet with no seams.
 - The Sound panel asks one question before every change: "what am I editing?" The answer is, in order: the selected map song, else the map song that is playing, else the playing library song. So it always edits what you see or hear.
+- The app has two music players inside. Normally only one plays. During a crossfade the old song keeps playing on its player and fades out, while the second player starts the next song and becomes the main one.
 - The view is like a camera over a big table: moving changes where the camera is, zoom changes how close it is. Songs keep their real place on the table.
