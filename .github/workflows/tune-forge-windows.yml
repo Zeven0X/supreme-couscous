@@ -1,0 +1,32 @@
+name: Tune Forge (Windows build)
+
+on:
+  push:
+    paths:
+      - 'music-app/**'
+      - '.github/workflows/tune-forge-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: music-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: music-app/package-lock.json
+      - run: npm ci
+      - name: Tests (real ffmpeg exports on Windows)
+        run: npm test
+      - name: Build installer + portable exe
+        run: npx electron-builder --win nsis portable --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tune-Forge-Windows
+          path: music-app/dist/*.exe
+          retention-days: 30

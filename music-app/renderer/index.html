@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Tune Forge</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header id="topbar">
+    <nav id="views">
+      <button class="nav" data-view="library" title="Library and search (Ctrl+1)"></button>
+      <button class="nav" data-view="editor" title="Song details and open songs (Ctrl+2)"></button>
+      <button class="nav" data-view="tools" title="Tools: convert to MP3 and log (Ctrl+3)"></button>
+      <button class="nav" data-view="settings" title="Settings (Ctrl+4)"></button>
+    </nav>
+    <div id="job" hidden><span id="job-label"></span><div class="bar"><div id="job-fill"></div></div></div>
+  </header>
+
+  <main id="main">
+    <aside id="left">
+      <div class="next-row">
+        <span class="next-label">Next</span>
+        <div id="next-thumbs"></div>
+      </div>
+      <div id="now-wrap"><div id="now-cover"></div></div>
+      <div id="now-title"></div>
+      <div id="fx-cards"></div>
+    </aside>
+
+    <section id="center">
+      <!-- Library / search -->
+      <div class="view" id="view-library">
+        <div id="grid-wrap"><div id="grid"></div></div>
+        <div id="lib-toolbar">
+          <button class="tool" id="btn-upload-file" title="Upload music or video files"></button>
+          <button class="tool boxed" id="btn-upload-folder" title="Upload a whole folder"></button>
+          <div class="zoom">
+            <span class="zoom-icon" id="zoom-out" title="Smaller pictures"></span>
+            <input type="range" id="zoom" min="80" max="280" step="1" value="150" title="Picture size">
+            <span class="zoom-icon" id="zoom-in" title="Bigger pictures"></span>
+          </div>
+          <button class="tool" id="btn-save" title="Save song as MP3 with cover (Ctrl+S)"></button>
+          <button class="tool boxed" id="btn-save-many" title="Save selected songs as one big MP3 or as an album"></button>
+          <span id="sel-info"></span>
+        </div>
+      </div>
+
+      <!-- Editor: open songs (tabs) + details -->
+      <div class="view" id="view-editor">
+        <div id="tabs"></div>
+        <div id="editor-body"></div>
+      </div>
+
+      <!-- Tools -->
+      <div class="view" id="view-tools">
+        <div class="tools-scroll">
+          <section class="panel" id="convert-panel">
+            <h2>Convert to MP3</h2>
+            <p class="muted">Turn video or audio files into MP3 files without adding them to the library. Drop files here or pick them.</p>
+            <div id="convert-drop">
+              <div id="convert-list" class="muted">No files chosen</div>
+            </div>
+            <div class="row">
+              <button class="btn" id="convert-pick">Choose files…</button>
+              <button class="btn" id="convert-pick-folder">Choose folder…</button>
+              <button class="btn" id="convert-clear">Clear</button>
+              <span class="grow"></span>
+              <span class="muted" id="convert-dest"></span>
+              <button class="btn primary" id="convert-go" disabled>Convert</button>
+            </div>
+          </section>
+          <section class="panel">
+            <h2>Export the playing song</h2>
+            <p class="muted">Saves the current song with its speed, pitch, volume and fades.</p>
+            <div class="row">
+              <button class="btn" id="export-mp3">Save as MP3</button>
+              <button class="btn" id="export-wav">Save as WAV</button>
+            </div>
+          </section>
+          <section class="panel" id="terminal-panel">
+            <div class="row"><h2>Log</h2><span class="grow"></span><button class="btn small" id="log-clear">Clear</button></div>
+            <div id="terminal"></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div class="view" id="view-settings">
+        <div class="tools-scroll">
+          <section class="panel">
+            <h2>Saving</h2>
+            <label class="field">Save folder
+              <div class="row"><input id="set-export-dir" readonly><button class="btn" id="set-export-pick">Change…</button><button class="btn" id="set-export-open">Open</button></div>
+            </label>
+            <label class="check"><input type="checkbox" id="set-ask"> Ask where to save every time (off = save instantly into the save folder)</label>
+            <label class="field">MP3 quality
+              <select id="set-bitrate">
+                <option value="320">320 kbps (best)</option>
+                <option value="256">256 kbps</option>
+                <option value="192">192 kbps</option>
+                <option value="128">128 kbps (smallest)</option>
+              </select>
+            </label>
+          </section>
+          <section class="panel">
+            <h2>Library</h2>
+            <p class="muted">Music files stay where they are. Videos are converted to MP3 and kept in the library folder.</p>
+            <div class="row"><input id="set-lib-dir" readonly><button class="btn" id="set-lib-open">Open</button></div>
+            <p class="muted" id="ffmpeg-info"></p>
+          </section>
+          <section class="panel">
+            <h2>Keyboard</h2>
+            <table class="keys">
+              <tr><td>Space</td><td>Play / pause</td></tr>
+              <tr><td>← / →</td><td>Back / forward 5 seconds</td></tr>
+              <tr><td>Shift + ← / →</td><td>Back / forward 30 seconds</td></tr>
+              <tr><td>Ctrl + F</td><td>Search</td></tr>
+              <tr><td>Ctrl + S</td><td>Save song</td></tr>
+              <tr><td>Ctrl + A</td><td>Select all songs</td></tr>
+              <tr><td>Ctrl/Shift + click</td><td>Select several songs</td></tr>
+              <tr><td>Double-click</td><td>Play song</td></tr>
+              <tr><td>Delete</td><td>Remove selected songs from library</td></tr>
+            </table>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <aside id="right">
+      <input id="search" placeholder="Search" spellcheck="false">
+      <div class="filters">
+        <label>Artists<input id="f-artist" list="dl-artist" spellcheck="false"></label>
+        <label>Date<input id="f-date" list="dl-date" spellcheck="false"></label>
+        <label>Label<input id="f-label" list="dl-label" spellcheck="false"></label>
+        <label>Genre<input id="f-genre" list="dl-genre" spellcheck="false"></label>
+        <button class="link" id="f-clear">Clear filters</button>
+      </div>
+      <datalist id="dl-artist"></datalist><datalist id="dl-date"></datalist><datalist id="dl-label"></datalist><datalist id="dl-genre"></datalist>
+    </aside>
+  </main>
+
+  <footer id="transport">
+    <div class="buttons">
+      <button class="tbtn" id="back30" title="Back 30 s (Shift+←)"></button>
+      <button class="tbtn" id="back5" title="Back 5 s (←)"></button>
+      <button class="play" id="play" title="Play / pause (Space)"></button>
+      <button class="tbtn" id="fwd5" title="Forward 5 s (→)"></button>
+      <button class="tbtn" id="fwd30" title="Forward 30 s (Shift+→)"></button>
+    </div>
+    <div class="wave-row">
+      <span id="t-cur">0:00</span>
+      <div id="wave-box"><canvas id="wave"></canvas><div id="wave-hover" hidden></div></div>
+      <span id="t-dur">0:00</span>
+    </div>
+  </footer>
+
+  <div id="drop-overlay" hidden><div>Drop music or video files to add them</div></div>
+  <div id="ctxmenu" hidden></div>
+  <div id="modal-root"></div>
+  <div id="toasts"></div>
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
