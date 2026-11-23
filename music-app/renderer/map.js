@@ -1,5 +1,5 @@
 'use strict';
-/* global S, h, $, $$, coverEl, ICONS, modal, guard, toast, tf, TFChance */
+/* global S, h, $, $$, coverEl, ICONS, modal, guard, toast, tf, TFChance, TFBackgrounds */
 // The Map page: songs on a board, connected by paths. (Path settings and playing come in later steps.)
 (function () {
   const M = {
@@ -12,6 +12,8 @@
     draw: null, // points of the line being drawn by hand right now
   };
   const Sh = window.TFShape;
+  const BG = window.TFBackgrounds;
+  let assetUrl = '';
   const board = $('#map-board');
   const world = $('#map-world');
   const STOP = 96; // cover size in map pixels
@@ -33,11 +35,28 @@
   function applyView() {
     const v = M.map.view;
     world.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.zoom})`;
+    // the background is a tile that repeats; it moves and zooms with the map
+    const t = bgTile();
+    board.style.backgroundColor = t.color;
+    board.style.backgroundImage = t.url;
     board.style.backgroundPosition = `${v.x}px ${v.y}px`;
-    board.style.backgroundSize = `${40 * v.zoom}px ${40 * v.zoom}px`;
+    board.style.backgroundSize = `${t.W * v.zoom}px ${t.H * v.zoom}px`;
     const z = $('#map-zoom');
     z.value = Math.round(v.zoom * 100);
     z.style.setProperty('--pct', `${((v.zoom * 100 - 30) / 220) * 100}%`);
+  }
+  function bgTile(bg = M.map.bg) {
+    if (bg && bg.kind === 'custom' && bg.file) return { color: '#202020', url: `url('${assetUrl}${bg.file}')`, W: bg.w || 512, H: bg.h || 512, light: false };
+    const b = BG.byId(bg && bg.id);
+    return { color: b.color, url: b.url, W: b.W, H: b.H, light: b.light };
+  }
+  // Song name color: Auto picks dark text on light backgrounds; or the user's choice.
+  function nameStyle() {
+    const n = M.map.names || { mode: 'auto' };
+    const color = n.mode === 'light' ? '#ffffff' : n.mode === 'dark' ? '#1a1a1a' : n.mode === 'custom' ? n.color : (bgTile().light ? '#1a1a1a' : '#ffffff');
+    const hex = color.replace('#', ''), lum = (0.299 * parseInt(hex.slice(0, 2), 16) + 0.587 * parseInt(hex.slice(2, 4), 16) + 0.114 * parseInt(hex.slice(4, 6), 16)) / 255;
+    board.style.setProperty('--mname', color);
+    board.style.setProperty('--mshadow', lum > 0.55 ? '0 1px 3px #000, 0 0 2px #000' : '0 1px 3px rgba(255,255,255,.85), 0 0 2px rgba(255,255,255,.7)');
   }
   function zoomAt(newZoom, cx, cy) {
     const v = M.map.view;
@@ -158,6 +177,7 @@
       outs === 0 && M.map.paths.length ? h('div', { class: 'mend', title: 'No paths out: the music stops here' }, 'END') : null));
     }
     drawLines();
+    nameStyle();
     $('#map-empty').hidden = M.map.stops.length > 0;
     $('#map-name').textContent = M.map.name;
     $('#map-start').disabled = !M.selected || M.selected === M.map.startId;
@@ -443,6 +463,59 @@
     });
   }
 
+  // Background picker: the 20 built-in tiles, your own pictures, and the song-name color.
+  function openBackgrounds() {
+    const before = JSON.stringify({ bg: M.map.bg, names: M.map.names, c: M.map.customBgs });
+    M.map.customBgs = M.map.customBgs || []; // pictures you added to this map (kept for export)
+    modal((box, close) => {
+      const grid = h('div', { class: 'bg-grid' });
+      const sw = (t) => ({ backgroundColor: t.color, backgroundImage: t.url, backgroundSize: `${Math.round(t.W * (t.W > 250 ? 0.42 : 0.7))}px ${Math.round(t.H * (t.W > 250 ? 0.42 : 0.7))}px` });
+      const isOn = (bg) => (bg.kind === 'custom' ? M.map.bg.file === bg.file : M.map.bg.kind !== 'custom' && M.map.bg.id === bg.id);
+      const choose = (bg) => { M.map.bg = bg; applyView(); render(); draw(); };
+      const draw = () => {
+        grid.innerHTML = '';
+        for (const b of BG.list) {
+          const bg = { kind: 'builtin', id: b.id };
+          grid.append(h('div', { class: `bg-card${isOn(bg) ? ' on' : ''}`, onclick: () => choose(bg), title: b.name },
+            h('div', { class: 'bg-sw', style: sw(bgTile(bg)) }), h('div', { class: 'bg-name' }, b.name)));
+        }
+        for (const c of M.map.customBgs) {
+          const bg = { kind: 'custom', file: c.file, w: c.w, h: c.h };
+          grid.append(h('div', { class: `bg-card${isOn(bg) ? ' on' : ''}`, onclick: () => choose(bg), title: c.label },
+            h('div', { class: 'bg-sw', style: sw(bgTile(bg)) }), h('div', { class: 'bg-name' }, `★ ${c.label}`),
+            h('button', { class: 'bg-x', html: ICONS.close, title: 'Take this picture out of this map', onclick: (e) => {
+              e.stopPropagation();
+              M.map.customBgs = M.map.customBgs.filter((x) => x !== c);
+              if (isOn(bg)) M.map.bg = { kind: 'builtin', id: 'dots' };
+              applyView(); render(); draw();
+            } })));
+        }
+        grid.append(h('div', { class: 'bg-card add', onclick: addPicture, title: 'Use your own picture. It repeats like tiles and is saved inside the map.' },
+          h('div', { class: 'bg-sw plus', html: ICONS.plus }), h('div', { class: 'bg-name' }, 'Add my picture')));
+        for (const b of $$('.nm', box)) b.classList.toggle('on', (M.map.names || { mode: 'auto' }).mode === b.dataset.mode);
+      };
+      async function addPicture() {
+        const img = await guard(() => tf.pickImage());
+        if (!img) return;
+        const got = await guard(() => tf.mapBgAdd(M.map.id, img), 'Picture: ');
+        if (!got) return;
+        M.map.customBgs.push(got);
+        choose({ kind: 'custom', file: got.file, w: got.w, h: got.h });
+      }
+      const setNames = (mode, color) => { M.map.names = { mode, color: color || (M.map.names && M.map.names.color) || '#ffffff' }; render(); draw(); };
+      const picker = h('input', { type: 'color', value: (M.map.names && M.map.names.color) || '#ffffff', title: 'Pick any color' });
+      picker.addEventListener('input', () => setNames('custom', picker.value));
+      const names = h('div', { class: 'row names-row' }, h('b', {}, 'Song names:'),
+        ...[['auto', 'Auto'], ['light', 'White'], ['dark', 'Dark']].map(([m, l]) => h('button', { class: 'btn nm', 'data-mode': m, onclick: () => setNames(m) }, l)),
+        h('label', { class: 'btn nm', 'data-mode': 'custom' }, 'Color ', picker));
+      box.classList.add('wide');
+      box.append(h('h2', {}, 'Map background'), grid, names,
+        h('p', { class: 'muted' }, 'Auto = dark names on light backgrounds, white names on dark ones. Your pictures repeat like tiles and are saved inside this map.'),
+        h('div', { class: 'foot' }, h('span', { class: 'muted' }), h('button', { class: 'btn primary', onclick: () => close() }, 'Done')));
+      draw();
+    }).then(() => { if (JSON.stringify({ bg: M.map.bg, names: M.map.names, c: M.map.customBgs }) !== before) save(); });
+  }
+  $('#map-bg').addEventListener('click', openBackgrounds);
   $('#map-add').addEventListener('click', openPicker);
   $('#map-path').addEventListener('click', () => setPathMode(!M.pathMode));
   $('#map-start').addEventListener('click', setStart);
@@ -473,6 +546,8 @@
       if (!list) { M.loaded = false; return; }
       M.map = list.length ? await guard(() => tf.mapGet(list[0].id)) : await guard(() => tf.mapCreate('My first map'));
       if (!M.map) { M.loaded = false; return; }
+      assetUrl = await tf.mapAssetUrl();
+      M.map.bg = M.map.bg || { kind: 'builtin', id: 'dots' };
       if (!M.map.stops.length) M.map.view = { x: board.clientWidth / 2, y: board.clientHeight / 2, zoom: 1 };
     }
     applyView();

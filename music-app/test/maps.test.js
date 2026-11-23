@@ -34,3 +34,20 @@ test('bad map ids are refused', () => {
     assert.throws(() => store.save({ id: '..\\x' }), /Bad map id/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('background, song-name color and own pictures are saved with the map', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-maps-'));
+  try {
+    const store = new MapStore(dir);
+    const m = store.create('Bg test');
+    assert.deepStrictEqual(m.bg, { kind: 'builtin', id: 'dots' }); // new maps start on Dark dots
+    m.bg = { kind: 'custom', file: 'abc.png', w: 300, h: 200 };
+    m.names = { mode: 'custom', color: '#ff00aa' };
+    m.customBgs = [{ file: 'abc.png', w: 300, h: 200, label: 'me.png' }];
+    store.save(m);
+    const back = store.get(m.id);
+    assert.deepStrictEqual([back.bg, back.names, back.customBgs], [m.bg, m.names, m.customBgs]);
+    assert.ok(fs.existsSync(store.assetDir));
+    assert.strictEqual(store.list().length, 1); // the pictures folder is not counted as a map
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

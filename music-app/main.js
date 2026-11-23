@@ -69,6 +69,7 @@ function startServer() {
       }
       const t = lib.byId(parts[2]);
       if (parts[1] === 'media' && t) return serveFile(req, res, t.mediaPath);
+      if (parts[1] === 'mapasset' && /^[a-f0-9]{12}-[a-f0-9]{8}\.png$/.test(parts[2] || '')) return serveFile(req, res, path.join(maps.assetDir, parts[2]));
       if (parts[1] === 'cover' && t && t.cover) return serveFile(req, res, lib.coverPath(t));
       res.writeHead(404); res.end();
     });
@@ -350,6 +351,17 @@ function registerIpc() {
   handle('map-get', (id) => maps.get(id));
   handle('map-create', (name) => maps.create(name));
   handle('map-save', (m) => ({ updatedAt: maps.save(m).updatedAt }));
+  // A picture for a map background: shrunk to at most 1024 px and kept as PNG (so see-through parts stay see-through).
+  handle('map-bg-add', async (mapId, imagePath) => {
+    if (!/^[a-f0-9]{12}$/.test(mapId)) throw new Error('Bad map id');
+    const name = `${mapId}-${crypto.randomBytes(4).toString('hex')}.png`;
+    const dest = path.join(maps.assetDir, name);
+    await ff.run(['-y', '-i', imagePath, '-frames:v', '1', '-vf', "scale='min(1024,iw)':-2", dest]);
+    const { stdout, stderr } = await ff.run(['-i', dest, '-f', 'null', '-']).catch((e) => ({ stderr: e.stderr || '' }));
+    const m = (stderr || '').match(/, (\d+)x(\d+)/);
+    return { file: name, w: m ? +m[1] : 512, h: m ? +m[2] : 512, label: path.basename(imagePath) };
+  });
+  handle('map-asset-url', () => `${baseUrl}/mapasset/`);
   handle('settings', (patch) => ({ ...lib.setSettings(patch), exportDir: exportDir() }));
   handle('show-item', (p) => { if (fs.existsSync(p) && fs.statSync(p).isDirectory()) shell.openPath(p); else shell.showItemInFolder(p); return true; });
   handle('open-path', (p) => shell.openPath(p));

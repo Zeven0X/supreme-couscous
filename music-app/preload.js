@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('tf', {
   mapGet: (id) => call('map-get', id),
   mapCreate: (name) => call('map-create', name),
   mapSave: (m) => call('map-save', m),
+  mapBgAdd: (mapId, imagePath) => call('map-bg-add', mapId, imagePath),
+  mapAssetUrl: () => call('map-asset-url'),
   showItem: (p) => call('show-item', p),
   openPath: (p) => call('open-path', p),
   ffmpegInfo: () => call('ffmpeg-info'),

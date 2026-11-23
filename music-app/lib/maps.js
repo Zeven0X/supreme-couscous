@@ -8,7 +8,8 @@ const crypto = require('crypto');
 class MapStore {
   constructor(dir) {
     this.dir = dir;
-    fs.mkdirSync(dir, { recursive: true });
+    this.assetDir = path.join(dir, 'assets'); // background pictures added by the user
+    fs.mkdirSync(this.assetDir, { recursive: true });
   }
 
   file(id) {
@@ -33,7 +34,8 @@ class MapStore {
   create(name = 'My first map') {
     const m = {
       id: crypto.randomBytes(6).toString('hex'), name, cover: null, startId: null,
-      stops: [], paths: [], view: { x: 0, y: 0, zoom: 1 }, progress: null, updatedAt: Date.now(),
+      stops: [], paths: [], view: { x: 0, y: 0, zoom: 1 }, progress: null,
+      bg: { kind: 'builtin', id: 'dots' }, names: { mode: 'auto', color: '#ffffff' }, updatedAt: Date.now(),
     };
     this.save(m);
     return m;
@@ -50,6 +52,9 @@ class MapStore {
       paths: Array.isArray(m.paths) ? m.paths : [],
       view: m.view || { x: 0, y: 0, zoom: 1 },
       progress: m.progress || null,
+      bg: m.bg || { kind: 'builtin', id: 'dots' },
+      names: m.names || { mode: 'auto', color: '#ffffff' },
+      customBgs: Array.isArray(m.customBgs) ? m.customBgs : [], // the user's own background pictures (go into the export)
       updatedAt: Date.now(),
     };
     const f = this.file(clean.id);

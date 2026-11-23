@@ -20,13 +20,13 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 | 13 | Others open it in Tonix and it becomes their copy. |
 | 14 | One map open at a time, as many maps as wanted, autosave + resume where playback stopped. |
 | 15 | Paths can be **drawn by hand** (freehand route) and reshaped with **bend handles**. (Added 2026-11-23.) |
-| 16 | Each map has its own **background**: 20 built-in ones (mix of themes) or the user's own picture (repeats like tiles, travels inside the export file). It moves and zooms with the map. (Decided 2026-11-23, not built yet.) |
+| 16 | Each map has its own **background**: 20 built-in ones (mix of themes) or the user's own picture (repeats like tiles, travels inside the export file). It moves and zooms with the map. Song-name color: Auto (dark on light backgrounds), White, Dark or any color. (Built 2026-11-23.) |
 | — | Icon: torn page with a loop trail to an X. Page style: dark "winding trail". |
 
 ## Build steps
 1. ✅ Map page: board, add songs, move, zoom, Start.
 2. ✅ Path button. 🔄 2026-11-23: + draw paths by hand, bend handles.
-2b. ⬜ Backgrounds: previews of 20 first, then the Background button.
+2b. ✅ Backgrounds: 20 built-in, your own pictures, song-name color.
 3. ⬜ Path settings.
 4. ⬜ Song settings on the map.
 5. ⬜ Playing a map.
@@ -92,8 +92,28 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
   - Every path already stores its blend (crossfade 3 s), color, line style and name, ready for step 3.
 - **History:** 2026-11-23 added.
 
+### Backgrounds
+- **Now:** "Background" in the map toolbar opens a picker with 20 built-in backgrounds:
+  Dark dots, Graph paper, Old parchment, Treasure map, Night sky, Galaxy, Deep ocean, Tropical sea, Forest, Mountains (contour lines), Neon grid, Circuit board, Desert dunes, Snow field, Lava, Blueprint, Chalkboard, Sheet music, Vinyl records, Honeycomb.
+  - Each map has its own background. It moves and zooms with the map and repeats with no seams.
+  - Clicking a background changes the map right away, so you can try them while the picker is open.
+  - New maps start on Dark dots.
+- **History:** 2026-11-23 added. Before: every map had the same dark dotted background.
+
+### Your own background pictures
+- **Now:** "Add my picture" in the picker. The picture is copied into the library (`maps\assets\`), shrunk to at most 1024 px wide, and repeats like tiles.
+  - Your pictures appear in the picker with a ★ and can be reused. Hover one and click × to take it out of this map (the copy stays on disk).
+  - They are listed inside the map so they will go into the exported file (step 7).
+  - A photo that isn't made to repeat will show its edges where the copies meet; patterns look best.
+- **History:** 2026-11-23 added.
+
+### Song-name color
+- **Now:** in the picker: **Auto** (dark names on light backgrounds like parchment, snow, desert, sheet music; white names on dark ones), **White**, **Dark**, or **Color** (any color). A matching outline keeps names readable. Saved per map.
+- **History:** 2026-11-23 added.
+
 ## How it works (simple words)
 - The map is a list of stops. Each stop remembers which song it is, where it sits (x, y) and its own effects.
 - A path remembers: which song it starts from, which song it goes to, and its chance. The chance math lives in `renderer/chance.js` and is tested on its own (6 tests): whole numbers, always 100, locks respected, and luck really follows the chances (70/30 over 20,000 tries).
 - A drawn path stores a few points measured from its two songs (how far along the way from A to B, and how far to the side). That is why the drawing follows when a song moves. This math is in `renderer/pathshape.js` with 6 tests.
+- The built-in backgrounds are tiny pictures made in code (`renderer/backgrounds.js`), so they add almost nothing to the app's size. Anything near a tile's edge is also drawn on the opposite edge, so the repeated copies meet with no seams.
 - The view is like a camera over a big table: moving changes where the camera is, zoom changes how close it is. Songs keep their real place on the table.
