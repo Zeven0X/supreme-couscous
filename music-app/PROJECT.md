@@ -14,16 +14,19 @@
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
+2. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
 
 ## Top bar buttons
 | Button | Status |
 |---|---|
 | 🔍 Search (library) | ✅ Working |
 | 🗺 Map | 🧪 Being built (step 2 of 8 done) |
-| 📏 Sound editing tool | 💤 Hidden, not planned yet |
+| 📏 Sound editor | 🎨 Designed, not built yet |
 | ⚙ Settings | 💤 Hidden, not planned yet |
 
 ## Recent changes
+- 2026-11-23: App look chosen: **Midnight glass** (dark blue frosted glass, silver highlights) with the improved layout. Not built yet.
+- 2026-11-23: Sound editor designed (5 tabs, smart connect, 3 save modes).
 - 2026-11-23: Map backgrounds: 20 built-in, your own pictures (tiles), song-name color.
 - 2026-11-23: Paths can be drawn by hand and bent with handles.
 - 2026-11-23: Map step 2. Path button, paths with even-split chances, loops, remove with Undo.
