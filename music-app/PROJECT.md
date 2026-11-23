@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: New look (Midnight glass) finished on every screen. Map step 3 (path settings) done too. Next: Map step 4, song settings on the map. After the Map: the sound editor. Still open: rename leftovers (save folder is still called "Tune Forge Exports").
+- 2026-11-23: New look (Midnight glass) finished on every screen. Map step 3 (path settings) done too. Map step 4 (song settings on the map) done too. Next: Map step 5, playing a map. After the Map: the sound editor. Still open: rename leftovers (save folder is still called "Tune Forge Exports").
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -20,11 +20,12 @@
 | Button | Status |
 |---|---|
 | 🔍 Search (library) | ✅ Working |
-| 🗺 Map | 🧪 Being built (step 3 of 8 done) |
+| 🗺 Map | 🧪 Being built (step 4 of 8 done) |
 | 📏 Sound editor | 🎨 Designed, not built yet |
 | ⚙ Settings | 💤 Hidden, not planned yet |
 
 ## Recent changes
+- 2026-11-23: Map step 4: each song on the map has its own sound settings, edited with the Sound panel; double-click plays it.
 - 2026-11-23: Map step 3: path settings panel (name, chance with lock and even split, join type, color, line style).
 - 2026-11-23: App look chosen: **Midnight glass** (dark blue frosted glass, silver highlights) with the improved layout. Not built yet.
 - 2026-11-23: Midnight glass part 1 built: new colors and glass panels, top bar (logo, Library/Map buttons with words, search box), Now playing card, Sound panel (one tidy list, ↺ reset in the middle of each row, Reset all). Waveform and map paths now silver. 

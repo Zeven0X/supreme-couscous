@@ -28,7 +28,7 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 2. ✅ Path button. 🔄 2026-11-23: + draw paths by hand, bend handles.
 2b. ✅ Backgrounds: 20 built-in, your own pictures, song-name color.
 3. ✅ Path settings.
-4. ⬜ Song settings on the map.
+4. ✅ Song settings on the map.
 5. ⬜ Playing a map.
 6. ⬜ Many maps.
 7. ⬜ Export / Import.
@@ -125,9 +125,19 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 - Pop-up messages now appear at the bottom left (under the Sound panel) so they never cover the map panel.
 - **History:** 2026-11-23 added.
 
+### Song settings on the map
+- **Now:** click a song on the map and the **Sound panel on the left** edits that song's own map copy (fade in, fade out, speed, pitch, volume). The panel gets a silver frame and says "on the map: <song>".
+  - The song in the library is **not changed**. The same song placed twice on a map can sound different each time.
+  - A small **FX** badge shows on songs that have any sound change.
+  - **Double-click** a song on the map to play it with its map settings (it stops at its end; full map playing is step 5). While it plays, the panel keeps editing that song, and you hear changes right away.
+  - Right-click → "Play with its map settings" or "Use the library settings again" (with Undo).
+  - Click empty space and, if nothing from the map is playing, the panel goes back to the playing library song. Leaving the Map page does the same.
+- **History:** 2026-11-23 added. Before: map songs had a hidden copy of the settings that could not be changed.
+
 ## How it works (simple words)
 - The map is a list of stops. Each stop remembers which song it is, where it sits (x, y) and its own effects.
 - A path remembers: which song it starts from, which song it goes to, and its chance. The chance math lives in `renderer/chance.js` and is tested on its own (6 tests): whole numbers, always 100, locks respected, and luck really follows the chances (70/30 over 20,000 tries).
 - A drawn path stores a few points measured from its two songs (how far along the way from A to B, and how far to the side). That is why the drawing follows when a song moves. This math is in `renderer/pathshape.js` with 6 tests.
 - The built-in backgrounds are tiny pictures made in code (`renderer/backgrounds.js`), so they add almost nothing to the app's size. Anything near a tile's edge is also drawn on the opposite edge, so the repeated copies meet with no seams.
+- The Sound panel asks one question before every change: "what am I editing?" The answer is, in order: the selected map song, else the map song that is playing, else the playing library song. So it always edits what you see or hear.
 - The view is like a camera over a big table: moving changes where the camera is, zoom changes how close it is. Songs keep their real place on the table.

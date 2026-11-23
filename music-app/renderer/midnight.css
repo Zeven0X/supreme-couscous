@@ -312,3 +312,10 @@ body { grid-template-rows: 70px minmax(0, 1fr) 108px; }
 .toast { max-width: 322px; }
 #view-map:has(#map-pathpanel:not([hidden])) #map-hint { left: calc(50% - 150px); }
 #view-map:has(#map-pathpanel:not([hidden])) #map-straighten { left: calc(50% - 150px); }
+
+/* ---------- song settings on the map ---------- */
+#fx-for { font: 600 11.5px var(--body); color: var(--accent); margin-left: 6px; }
+.fx-panel.map-edit { box-shadow: var(--shadow), inset 0 0 0 1.5px var(--accent); }
+.panel-h > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mstop .mfx { position: absolute; right: -8px; bottom: -4px; background: var(--accent); color: var(--on-accent); font: 800 10px var(--body); padding: 2px 6px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0, 0, 0, .5); }
+.mstop .mfx[hidden] { display: none; }

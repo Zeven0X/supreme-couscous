@@ -115,9 +115,15 @@ function envelope(t, fx, dur) {
   if (fx.fadeOut > 0 && dur > 0) e = Math.min(e, ((dur - t) / sp) / fx.fadeOut);
   return Math.max(0, Math.min(1, e));
 }
+// The Sound panel normally edits the playing song. On the Map it can edit one song stop's own copy
+// instead (S.edit), and a stop played from the map uses that copy for the sound (S.playFx).
+// Order: the selected map song, else the map song that is playing, else the playing library song.
+const editTarget = () => S.edit || S.playStop || null;
+const editFx = () => (editTarget() ? editTarget().fx : (cur() ? cur().fx : null));
+const liveFx = () => S.playFx || (cur() ? cur().fx : S.defaults);
+function setEdit(target) { S.edit = target; renderFx(); }
 function applyFx() {
-  const t = cur();
-  const fx = t ? t.fx : S.defaults;
+  const fx = liveFx();
   audio.defaultPlaybackRate = fx.speed / 100;
   audio.playbackRate = fx.speed / 100;
   audio.preservesPitch = true;
@@ -127,7 +133,7 @@ function applyFx() {
 function updateGain(now) {
   if (!gainNode) return;
   const t = cur();
-  const fx = t ? t.fx : S.defaults;
+  const fx = liveFx();
   const dur = audio.duration || (t && t.duration) || 0;
   const target = S.muted ? 0 : (fx.volume / 100) * ((S.master ?? 100) / 100) * envelope(audio.currentTime, fx, dur);
   if (now) gainNode.gain.setValueAtTime(target, actx.currentTime);
@@ -151,10 +157,12 @@ function seek(t) {
 }
 const skip = (s) => seek(audio.currentTime + s);
 
-function loadTrack(id, { autoplay = false, keepQueue = true } = {}) {
+function loadTrack(id, { autoplay = false, keepQueue = true, stop = null } = {}) {
   const t = S.byId.get(id);
   if (!t) return;
   S.currentId = id;
+  S.playStop = stop; // set when a song is played from the map: { fx, title, save }
+  S.playFx = stop ? stop.fx : null;
   if (!keepQueue || !S.queue.includes(id)) S.queue = visibleTracks().map((x) => x.id);
   audio.src = t.mediaUrl;
   audio.load();
@@ -183,6 +191,7 @@ audio.addEventListener('loadedmetadata', () => { applyFx(); drawWave(); });
 audio.addEventListener('play', () => setPlayIcon(true));
 audio.addEventListener('pause', () => setPlayIcon(false));
 audio.addEventListener('ended', () => {
+  if (S.playFx) { setPlayIcon(false); return; } // a song played from the map stops at its end (map playing comes later)
   const n = upNext()[0];
   if (n) loadTrack(n.id, { autoplay: true }); else { setPlayIcon(false); }
 });
@@ -255,8 +264,7 @@ function setMaster(v, save = true) {
 }
 $('#master').addEventListener('input', (e) => setMaster(e.target.value));
 function resetAllFx() {
-  const t = cur();
-  if (!t) return;
+  if (!editFx()) return;
   for (const f of FX) setFx(f.key, S.defaults[f.key]);
   toast('All sound settings are back to normal');
 }
@@ -267,29 +275,32 @@ function commitInput(input, f) {
   if (Number.isFinite(v)) setFx(f.key, v);
 }
 function nudge(f, d) {
-  const t = cur();
-  if (!t) return;
-  setFx(f.key, t.fx[f.key] + d);
+  const fx = editFx();
+  if (!fx) return;
+  setFx(f.key, fx[f.key] + d);
 }
 let saveFxTimer = null;
 function setFx(key, value, { fromSlider = false } = {}) {
-  const t = cur();
-  if (!t) return;
+  const target = editFx();
+  if (!target) return;
   const f = FX.find((x) => x.key === key);
   const [lo, hi] = S.limits[key];
   const p = 10 ** f.dec;
-  t.fx[key] = Math.min(hi, Math.max(lo, Math.round(value * p) / p));
+  target[key] = Math.min(hi, Math.max(lo, Math.round(value * p) / p));
   applyFx();
   renderFx(fromSlider ? key : null);
   drawWave();
+  if (editTarget()) { editTarget().save(); return; } // a map song: saved with the map, the library song is not touched
+  const t = cur();
   clearTimeout(saveFxTimer);
   const id = t.id, fx = { ...t.fx };
   saveFxTimer = setTimeout(() => tf.updateTrack(id, { fx }).catch((e) => addLog('error', e.message)), 250);
 }
 function renderFx(skipSliderKey) {
-  const t = cur();
-  $('#fx-cards').classList.toggle('disabled', !t);
-  const fx = t ? t.fx : S.defaults;
+  const fx = editFx() || S.defaults;
+  $('#fx-cards').classList.toggle('disabled', !editFx());
+  $('#fx-for').textContent = editTarget() ? `on the map: ${editTarget().title}` : '';
+  $('.fx-panel').classList.toggle('map-edit', !!editTarget());
   for (const f of FX) {
     const card = $(`.fx[data-key="${f.key}"]`);
     const input = $('.fx-val', card);
@@ -353,10 +364,11 @@ function drawWave() {
   $('#t-dur').textContent = fmtTime(dur);
   if (!t) return;
   // fade areas (fades are in output seconds -> source seconds = s * speed)
-  const sp = t.fx.speed / 100;
+  const lf = liveFx();
+  const sp = lf.speed / 100;
   if (dur) {
-    if (t.fx.fadeIn > 0) { g.fillStyle = 'rgba(224,59,59,.22)'; g.fillRect(0, 0, Math.min(1, (t.fx.fadeIn * sp) / dur) * W, H); }
-    if (t.fx.fadeOut > 0) { const w = Math.min(1, (t.fx.fadeOut * sp) / dur) * W; g.fillStyle = 'rgba(154,70,227,.25)'; g.fillRect(W - w, 0, w, H); }
+    if (lf.fadeIn > 0) { g.fillStyle = 'rgba(224,59,59,.22)'; g.fillRect(0, 0, Math.min(1, (lf.fadeIn * sp) / dur) * W, H); }
+    if (lf.fadeOut > 0) { const w = Math.min(1, (lf.fadeOut * sp) / dur) * W; g.fillStyle = 'rgba(154,70,227,.25)'; g.fillRect(W - w, 0, w, H); }
   }
   const bar = Math.max(2, Math.round(3 * dpr)), gap = Math.max(1, Math.round(dpr));
   const n = Math.floor(W / (bar + gap));
@@ -886,6 +898,7 @@ function showView(v) {
   for (const el of $$('.view')) el.classList.toggle('active', el.id === `view-${v}`);
   $('#main').classList.toggle('no-right', v !== 'library');
   if (v === 'tools') { const term = $('#terminal'); term.scrollTop = term.scrollHeight; }
+  if (v !== 'map' && S.edit) setEdit(null); // away from the map, the Sound panel edits the playing song again
   if (v === 'map' && window.TFMap) window.TFMap.show();
   requestAnimationFrame(drawWave);
 }

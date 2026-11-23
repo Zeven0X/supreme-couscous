@@ -171,16 +171,18 @@
       world.append(h('div', {
         class: `mstop${s.id === M.selected ? ' selected' : ''}${s.id === M.map.startId ? ' start' : ''}${s.id === M.from ? ' from' : ''}${t ? '' : ' missing'}`,
         'data-id': s.id, style: { left: `${s.x - R}px`, top: `${s.y - R}px` },
-        title: t ? [t.title, t.artist].filter(Boolean).join(' — ') : 'This song was removed from your library',
+        title: t ? `${[t.title, t.artist].filter(Boolean).join(' — ')}\nDouble-click to play it with its map settings` : 'This song was removed from your library',
       },
       h('div', { class: 'mart' }, coverEl(t || { title: 'Missing song' })),
       h('div', { class: 'mname' }, t ? t.title : 'Missing song'),
       s.id === M.map.startId ? h('div', { class: 'mflag', html: ICONS.flag, title: 'Start' }) : null,
+      h('div', { class: 'mfx', title: 'This song has its own sound settings on this map', hidden: !t || !s.fx || sameFx(s.fx, S.defaults) }, 'FX'),
       outs === 0 && M.map.paths.length ? h('div', { class: 'mend', title: 'No paths out: the music stops here' }, 'END') : null));
     }
     drawLines();
     nameStyle();
     pathPanel();
+    syncEdit();
     $('#map-empty').hidden = M.map.stops.length > 0;
     $('#map-name').textContent = M.map.name;
     const ns = M.map.stops.length, np = M.map.paths.length;
@@ -199,6 +201,28 @@
     $('#map-straighten').hidden = !(selP && selP.pts && selP.pts.length);
   }
   function select(id) { M.selected = id; M.selPath = null; render(); }
+  // The Sound panel on the left edits the selected song's own map copy of the settings.
+  const sameFx = (a, b) => ['speed', 'pitch', 'volume', 'fadeIn', 'fadeOut'].every((k) => (a[k] || 0) === (b[k] || 0));
+  function syncEdit() {
+    const s = !M.pathMode && stopById(M.selected);
+    const t = s && S.byId.get(s.trackId);
+    if (!s || !t) { if (S.edit) setEdit(null); return; }
+    if (!s.fx) s.fx = { ...t.fx };
+    if (!S.edit || S.edit.fx !== s.fx) setEdit(editObj(s, t));
+  }
+  function editObj(s, t) {
+    return { fx: s.fx, title: t.title, save: () => {
+      const n = world.querySelector(`.mstop[data-id="${s.id}"] .mfx`);
+      if (n) n.hidden = sameFx(s.fx, S.defaults);
+      save();
+    } };
+  }
+  function playStop(s) {
+    const t = s && S.byId.get(s.trackId);
+    if (!t) return;
+    if (!s.fx) s.fx = { ...t.fx };
+    loadTrack(s.trackId, { autoplay: true, stop: editObj(s, t) });
+  }
   function selectPath(id) { M.selPath = id; M.selected = null; render(); }
 
 
@@ -457,6 +481,15 @@
       e.preventDefault();
       select(stopEl.dataset.id);
       menu(e.clientX, e.clientY, [
+        ['Play with its map settings', () => playStop(stopById(stopEl.dataset.id))],
+        ['Use the library settings again', () => {
+          const s = stopById(stopEl.dataset.id), t = s && S.byId.get(s.trackId);
+          if (!t) return;
+          const before = snapshot();
+          Object.assign(s.fx, t.fx);
+          applyFx(); renderFx(); render(); save();
+          undoToast('Sound settings copied from the library', before);
+        }],
         ['Set as Start', setStart],
         ['Start a path from here', () => { M.pathMode = true; M.from = stopEl.dataset.id; M.pointer = toWorld(e.clientX, e.clientY); render(); }],
         ['Remove from map', removeSelected],
@@ -469,6 +502,8 @@
     }
   });
   board.addEventListener('dblclick', (e) => {
+    const stopEl = e.target.closest('.mstop');
+    if (stopEl && !M.pathMode) { playStop(stopById(stopEl.dataset.id)); return; }
     const handle = e.target.closest('.handle:not(.ghost)');
     const p = handle && M.map.paths.find((x) => x.id === M.selPath);
     if (!p || !p.pts) return;
