@@ -50,12 +50,13 @@ class Library {
     this.coverDir = path.join(dataDir, 'covers');
     this.peakDir = path.join(dataDir, 'waveforms');
     for (const d of [dataDir, this.mediaDir, this.coverDir, this.peakDir]) fs.mkdirSync(d, { recursive: true });
-    this.data = { tracks: [], settings: { ...DEFAULT_SETTINGS } };
+    this.data = { tracks: [], settings: { ...DEFAULT_SETTINGS }, playlists: [] };
     if (fs.existsSync(this.file)) {
       try {
         const loaded = JSON.parse(fs.readFileSync(this.file, 'utf8'));
         this.data.tracks = Array.isArray(loaded.tracks) ? loaded.tracks : [];
         this.data.settings = { ...DEFAULT_SETTINGS, ...(loaded.settings || {}) };
+        this.data.playlists = Array.isArray(loaded.playlists) ? loaded.playlists : [];
       } catch (e) {
         // Keep the broken file so nothing is lost, start fresh.
         fs.copyFileSync(this.file, `${this.file}.broken-${Date.now()}`);
@@ -96,7 +97,39 @@ class Library {
       fs.rmSync(path.join(this.peakDir, `${t.id}.json`), { force: true });
     }
     this.data.tracks = this.data.tracks.filter((t) => !set.has(t.id));
+    for (const pl of this.data.playlists) pl.trackIds = pl.trackIds.filter((id) => !set.has(id)); // gone from playlists too
     this.save();
+  }
+
+  // ---- playlists: { id, name, trackIds (in order), cover, coverVersion, shuffle, createdAt }
+  get playlists() { return this.data.playlists; }
+  playlistById(id) { return this.data.playlists.find((p) => p.id === id); }
+  cleanIds(ids) {
+    const have = new Set(this.data.tracks.map((t) => t.id));
+    return [...new Set((Array.isArray(ids) ? ids : []).filter((id) => have.has(id)))]; // each song once
+  }
+  createPlaylist(name, trackIds = []) {
+    const p = { id: this.newId(), name: String(name || '').trim().slice(0, 120) || 'New playlist', trackIds: this.cleanIds(trackIds), cover: null, coverVersion: 0, shuffle: false, createdAt: Date.now() };
+    this.data.playlists.push(p);
+    this.save();
+    return p;
+  }
+  updatePlaylist(id, patch = {}) {
+    const p = this.playlistById(id);
+    if (!p) return null;
+    if ('name' in patch) p.name = String(patch.name || '').trim().slice(0, 120) || p.name;
+    if ('trackIds' in patch) p.trackIds = this.cleanIds(patch.trackIds);
+    if ('shuffle' in patch) p.shuffle = !!patch.shuffle;
+    this.save();
+    return p;
+  }
+  deletePlaylist(id) {
+    const p = this.playlistById(id);
+    if (!p) return false;
+    if (p.cover) fs.rmSync(path.join(this.coverDir, p.cover), { force: true });
+    this.data.playlists = this.data.playlists.filter((x) => x !== p);
+    this.save();
+    return true;
   }
 
   setSettings(patch) {

@@ -1,5 +1,5 @@
 'use strict';
-/* global ICONS, tf, TFStudio, TFSaveName */
+/* global ICONS, tf, TFStudio, TFSaveName, TFPlaylists */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 function h(tag, attrs = {}, ...kids) {
@@ -227,6 +227,7 @@ function loadTrack(id, { autoplay = false, keepQueue = true, stop = null } = {})
   renderFx();
   renderNext();
   markPlaying();
+  TFPlaylists.render();
   drawWave();
   if (autoplay) play();
 }
@@ -239,6 +240,7 @@ function makeQueue(id) {
   return [id, ...rest];
 }
 function playTrack(id) {
+  S.playlistId = null; // a library song: the library order, not a playlist
   S.queue = makeQueue(id);
   loadTrack(id, { autoplay: true });
 }
@@ -555,7 +557,7 @@ function renderGrid() {
     grid.append(h('div', { class: 'empty', style: { gridColumn: '1 / -1' } }, S.libTab === 'video' ? 'No songs came from video files yet.' : 'No songs match your search or filters.'));
   }
   for (const t of list) {
-    const card = h('div', { class: 'card', 'data-id': t.id, title: [t.title, t.artist, t.album].filter(Boolean).join(' — ') },
+    const card = h('div', { class: 'card', draggable: 'true', 'data-id': t.id, title: [t.title, t.artist, t.album].filter(Boolean).join(' — ') },
       h('div', { class: 'art' }, coverEl(t), t.isVideo && S.settings.videoBadge !== false ? h('span', { class: 'badge' }, 'from video') : null,
         h('button', { class: 'hover-play', title: 'Play', html: ICONS.play, onclick: (e) => { e.stopPropagation(); playTrack(t.id); } })),
       h('div', { class: 'name' }, t.title),
@@ -593,6 +595,16 @@ $('#grid').addEventListener('click', (e) => {
   if (!card) { if (!e.ctrlKey && !e.shiftKey) { S.selected = []; markSelection(); } return; }
   selectClick(card.dataset.id, e);
 });
+// drag song cards onto a playlist (a bar with the playlists appears)
+$('#grid').addEventListener('dragstart', (e) => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const ids = S.selected.includes(card.dataset.id) ? [...S.selected] : [card.dataset.id];
+  e.dataTransfer.effectAllowed = 'copy';
+  e.dataTransfer.setData('application/x-tonix-songs', ids.join(','));
+  TFPlaylists.startDrag(ids);
+});
+$('#grid').addEventListener('dragend', () => TFPlaylists.endDrag());
 $('#grid').addEventListener('dblclick', (e) => { const card = e.target.closest('.card'); if (card) playTrack(card.dataset.id); });
 $('#grid').addEventListener('contextmenu', (e) => {
   const card = e.target.closest('.card');
@@ -629,7 +641,11 @@ for (const b of $$('#lib-tabs button')) {
   b.addEventListener('click', () => {
     S.libTab = b.dataset.tab;
     for (const x of $$('#lib-tabs button')) x.classList.toggle('on', x === b);
-    renderGrid();
+    const pl = S.libTab === 'playlists';
+    $('#grid-wrap').hidden = pl;
+    $('#pl-view').hidden = !pl;
+    $('#view-library').classList.toggle('pl-mode', pl);
+    if (pl) TFPlaylists.render(); else renderGrid();
   });
 }
 function setZoom(v) {
@@ -662,7 +678,9 @@ function showCardMenu(x, y, id) {
     ['Play', () => playTrack(id)],
     ['Change picture…', () => changeCover(id)],
     null,
-    ['Save as MP3…', () => openSaveModal(id)],
+    [many ? `Add ${S.selected.length} songs to playlist…` : 'Add to playlist…', () => TFPlaylists.pickFor(many ? [...S.selected] : [id])],
+    null,
+    ['Save song…', () => openSaveModal(id)],
     many ? [`Save ${S.selected.length} songs as album / one file…`, () => openAlbumModal()] : null,
     null,
     ['Show original file', () => tf.showItem(S.byId.get(id).srcPath)],
@@ -743,6 +761,7 @@ async function clearAll() {
 }
 async function forgetTracks(ids) {
   if (await guard(() => tf.removeTracks(ids)) === undefined) return;
+  TFPlaylists.onTracksRemoved(ids);
   for (const id of ids) {
     S.byId.delete(id);
     S.tabs = S.tabs.filter((x) => x !== id);
@@ -1171,6 +1190,7 @@ tf.onLog(({ level, msg, time }) => addLog(level, msg, time));
   icon('#back30', 'back30'); icon('#back5', 'back5'); icon('#fwd5', 'fwd5'); icon('#fwd30', 'fwd30'); icon('#play', 'play');
   const st = await tf.state();
   setTracks(st.tracks);
+  TFPlaylists.setAll(st.playlists);
   S.settings = st.settings;
   setMaster(S.settings.rememberMaster === false ? 100 : (S.settings.master ?? 100), false);
   S.limits = st.limits;

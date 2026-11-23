@@ -74,6 +74,7 @@ function startServer() {
       if (parts[1] === 'media' && t) return serveFile(req, res, t.mediaPath);
       if (parts[1] === 'mapasset' && /^[a-f0-9]{12}-[a-f0-9]{8}\.png$/.test(parts[2] || '')) return serveFile(req, res, path.join(maps.assetDir, parts[2]));
       if (parts[1] === 'studio' && studio) { const f = studio.fileFor(parts[2] || ''); if (f) return serveFile(req, res, f); }
+      if (parts[1] === 'plcover') { const p = lib.playlistById(parts[2]); if (p && p.cover) return serveFile(req, res, path.join(lib.coverDir, p.cover)); }
       if (parts[1] === 'cover' && t && t.cover) return serveFile(req, res, lib.coverPath(t));
       res.writeHead(404); res.end();
     });
@@ -128,8 +129,11 @@ function fileName(t) {
   return mode === 'title-artist' ? `${t.title} - ${t.artist}` : `${t.artist} - ${t.title}`;
 }
 function oldVersionsDir() { return path.join(app.getPath('documents'), 'Tonix', 'Old versions'); }
+function playlistForUi(p) {
+  return { ...p, coverUrl: p.cover ? `${baseUrl}/plcover/${p.id}?v=${p.coverVersion || 0}` : null };
+}
 function state() {
-  return { tracks: lib.tracks.map(trackForUi), settings: { ...lib.settings, exportDir: exportDir() }, baseUrl, libraryDir: lib.dataDir, limits: ff.LIMITS, defaults: ff.DEFAULT_FX };
+  return { playlists: lib.playlists.map(playlistForUi), tracks: lib.tracks.map(trackForUi), settings: { ...lib.settings, exportDir: exportDir() }, baseUrl, libraryDir: lib.dataDir, limits: ff.LIMITS, defaults: ff.DEFAULT_FX };
 }
 async function setCoverFromImage(t, imagePath) {
   const name = `${t.id}.jpg`;
@@ -149,14 +153,16 @@ function importPaths(paths) {
 async function doImport(paths) {
   const files = collectFiles(paths);
   const added = [];
+  const ids = []; // every song from these files, new or already in the library, in order
   let skipped = 0, failed = 0;
-  if (!files.length) { log('warn', 'No supported audio or video files found.'); return { added, skipped, failed }; }
+  if (!files.length) { log('warn', 'No supported audio or video files found.'); return { added, skipped, failed, ids }; }
   log('info', `Importing ${files.length} file(s)...`);
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     const name = path.basename(file);
     send('import-progress', { done: i, total: files.length, name });
-    if (lib.bySource(file)) { skipped++; continue; }
+    const known = lib.bySource(file);
+    if (known) { skipped++; ids.push(known.id); continue; }
     try {
       const { info, tags } = await ff.probe(file);
       if (!info.hasAudio) throw new Error('this file has no sound track');
@@ -178,6 +184,7 @@ async function doImport(paths) {
       } catch (e) { log('warn', `${name}: could not read its cover picture`); }
       const t = lib.add({ id, ...tags, srcPath: file, mediaPath, converted, duration: info.duration, cover, isVideo: info.isVideo });
       added.push(trackForUi(t));
+      ids.push(t.id);
       log('ok', `Added "${t.title}"${converted ? ' (converted to MP3)' : ''}`);
     } catch (e) {
       failed++;
@@ -187,7 +194,7 @@ async function doImport(paths) {
   send('import-progress', { done: files.length, total: files.length, name: '' });
   lib.flush();
   log('info', `Import finished: ${added.length} added, ${skipped} already in library, ${failed} failed.`);
-  return { added, skipped, failed };
+  return { added, skipped, failed, ids };
 }
 
 // ---------- export ----------
@@ -467,6 +474,20 @@ function registerIpc() {
   handle('studio-cancel', (group) => { studio.cancel(group); return true; });
   handle('studio-size', () => studio.size());
   handle('studio-clear', () => { studio.clear(); return true; });
+  handle('playlist-create', (name, trackIds) => playlistForUi(lib.createPlaylist(name, trackIds)));
+  handle('playlist-update', (id, patch) => { const p = lib.updatePlaylist(id, patch); if (!p) throw new Error('Playlist not found'); return playlistForUi(p); });
+  handle('playlist-delete', (id) => lib.deletePlaylist(id));
+  handle('playlist-cover', async (id, imagePath) => {
+    const p = lib.playlistById(id);
+    if (!p) throw new Error('Playlist not found');
+    const v = (p.coverVersion || 0) + 1;
+    const name = `pl-${p.id}-${v}.jpg`;
+    await ff.imageToJpg(imagePath, path.join(lib.coverDir, name));
+    if (p.cover) fs.rmSync(path.join(lib.coverDir, p.cover), { force: true });
+    p.cover = name; p.coverVersion = v;
+    lib.save();
+    return playlistForUi(p);
+  });
   handle('export-track', (id, opts) => exportTrack(id, opts));
   handle('file-exists', (dir, name, ext) => fs.existsSync(path.join(dir, `${safeName(name)}.${ext}`)));
   handle('export-many', (ids, opts) => exportMany(ids, opts));

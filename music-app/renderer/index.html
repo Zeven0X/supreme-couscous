@@ -48,9 +48,12 @@
             <button data-tab="all" class="on">All</button>
             <button data-tab="recent" title="Newest songs first">Recently added</button>
             <button data-tab="video" title="Songs that came from video files">From videos</button>
+            <button data-tab="playlists" title="Your playlists">Playlists</button>
           </div>
         </div>
         <div id="grid-wrap"><div id="grid"></div></div>
+        <div id="pl-view" hidden></div>
+        <div id="pl-dropbar" hidden></div>
         <div id="lib-toolbar">
           <div class="tgroup">
             <button class="tb pri" id="btn-upload-file" title="Upload music or video files"><span class="ic" data-icon="cloudUp"></span><span>Upload files</span></button>
@@ -206,6 +209,7 @@
   <script src="savename.js"></script>
   <script src="studio.js"></script>
   <script src="app.js"></script>
+  <script src="playlists.js"></script>
   <script src="map.js"></script>
   <script src="settings.js"></script>
   <script src="shortcuts.js"></script>

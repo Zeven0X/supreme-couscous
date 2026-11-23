@@ -1,5 +1,6 @@
 const { _electron } = require('playwright'); const fs = require('fs'), path = require('path');
-const SP = process.env.SP; // SP/media holds the test songs (made by the developer) const DATA = SP + '/userdata-clear'; fs.rmSync(DATA, { recursive: true, force: true });
+// SP/media holds the test songs (made by the developer)
+const SP = process.env.SP; const DATA = SP + '/userdata-clear'; fs.rmSync(DATA, { recursive: true, force: true });
 let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.log('✓', n, x); } else { fail++; console.log('✗', n, x); } };
 (async () => {
   const a = await _electron.launch({ executablePath: 'node_modules/electron/dist/electron', args: ['.', '--no-sandbox', '--force-device-scale-factor=2', '--autoplay-policy=no-user-gesture-required'], env: { ...process.env, TONIX_DATA: DATA } });
