@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: New look (Midnight glass) finished on every screen. Next: Map step 3, path settings. After the Map: the sound editor. Still open: rename leftovers (save folder is still called "Tune Forge Exports").
+- 2026-11-23: New look (Midnight glass) finished on every screen. Map step 3 (path settings) done too. Next: Map step 4, song settings on the map. After the Map: the sound editor. Still open: rename leftovers (save folder is still called "Tune Forge Exports").
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -20,11 +20,12 @@
 | Button | Status |
 |---|---|
 | 🔍 Search (library) | ✅ Working |
-| 🗺 Map | 🧪 Being built (step 2 of 8 done) |
+| 🗺 Map | 🧪 Being built (step 3 of 8 done) |
 | 📏 Sound editor | 🎨 Designed, not built yet |
 | ⚙ Settings | 💤 Hidden, not planned yet |
 
 ## Recent changes
+- 2026-11-23: Map step 3: path settings panel (name, chance with lock and even split, join type, color, line style).
 - 2026-11-23: App look chosen: **Midnight glass** (dark blue frosted glass, silver highlights) with the improved layout. Not built yet.
 - 2026-11-23: Midnight glass part 1 built: new colors and glass panels, top bar (logo, Library/Map buttons with words, search box), Now playing card, Sound panel (one tidy list, ↺ reset in the middle of each row, Reset all). Waveform and map paths now silver. 
 - 2026-11-23: Midnight glass part 2 built: Library page (title + song count, tabs All / Recently added / From videos, cards with artist names, new toolbar with words, "Save 2 songs" shows how many are picked) and Filters panel (typing box + clickable name chips per group, "Clear", how many songs match).

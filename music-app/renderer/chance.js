@@ -38,9 +38,10 @@
   function setChance(paths, target, value) {
     const others = paths.filter((p) => p !== target && !p.locked);
     const lockedOthers = paths.filter((p) => p !== target && p.locked).reduce((a, p) => a + p.chance, 0);
-    const max = others.length ? 100 - lockedOthers : 100 - lockedOthers;
-    target.chance = Math.round(Math.min(Math.max(0, value), others.length ? max : 100 - lockedOthers));
-    if (!others.length) return paths;
+    const max = 100 - lockedOthers;
+    // nobody left to share with: this path must take everything that is free
+    if (!others.length) { target.chance = max; return paths; }
+    target.chance = Math.round(Math.min(Math.max(0, value), max));
     const rest = 100 - lockedOthers - target.chance;
     share(rest, others.map((p) => Math.max(0, p.chance))).forEach((c, i) => { others[i].chance = c; });
     return paths;

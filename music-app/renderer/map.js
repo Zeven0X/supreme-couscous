@@ -134,14 +134,16 @@
       const sel = p.id === M.selPath;
       const g = el('g', { class: `mpath${sel ? ' selected' : ''}`, 'data-id': p.id, style: `color:${p.color && p.color !== '#e3923a' ? p.color : 'var(--accent)'}` });
       const line = el('path', { d: c.d, class: 'line', 'stroke-width': w });
+      if (p.style === 'dashed') line.setAttribute('stroke-dasharray', `${w * 2.4} ${w * 2}`);
+      if (p.style === 'dotted') line.setAttribute('stroke-dasharray', `0.01 ${w * 2.1}`);
       g.append(el('path', { d: c.d, class: 'hit' }), line, el('polygon', { points: arrowHead(c.end, c.dir, 5 + w * 0.6), class: 'head' }));
       svg.append(g);
       // the chance label sits halfway along the line, whatever its shape
       const len = line.getTotalLength();
       const at = (f) => { const q = line.getPointAtLength(len * f); return [q.x, q.y]; };
       const mid = at(0.5);
-      const label = `${p.chance}%`;
-      const lw = 12 + label.length * 8;
+      const label = `${p.name ? `${p.name} · ` : ''}${p.chance}%${p.locked ? ' 🔒' : ''}`;
+      const lw = 14 + label.length * 7.3 + (p.locked ? 6 : 0);
       g.append(el('rect', { x: mid[0] - lw / 2, y: mid[1] - 11, width: lw, height: 22, rx: 11, class: 'pill' }));
       const t = el('text', { x: mid[0], y: mid[1] + 5, class: 'pct' });
       t.textContent = label;
@@ -178,6 +180,7 @@
     }
     drawLines();
     nameStyle();
+    pathPanel();
     $('#map-empty').hidden = M.map.stops.length > 0;
     $('#map-name').textContent = M.map.name;
     const ns = M.map.stops.length, np = M.map.paths.length;
@@ -197,6 +200,103 @@
   }
   function select(id) { M.selected = id; M.selPath = null; render(); }
   function selectPath(id) { M.selPath = id; M.selected = null; render(); }
+
+
+  // ---------- path settings panel (shows when a path is selected) ----------
+  const COLORS = [null, '#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#38d9a9', '#4dabf7', '#b197fc', '#f783ac'];
+  const stopName = (id) => { const s = stopById(id); const t = s && S.byId.get(s.trackId); return t ? t.title : 'Missing song'; };
+  function pathPanel() {
+    const box = $('#map-pathpanel');
+    const p = !M.pathMode && M.map.paths.find((x) => x.id === M.selPath);
+    if (!p) { box.hidden = true; M.panelFor = null; return; }
+    box.hidden = false;
+    if (M.panelFor !== p.id) { buildPanel(box, p.id); M.panelFor = p.id; }
+    refreshPanel(box, p);
+  }
+  function buildPanel(box, id) {
+    const P = () => M.map.paths.find((x) => x.id === id);
+    const sib = () => pathsFrom(P().from);
+    const changed = () => { drawLines(); refreshPanel(box, P()); save(); };
+    const setChance = (v) => { if (sib().length < 2) return; TFChance.setChance(sib(), P(), v); changed(); };
+    const enter = (e) => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); };
+
+    const name = h('input', { class: 'pp-name', placeholder: 'Name (optional)', maxlength: '30', spellcheck: 'false' });
+    name.addEventListener('input', () => { P().name = name.value; drawLines(); save(); });
+    name.addEventListener('keydown', enter);
+
+    const chance = h('input', { class: 'pp-num', 'data-f': 'chance', spellcheck: 'false', title: 'Type an exact chance and press Enter' });
+    chance.addEventListener('change', () => { const v = parseFloat(chance.value.replace(',', '.')); if (Number.isFinite(v)) setChance(v); else refreshPanel(box, P()); });
+    chance.addEventListener('keydown', enter);
+    const slider = h('input', { type: 'range', min: '0', max: '100', step: '1', 'data-f': 'slider' });
+    slider.addEventListener('input', () => setChance(+slider.value));
+    const lock = h('button', { class: 'pp-lock', title: 'Lock: this chance stays put when other paths change', onclick: () => { P().locked = !P().locked; changed(); } }, '🔒 Lock');
+    const steps = h('div', { class: 'fx-btns' }, ...[-25, -5, -1, 1, 5, 25].map((d) => h('button', { onclick: () => setChance(P().chance + d) }, `${d > 0 ? '+' : '−'}${Math.abs(d)}`)));
+    const even = h('button', { class: 'chip', title: 'Give every unlocked path from this song the same chance', onclick: () => { TFChance.evenSplit(sib()); changed(); } }, 'Even split');
+
+    const secs = h('input', { class: 'pp-num', 'data-f': 'secs', spellcheck: 'false', title: '0 to 15 seconds' });
+    secs.addEventListener('change', () => { const v = parseFloat(secs.value.replace(',', '.')); if (Number.isFinite(v)) P().blend.secs = Math.round(Math.min(15, Math.max(0, v)) * 100) / 100; changed(); });
+    secs.addEventListener('keydown', enter);
+    const blend = h('div', { class: 'seg', 'data-f': 'blend' }, ...[['crossfade', 'Crossfade', 'The first song fades out while the next fades in'], ['silence', 'Silence', 'A short quiet gap between the songs'], ['cut', 'Cut', 'The next song starts right away']]
+      .map(([k, l, tip]) => h('button', { 'data-k': k, title: tip, onclick: () => { P().blend = { type: k, secs: P().blend && P().blend.secs !== undefined ? P().blend.secs : 3 }; changed(); } }, l)));
+
+    const custom = h('input', { type: 'color', title: 'Any color' });
+    custom.addEventListener('input', () => { P().color = custom.value; changed(); });
+    const colors = h('div', { class: 'pp-colors', 'data-f': 'colors' },
+      ...COLORS.map((c) => h('button', { class: 'sw', 'data-c': c || '', title: c ? '' : 'Normal', style: { background: c || 'var(--accent)' }, onclick: () => { P().color = c; changed(); } })),
+      h('label', { class: 'sw any', title: 'Any color' }, '+', custom));
+    const style = h('div', { class: 'seg', 'data-f': 'style' }, ...[['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']].map(([k, l]) => h('button', { 'data-k': k, onclick: () => { P().style = k; changed(); } }, l)));
+
+    box.innerHTML = '';
+    box.append(
+      h('div', { class: 'pp-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Path'), h('div', { class: 'pp-title' })),
+        h('button', { class: 'pp-x', html: ICONS.close, title: 'Close (Esc)', onclick: () => { M.selPath = null; render(); } })),
+      name,
+      h('div', { class: 'pp-row' }, h('span', { class: 'fl' }, 'Chance'), h('span', { class: 'grow' }), h('label', { class: 'fx-box' }, chance, h('span', { class: 'fx-unit' }, '%')), lock),
+      slider, steps,
+      h('div', { class: 'pp-row' }, h('span', { class: 'pp-sibh' }), even),
+      h('div', { class: 'pp-sib' }),
+      h('div', { class: 'pp-row' }, h('span', { class: 'fl' }, 'Join'), blend),
+      h('div', { class: 'pp-row pp-secs' }, h('span', { class: 'pp-secs-l' }), h('label', { class: 'fx-box' }, secs, h('span', { class: 'fx-unit' }, 's'))),
+      colors,
+      h('div', { class: 'pp-row' }, h('span', { class: 'fl' }, 'Line'), style),
+      h('button', { class: 'btn pp-remove', onclick: removeSelected }, 'Remove path'),
+    );
+    $('.pp-name', box).value = P().name || '';
+  }
+  function refreshPanel(box, p) {
+    if (!p) return;
+    const even = box.querySelector('.pp-row .chip');
+    const q = (f) => box.querySelector(`[data-f="${f}"]`);
+    const sibs = pathsFrom(p.from);
+    const alone = sibs.length < 2;
+    box.querySelector('.pp-title').textContent = p.from === p.to ? `${stopName(p.from)} ↻ repeats` : `${stopName(p.from)} → ${stopName(p.to)}`;
+    if (document.activeElement !== q('chance')) q('chance').value = p.chance;
+    q('slider').value = p.chance;
+    q('slider').style.setProperty('--pct', `${p.chance}%`);
+    q('slider').style.setProperty('--c', p.color && p.color !== '#e3923a' ? p.color : 'var(--accent)');
+    for (const el2 of [q('chance'), q('slider'), ...box.querySelectorAll('.fx-btns button'), box.querySelector('.pp-lock')]) el2.disabled = alone;
+    box.querySelector('.pp-lock').classList.toggle('on', !!p.locked);
+    const sibBox = box.querySelector('.pp-sib');
+    sibBox.innerHTML = '';
+    box.querySelector('.pp-sibh').textContent = alone ? `The only path out of “${stopName(p.from)}”: always 100%.` : `Paths out of “${stopName(p.from)}”`;
+    even.hidden = alone;
+    if (!alone) {
+      for (const s of sibs) {
+        sibBox.append(h('button', { class: `pp-s${s === p ? ' me' : ''}`, title: 'Click to open this path', onclick: () => { M.selPath = s.id; render(); } },
+          h('span', {}, `${s.locked ? '🔒 ' : ''}${s.from === s.to ? '↻ repeat' : `→ ${stopName(s.to)}`}`), h('b', {}, `${s.chance}%`)));
+      }
+    }
+    const b = p.blend || { type: 'crossfade', secs: 3 };
+    for (const x of q('blend').children) x.classList.toggle('on', x.dataset.k === b.type);
+    box.querySelector('.pp-secs').hidden = b.type === 'cut';
+    box.querySelector('.pp-secs-l').textContent = b.type === 'silence' ? 'Quiet gap of' : 'Blend for';
+    if (document.activeElement !== q('secs')) q('secs').value = (b.secs !== undefined ? b.secs : 3).toFixed(2);
+    const col = p.color && p.color !== '#e3923a' ? p.color : '';
+    let known = false;
+    for (const x of q('colors').querySelectorAll('button.sw')) { const on = x.dataset.c === col; x.classList.toggle('on', on); known = known || on; }
+    q('colors').querySelector('.any').classList.toggle('on', !known);
+    for (const x of q('style').children) x.classList.toggle('on', x.dataset.k === (p.style || 'solid'));
+  }
 
   // ---------- paths ----------
   function newId() { return Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, '0')).join(''); }

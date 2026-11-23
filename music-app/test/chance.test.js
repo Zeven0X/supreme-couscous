@@ -49,3 +49,12 @@ test('luck follows the chances (70/30 over 20,000 picks)', () => {
   const q = [P(0), P(100)]; // a 0% path is never picked, even with the lowest roll
   assert.strictEqual(C.pick(q, 0), q[1]);
 });
+
+test('a path with nobody to share with always takes what is free', () => {
+  const one = [P(100)];
+  C.setChance(one, one[0], 30); // the only path out of a song stays 100%
+  assert.strictEqual(one[0].chance, 100);
+  const ps = [P(40, true), P(60)];
+  C.setChance(ps, ps[1], 10); // the other path is locked at 40, so this one must stay 60
+  assert.deepStrictEqual(ps.map((p) => p.chance), [40, 60]);
+});

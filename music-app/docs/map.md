@@ -27,7 +27,7 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 1. ✅ Map page: board, add songs, move, zoom, Start.
 2. ✅ Path button. 🔄 2026-11-23: + draw paths by hand, bend handles.
 2b. ✅ Backgrounds: 20 built-in, your own pictures, song-name color.
-3. ⬜ Path settings.
+3. ✅ Path settings.
 4. ⬜ Song settings on the map.
 5. ⬜ Playing a map.
 6. ⬜ Many maps.
@@ -109,6 +109,20 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 
 ### Song-name color
 - **Now:** in the picker: **Auto** (dark names on light backgrounds like parchment, snow, desert, sheet music; white names on dark ones), **White**, **Dark**, or **Color** (any color). A matching outline keeps names readable. Saved per map.
+- **History:** 2026-11-23 added.
+
+### Path settings panel
+- **Now:** click a path and a panel opens on the right side of the map. Close it with × or Esc.
+  - **Name:** optional. It shows on the path's label next to the chance.
+  - **Chance:** type an exact number, drag the slider, or use −25 −5 −1 +1 +5 +25. The other paths from the same song share what is left, keeping their sizes relative to each other. Always whole numbers that add up to 100.
+  - **Lock 🔒:** a locked path keeps its chance when the others change. A 🔒 shows on its label.
+  - **Even split:** gives every unlocked path from that song the same chance.
+  - **Paths out of this song:** a small list with each chance. Click one to jump to that path.
+  - The only path out of a song is always 100%, so its chance controls are switched off.
+  - **Join** (how one song flows into the next): Crossfade (blend for 0–15 s), Silence (quiet gap of 0–15 s), or Cut (next song starts right away). Saved now; you will hear it when map playing is built (step 5).
+  - **Color:** 9 ready colors or any color. **Line:** Solid, Dashed or Dotted.
+  - **Remove path** button.
+- Pop-up messages now appear at the bottom left (under the Sound panel) so they never cover the map panel.
 - **History:** 2026-11-23 added.
 
 ## How it works (simple words)
