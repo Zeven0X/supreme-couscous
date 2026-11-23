@@ -7,6 +7,8 @@ const os = require('os');
 const crypto = require('crypto');
 const ff = require('./lib/ffmpeg');
 const { Library } = require('./lib/library');
+const { MapStore } = require('./lib/maps');
+let maps = null;
 
 app.setName('Tune Forge');
 if (process.env.TUNEFORGE_DATA) app.setPath('userData', process.env.TUNEFORGE_DATA);
@@ -344,6 +346,10 @@ function registerIpc() {
     send('export-progress', { p: 1, label: '' });
     return results;
   });
+  handle('maps-list', () => maps.list());
+  handle('map-get', (id) => maps.get(id));
+  handle('map-create', (name) => maps.create(name));
+  handle('map-save', (m) => ({ updatedAt: maps.save(m).updatedAt }));
   handle('settings', (patch) => ({ ...lib.setSettings(patch), exportDir: exportDir() }));
   handle('show-item', (p) => { if (fs.existsSync(p) && fs.statSync(p).isDirectory()) shell.openPath(p); else shell.showItemInFolder(p); return true; });
   handle('open-path', (p) => shell.openPath(p));
@@ -370,6 +376,7 @@ async function createWindow() {
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   lib = new Library(path.join(app.getPath('userData'), 'library'));
+  maps = new MapStore(path.join(lib.dataDir, 'maps'));
   await startServer();
   registerIpc();
   await createWindow();

@@ -819,6 +819,7 @@ function showView(v) {
   for (const el of $$('.view')) el.classList.toggle('active', el.id === `view-${v}`);
   $('#main').classList.toggle('no-right', v !== 'library');
   if (v === 'tools') { const term = $('#terminal'); term.scrollTop = term.scrollHeight; }
+  if (v === 'map' && window.TFMap) window.TFMap.show();
   requestAnimationFrame(drawWave);
 }
 for (const b of $$('.nav')) {
@@ -847,7 +848,7 @@ document.addEventListener('keydown', (e) => {
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === 'f') { e.preventDefault(); showView('library'); $('#search').focus(); $('#search').select(); return; }
   if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); if (!$('.modal-back')) openSaveModal(); return; }
-  if (mod && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); showView(['library', 'editor', 'tools', 'settings'][+e.key - 1]); return; }
+  if (mod && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); showView(['library', 'map', 'tools', 'settings'][+e.key - 1]); return; }
   if (typing || $('.modal-back')) return;
   if (e.key === ' ') { e.preventDefault(); togglePlay(); }
   else if (e.key === 'ArrowLeft') { e.preventDefault(); skip(e.shiftKey ? -30 : -5); }
@@ -875,7 +876,7 @@ tf.onLog(({ level, msg, time }) => addLog(level, msg, time));
 
 // ---------------------------------------------------------------- start
 (async function init() {
-  for (const b of $$('.nav')) b.innerHTML = ICONS[{ library: 'search', editor: 'page', tools: 'caliper', settings: 'gear' }[b.dataset.view]];
+  for (const b of $$('.nav')) b.innerHTML = ICONS[{ library: 'search', map: 'map', editor: 'page', tools: 'caliper', settings: 'gear' }[b.dataset.view]];
   const icon = (sel, name) => { $(sel).innerHTML = ICONS[name]; };
   icon('#btn-upload-file', 'cloudUp'); icon('#btn-upload-folder', 'folderUp'); icon('#btn-save', 'save'); icon('#btn-save-many', 'saveMany');
   icon('#zoom-in', 'zoomIn'); icon('#zoom-out', 'zoomOut');

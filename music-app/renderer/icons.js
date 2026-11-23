@@ -42,5 +42,15 @@
     up: '<svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     down: '<svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   };
+  // Map: torn page with a loop trail to an X (cut out, so it works in any color).
+  const PAPER = 'M9.36 7.54Q9.00 3.28 10.94 3.63Q12.88 3.97 14.29 4.50Q15.70 5.03 17.35 4.55Q19.00 4.07 20.81 4.58Q22.62 5.09 24.28 5.01Q25.94 4.92 27.67 5.08Q29.39 5.24 30.82 4.71Q32.26 4.18 34.04 4.57Q35.82 4.96 37.41 4.94Q39.00 4.92 39.42 6.46Q39.84 8.00 39.05 10.81Q38.25 13.61 39.05 16.13Q39.85 18.64 39.57 21.33Q39.29 24.02 39.56 26.60Q39.82 29.17 39.28 32.08Q38.74 34.99 39.21 37.32Q39.67 39.66 39.34 41.17Q39.00 42.69 37.53 43.02Q36.05 43.35 34.58 43.96Q33.11 44.57 31.44 44.32Q29.78 44.07 27.87 43.27Q25.96 42.46 24.50 43.06Q23.05 43.67 21.42 43.50Q19.78 43.33 18.39 43.92Q17.00 44.50 15.70 43.85Q14.41 43.20 11.71 43.56Q9.00 43.91 9.01 41.96Q9.03 40.00 8.92 37.83Q8.81 35.67 8.77 33.39Q8.73 31.10 8.70 28.68Q8.67 26.25 8.95 23.72Q9.23 21.19 9.52 18.96Q9.81 16.72 9.77 14.27Q9.73 11.81 9.36 7.54Z';
+  I.map = `<svg viewBox="0 0 48 48"><defs><mask id="tf-map-mask"><rect width="48" height="48" fill="#fff"/>
+    <path d="M14 40C18 37 25 37.5 27.5 33C30.5 27.5 27 21 21.5 22S15.5 30.5 21.5 31.5S30.5 24 30 15.5" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="2.6 2.8" fill="none"/>
+    <path d="M30 8.5l5 5M35 8.5l-5 5" stroke="#000" stroke-width="2.8" stroke-linecap="round"/></mask></defs>
+    <path d="${PAPER}" fill="currentColor" mask="url(#tf-map-mask)"/></svg>`;
+  I.plus = '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>';
+  I.flag = '<svg viewBox="0 0 24 24"><path d="M6 21V3.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path fill="currentColor" d="M7 4c3-1.6 5.5 1.4 8.5 0S19 3 19 3v9s-1.5 1.2-3.5 1.6c-3 .6-5.5-2.2-8.5-.6Z"/></svg>';
+  I.trash = '<svg viewBox="0 0 24 24"><path d="M4 6.5h16M9.5 6.5V4h5v2.5M6.5 6.5l1 13.5h9l1-13.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  I.fit = '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   window.ICONS = I;
 })();

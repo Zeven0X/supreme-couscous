@@ -10,7 +10,8 @@
   <header id="topbar">
     <nav id="views">
       <button class="nav" data-view="library" title="Library and search (Ctrl+1)"></button>
-      <button class="nav" data-view="editor" title="Song details and open songs (Ctrl+2)"></button>
+      <button class="nav" data-view="map" title="Map (Ctrl+2)"></button>
+      <button class="nav" data-view="editor" title="Song details and open songs"></button>
       <button class="nav" data-view="tools" title="Tools: convert to MP3 and log (Ctrl+3)"></button>
       <button class="nav" data-view="settings" title="Settings (Ctrl+4)"></button>
     </nav>
@@ -43,6 +44,28 @@
           <button class="tool" id="btn-save" title="Save song as MP3 with cover (Ctrl+S)"></button>
           <button class="tool boxed" id="btn-save-many" title="Save selected songs as one big MP3 or as an album"></button>
           <span id="sel-info"></span>
+        </div>
+      </div>
+
+      <!-- Map: songs connected by paths -->
+      <div class="view" id="view-map">
+        <div id="map-board">
+          <svg id="map-lines"></svg>
+          <div id="map-world"></div>
+          <div id="map-empty" hidden><div>This map is empty.<br><b>Click “Add songs”</b> below to put songs on it,<br>then drag them anywhere.</div></div>
+          <div id="map-name"></div>
+        </div>
+        <div id="map-toolbar">
+          <button class="mtool" id="map-add" title="Add songs from your library"><span class="ic" data-icon="plus"></span>Add songs</button>
+          <button class="mtool" id="map-start" title="Make the selected song the Start (S)" disabled><span class="ic" data-icon="flag"></span>Set start</button>
+          <button class="mtool" id="map-remove" title="Remove the selected song from the map (Delete)" disabled><span class="ic" data-icon="trash"></span>Remove</button>
+          <span class="grow"></span>
+          <button class="mtool" id="map-fit" title="Show all songs (F)"><span class="ic" data-icon="fit"></span>Show all</button>
+          <div class="zoom">
+            <span class="zoom-icon" id="map-zoom-out" title="Zoom out"></span>
+            <input type="range" id="map-zoom" min="30" max="250" step="1" value="100" title="Zoom">
+            <span class="zoom-icon" id="map-zoom-in" title="Zoom in"></span>
+          </div>
         </div>
       </div>
 
@@ -161,5 +184,6 @@
   <div id="toasts"></div>
   <script src="icons.js"></script>
   <script src="app.js"></script>
+  <script src="map.js"></script>
 </body>
 </html>
