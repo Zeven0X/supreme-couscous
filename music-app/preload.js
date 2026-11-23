@@ -1,5 +1,5 @@
 'use strict';
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron');
 
 async function call(name, ...args) {
   const r = await ipcRenderer.invoke(name, ...args);
@@ -33,6 +33,13 @@ contextBridge.exposeInMainWorld('tf', {
   mapCreate: (name) => call('map-create', name),
   mapDelete: (id) => call('map-delete', id),
   mapExport: (id) => call('map-export', id),
+  mapTrash: () => call('map-trash'),
+  mapRestore: (file) => call('map-restore', file),
+  mapPurge: (file) => call('map-purge', file),
+  findMissing: () => call('find-missing'),
+  about: () => call('about'),
+  openOldVersions: () => call('open-old-versions'),
+  setZoomFactor: (f) => webFrame.setZoomFactor(f),
   mapImport: (file) => call('map-import', file),
   pickMapFile: () => call('pick-mapfile'),
   mapSave: (m) => call('map-save', m),

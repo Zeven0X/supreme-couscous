@@ -66,3 +66,24 @@ test('deleting a map moves it to the trash folder instead of destroying it', () 
     assert.ok(store.get(a.id));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('map trash: list, restore (even if the id is taken again), delete forever', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-maps-'));
+  try {
+    const store = new MapStore(dir);
+    const a = store.create('One');
+    const b = store.create('Two', 'galaxy');
+    assert.deepStrictEqual(b.bg, { kind: 'builtin', id: 'galaxy' });
+    store.remove(a.id);
+    store.remove(b.id);
+    const trash = store.trashList();
+    assert.deepStrictEqual(trash.map((t) => t.name).sort(), ['One', 'Two']);
+    const back = store.restore(trash.find((t) => t.name === 'One').file);
+    assert.strictEqual(back.id, a.id);
+    assert.deepStrictEqual(store.list().map((m) => m.name), ['One']);
+    assert.strictEqual(store.trashList().length, 1);
+    store.purge(store.trashList()[0].file);
+    assert.strictEqual(store.trashList().length, 0);
+    assert.throws(() => store.purge('../library.json'), /Bad trash file/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

@@ -11,6 +11,35 @@ const DEFAULT_SETTINGS = {
   askWhereToSave: false,
   bitrate: 320,
   zoom: 150,
+  // General
+  openOn: 'last', // 'library' | 'map' | 'last'
+  lastView: 'library',
+  continueOnOpen: false,
+  confirmRemove: true,
+  // Look
+  theme: 'midnight',
+  textSize: 'normal', // 'small' | 'normal' | 'big'
+  blur: 70, // 0-100 %
+  animations: true,
+  // Playing
+  whenEnds: 'next', // 'next' | 'repeat' | 'stop'
+  shuffle: false,
+  libraryBlend: 0, // seconds of crossfade between library songs (0 = off)
+  volumeLimit: 500,
+  rememberMaster: true,
+  // Saving
+  format: 'mp3',
+  fileNames: 'artist-title', // 'artist-title' | 'title' | 'title-artist'
+  // Library
+  videoBadge: true,
+  // Map
+  mapJoin: { type: 'crossfade', secs: 3 },
+  mapBg: 'dots',
+  pathLabels: 'name', // 'chance' | 'name' (name + chance) | 'hidden'
+  mapFollow: true,
+  mapDot: true,
+  // Keyboard: only the shortcuts the user changed
+  keys: {},
 };
 
 class Library {

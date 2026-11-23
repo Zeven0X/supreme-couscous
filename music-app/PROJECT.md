@@ -10,11 +10,12 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: New look (Midnight glass) finished on every screen. Map step 3 (path settings) done too. Map step 4 (song settings on the map) done too. Map step 5 part 1 (playing a map) done too. Step 5 part 2 (real crossfades) done too. Map step 6 (many maps) done too. Map step 7 (export / import) done too. Next: Map step 8, final checks + Windows build. After the Map: the sound editor. Still open: rename leftovers (save folder is still called "Tune Forge Exports").
+- 2026-11-23: Settings + keyboard shortcuts done. Next: Map step 8 (final checks + Windows build), then the sound editor.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
-2. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
+2. [Settings and keyboard shortcuts](docs/settings.md): 9 sections, 7 looks, 46 shortcuts you can change, map undo/redo.
+3. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
 
 ## Top bar buttons
 | Button | Status |
@@ -22,9 +23,10 @@
 | 🔍 Search (library) | ✅ Working |
 | 🗺 Map | 🧪 Being built (step 7 of 8 done) |
 | 📏 Sound editor | 🎨 Designed, not built yet |
-| ⚙ Settings | 💤 Hidden, not planned yet |
+| ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: Settings page (9 sections, 7 looks), keyboard shortcuts for everything (changeable, cheat sheet with ? / F1), map undo/redo (Ctrl+Z / Ctrl+Y), number keys choose the next map path. Fixed a start-up timing bug.
 - 2026-11-23: Map step 7: export a map as one .tonixmap file (songs, covers, pictures inside) and import it as your own copy.
 - 2026-11-23: Map step 6: many maps (new, rename, cover, delete to trash, switch) and Continue where the music stopped.
 - 2026-11-23: Map step 5 part 2: real crossfades (two songs overlap and blend). The app now has two players inside.

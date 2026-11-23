@@ -116,6 +116,13 @@ function exportDir() {
 function trackForUi(t) {
   return { ...t, coverUrl: t.cover ? `${baseUrl}/cover/${t.id}?v=${t.coverVersion || 0}` : null, mediaUrl: `${baseUrl}/media/${t.id}` };
 }
+// How saved songs are named (Settings → Saving).
+function fileName(t) {
+  const mode = lib.settings.fileNames;
+  if (!t.artist || mode === 'title') return t.title;
+  return mode === 'title-artist' ? `${t.title} - ${t.artist}` : `${t.artist} - ${t.title}`;
+}
+function oldVersionsDir() { return path.join(app.getPath('documents'), 'Tonix', 'Old versions'); }
 function state() {
   return { tracks: lib.tracks.map(trackForUi), settings: { ...lib.settings, exportDir: exportDir() }, baseUrl, libraryDir: lib.dataDir, limits: ff.LIMITS, defaults: ff.DEFAULT_FX };
 }
@@ -200,8 +207,8 @@ async function exportTrack(id, opts = {}) {
   if (!t) throw new Error('Song not found');
   if (opts.tags) lib.update(id, opts.tags);
   if (opts.coverImage) await setCoverFromImage(t, opts.coverImage);
-  const format = opts.format === 'wav' ? 'wav' : 'mp3';
-  const dest = await chooseDest(t.artist ? `${t.artist} - ${t.title}` : t.title, format);
+  const format = (opts.format || lib.settings.format) === 'wav' ? 'wav' : 'mp3';
+  const dest = await chooseDest(fileName(t), format);
   if (!dest) return { canceled: true };
   log('info', `Saving "${t.title}" (speed ${t.fx.speed}%, pitch ${t.fx.pitch}%, volume ${t.fx.volume}%, fade in ${t.fx.fadeIn}s, fade out ${t.fx.fadeOut}s)...`);
   const started = Date.now();
@@ -457,7 +464,18 @@ function registerIpc() {
   });
   handle('maps-list', () => maps.list());
   handle('map-get', (id) => maps.get(id));
-  handle('map-create', (name) => maps.create(name));
+  handle('map-create', (name) => maps.create(name, lib.settings.mapBg));
+  handle('map-trash', () => maps.trashList());
+  handle('map-restore', (file) => { const m = maps.restore(file); return { id: m.id, name: m.name }; });
+  handle('map-purge', (file) => maps.purge(file));
+  // Songs whose file is gone from the PC (moved or deleted).
+  handle('find-missing', () => lib.tracks.filter((t) => !fs.existsSync(t.mediaPath)).map((t) => ({ id: t.id, title: t.title, artist: t.artist, path: t.srcPath })));
+  handle('about', async () => {
+    let ffv = '';
+    try { const { stdout } = await ff.run(['-version']); ffv = (stdout.toString().match(/ffmpeg version (\S+)/) || [])[1] || ''; } catch (_) { /* shown as unknown */ }
+    return { version: app.getVersion(), ffmpeg: ffv, oldVersions: oldVersionsDir(), libraryDir: lib.dataDir };
+  });
+  handle('open-old-versions', () => { fs.mkdirSync(oldVersionsDir(), { recursive: true }); return shell.openPath(oldVersionsDir()); });
   handle('map-delete', (id) => maps.remove(id));
   handle('map-export', (id) => exportMap(id));
   handle('map-import', (file) => importMap(file));

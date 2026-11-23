@@ -1,0 +1,53 @@
+/* The 7 looks (Settings → Look). Midnight is the base in midnight.css; each theme only changes colors. */
+body[data-theme="warm"] {
+  --bg-grad: radial-gradient(circle at 20% 10%, #5a2a6e 0, #2a1238 35%, #120a1a 75%); --bg-base: #120a1a;
+  --glass: rgba(255, 255, 255, .07); --glass-2: rgba(255, 255, 255, .1); --glass-3: rgba(255, 255, 255, .15); --line: rgba(255, 255, 255, .12);
+  --text: #fff; --muted: #c9bcd6; --accent: #ff8fc8; --accent-2: #ffb36b; --on-accent: #2a1238; --glow: rgba(255, 143, 200, .5);
+  --surface: #2a1838; --surface-deep: #1e1028; --surface-glass: rgba(42, 24, 56, .82); --accent-soft: rgba(255, 143, 200, .12); --orange-hi: #ffb3da;
+}
+body[data-theme="sunset"] {
+  --bg-grad: radial-gradient(circle at 15% 0%, #8a3a1f 0, #4a1a2a 40%, #1a0b14 80%); --bg-base: #1a0b14;
+  --glass: rgba(255, 255, 255, .07); --glass-2: rgba(255, 255, 255, .1); --glass-3: rgba(255, 255, 255, .15); --line: rgba(255, 255, 255, .13);
+  --text: #fff; --muted: #e6c7b8; --accent: #ffa35c; --accent-2: #ff5e7a; --on-accent: #3a120e; --glow: rgba(255, 140, 80, .55);
+  --surface: #33171f; --surface-deep: #24101a; --surface-glass: rgba(51, 23, 31, .82); --accent-soft: rgba(255, 163, 92, .12); --orange-hi: #ffc08f;
+}
+body[data-theme="ocean"] {
+  --bg-grad: radial-gradient(circle at 80% 0%, #0f6b7a 0, #0b3550 40%, #06121f 85%); --bg-base: #06121f;
+  --glass: rgba(255, 255, 255, .06); --glass-2: rgba(255, 255, 255, .09); --glass-3: rgba(255, 255, 255, .14); --line: rgba(160, 230, 255, .14);
+  --text: #effbff; --muted: #a9cfdc; --accent: #5fe3ff; --accent-2: #5f8bff; --on-accent: #04263a; --glow: rgba(95, 227, 255, .5);
+  --surface: #0f2a3c; --surface-deep: #0a1e2c; --surface-glass: rgba(15, 42, 60, .82); --accent-soft: rgba(95, 227, 255, .12); --orange-hi: #9cecff;
+}
+body[data-theme="aurora"] {
+  --bg-grad: linear-gradient(160deg, #0a1f1c 0%, #123d33 30%, #2c1f55 70%, #0d0a1c 100%); --bg-base: #0d0a1c;
+  --glass: rgba(255, 255, 255, .06); --glass-2: rgba(255, 255, 255, .09); --glass-3: rgba(255, 255, 255, .14); --line: rgba(180, 255, 220, .14);
+  --text: #f0fff8; --muted: #b5d8cc; --accent: #5cf2a8; --accent-2: #a17bff; --on-accent: #06281a; --glow: rgba(92, 242, 168, .5);
+  --surface: #14302c; --surface-deep: #0d211e; --surface-glass: rgba(20, 48, 44, .82); --accent-soft: rgba(92, 242, 168, .12); --orange-hi: #98f7c8;
+}
+/* the light one */
+body[data-theme="pastel"] {
+  --bg-grad: linear-gradient(135deg, #ffd9ec 0%, #e3dcff 45%, #cfeeff 100%); --bg-base: #eee8ff;
+  --glass: rgba(255, 255, 255, .55); --glass-2: rgba(60, 40, 120, .07); --glass-3: rgba(60, 40, 120, .13); --line: rgba(60, 40, 120, .14);
+  --text: #2a2340; --muted: #6f6688; --accent: #8a5cff; --accent-2: #ff6fb5; --on-accent: #fff; --glow: rgba(138, 92, 255, .35);
+  --surface: #f7f4ff; --surface-deep: #ffffff; --surface-glass: rgba(255, 255, 255, .85); --accent-soft: rgba(138, 92, 255, .12); --orange-hi: #a483ff;
+  --field: rgba(255, 255, 255, .75); --shadow: 0 10px 30px rgba(90, 60, 160, .15);
+  color-scheme: light;
+}
+body[data-theme="pastel"] .fx-val, body[data-theme="pastel"] .pp-num, body[data-theme="pastel"] #search { color: var(--text); }
+body[data-theme="pastel"] .tog i, body[data-theme="pastel"] .stog i { background: #fff; }
+body[data-theme="pastel"] .mpath .pct { fill: #2a2340; }
+body[data-theme="pastel"] .mpath .pill { fill: #fff; }
+body[data-theme="pastel"] .fx-btns button.rs { background: rgba(60, 40, 120, .14) !important; }
+body[data-theme="pastel"] input[type=range]::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--c) var(--pct), rgba(60, 40, 120, .15) var(--pct)); }
+body[data-theme="pastel"] ::-webkit-scrollbar-thumb { background-color: rgba(60, 40, 120, .2); }
+/* "Cover colors": the colors are set by settings.js from the playing song's picture */
+body[data-theme="cover"] {
+  --glass: rgba(255, 255, 255, .07); --glass-2: rgba(255, 255, 255, .1); --glass-3: rgba(255, 255, 255, .15); --line: rgba(255, 255, 255, .13);
+  --text: #fff; --muted: rgba(255, 255, 255, .7);
+  transition: background .8s;
+}
+
+/* text size and calm mode */
+body.no-anim *, body.no-anim *::before, body.no-anim *::after { transition: none !important; animation: none !important; }
+
+body[data-theme="pastel"] { --wave-todo: rgba(60, 40, 120, .2); }
+body[data-theme="pastel"] #wave-box { background: rgba(60, 40, 120, .06); }

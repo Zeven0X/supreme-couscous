@@ -42,11 +42,42 @@ class MapStore {
     return dest;
   }
 
-  create(name = 'My first map') {
+  // Deleted maps waiting in the trash folder, newest first.
+  trashList() {
+    const dir = path.join(this.dir, 'trash');
+    if (!fs.existsSync(dir)) return [];
+    const out = [];
+    for (const f of fs.readdirSync(dir)) {
+      const m = f.match(/^([a-f0-9]{12})-(\d+)\.json$/);
+      if (!m) continue;
+      try {
+        const j = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+        out.push({ file: f, name: j.name || 'Untitled map', stops: (j.stops || []).length, deletedAt: +m[2], cover: j.cover || null, bg: j.bg || null });
+      } catch (_) { /* skip broken files */ }
+    }
+    return out.sort((a, b) => b.deletedAt - a.deletedAt);
+  }
+  trashFile(file) {
+    if (!/^[a-f0-9]{12}-\d+\.json$/.test(file)) throw new Error('Bad trash file');
+    return path.join(this.dir, 'trash', file);
+  }
+  // Bring a map back. If a map with the same id exists again, it gets a new id.
+  restore(file) {
+    const src = this.trashFile(file);
+    const m = JSON.parse(fs.readFileSync(src, 'utf8'));
+    if (!/^[a-f0-9]{12}$/.test(m.id) || fs.existsSync(this.file(m.id))) m.id = crypto.randomBytes(6).toString('hex');
+    const saved = this.save(m);
+    fs.rmSync(src, { force: true });
+    return saved;
+  }
+  // Delete forever (the user confirmed in the app).
+  purge(file) { fs.rmSync(this.trashFile(file), { force: true }); return true; }
+
+  create(name = 'My first map', bgId = 'dots') {
     const m = {
       id: crypto.randomBytes(6).toString('hex'), name, cover: null, startId: null,
       stops: [], paths: [], view: { x: 0, y: 0, zoom: 1 }, progress: null,
-      bg: { kind: 'builtin', id: 'dots' }, names: { mode: 'auto', color: '#ffffff' }, updatedAt: Date.now(),
+      bg: { kind: 'builtin', id: /^[a-z]{2,20}$/.test(bgId) ? bgId : 'dots' }, names: { mode: 'auto', color: '#ffffff' }, updatedAt: Date.now(),
     };
     this.save(m);
     return m;

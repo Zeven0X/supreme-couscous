@@ -22,9 +22,44 @@
   const SVGNS = 'http://www.w3.org/2000/svg';
 
   // ---------- saving ----------
+  // Undo / redo: each save compares the map with the last saved copy. If something real changed
+  // (not just moving around, zooming or the music's position), the old copy goes on the undo list.
+  const content = (m) => JSON.stringify({ ...m, view: null, progress: null, updatedAt: null });
+  M.undo = []; M.redo = []; M.last = null;
+  function remember() {
+    if (!M.map) return;
+    const now = content(M.map);
+    if (M.last !== null && now !== M.last) {
+      M.undo.push(M.last);
+      if (M.undo.length > 100) M.undo.shift();
+      M.redo = [];
+    }
+    M.last = now;
+  }
+  function resetHistory() { M.undo = []; M.redo = []; M.last = M.map ? content(M.map) : null; }
   function save() {
     clearTimeout(M.saveTimer);
-    M.saveTimer = setTimeout(() => { if (M.map) tf.mapSave(M.map).catch((e) => toast(`Map not saved: ${e.message}`, { type: 'error' })); }, 400);
+    M.saveTimer = setTimeout(() => {
+      if (!M.map) return;
+      remember();
+      tf.mapSave(M.map).catch((e) => toast(`Map not saved: ${e.message}`, { type: 'error' }));
+    }, 400);
+  }
+  function undoRedo(dir) {
+    clearTimeout(M.saveTimer);
+    remember(); // a change still waiting to be saved counts too
+    const from = dir < 0 ? M.undo : M.redo, to = dir < 0 ? M.redo : M.undo;
+    if (!from.length) { toast(dir < 0 ? 'Nothing to undo' : 'Nothing to redo', { ms: 1500 }); return; }
+    to.push(M.last);
+    const back = JSON.parse(from.pop());
+    M.map = { ...back, view: M.map.view, progress: M.map.progress };
+    M.last = content(M.map);
+    if (!stopById(M.selected)) M.selected = null;
+    if (!M.map.paths.some((p) => p.id === M.selPath)) M.selPath = null;
+    render();
+    applyView();
+    tf.mapSave(M.map).catch(() => {});
+    toast(dir < 0 ? 'Undone' : 'Redone', { ms: 1200 });
   }
   const snapshot = () => JSON.parse(JSON.stringify(M.map));
   function undoToast(msg, before) {
@@ -143,7 +178,10 @@
       const len = line.getTotalLength();
       const at = (f) => { const q = line.getPointAtLength(len * f); return [q.x, q.y]; };
       const mid = at(0.5);
-      const label = `${p.name ? `${p.name} · ` : ''}${p.chance}%${p.locked ? ' 🔒' : ''}`;
+      const num = live ? outsOf(M.play.stopId).indexOf(p) + 1 : 0; // number key that chooses this path
+      const showName = S.settings.pathLabels !== 'chance';
+      const label = `${num > 0 && num < 10 ? `${num} · ` : ''}${showName && p.name ? `${p.name} · ` : ''}${p.chance}%${p.locked ? ' 🔒' : ''}`;
+      if (S.settings.pathLabels === 'hidden' && !sel && !(num > 0)) continue; // no label (the line stays clickable)
       const lw = 14 + label.length * 7.3 + (p.locked ? 6 : 0);
       g.append(el('rect', { x: mid[0] - lw / 2, y: mid[1] - 11, width: lw, height: 22, rx: 11, class: 'pill' }));
       const t = el('text', { x: mid[0], y: mid[1] + 5, class: 'pct' });
@@ -199,7 +237,10 @@
     $('#map-play').classList.toggle('on', !!M.play);
     const rp = !M.play && resumePoint();
     $('#map-play span:last-child').textContent = M.play ? 'Stop map' : rp ? 'Continue' : 'Play map';
-    $('#map-play').title = M.play ? 'Stop the map (it remembers where)' : rp ? `Continue where the music stopped: ${(S.byId.get(stopById(rp.stopId).trackId) || {}).title || ''}` : 'Play this map from its Start song';
+    const tip = M.play ? 'Stop the map (it remembers where)' : rp ? `Continue where the music stopped: ${(S.byId.get(stopById(rp.stopId).trackId) || {}).title || ''}` : 'Play this map from its Start song';
+    const pk = TFKeys.current(S.settings.keys || {}).mapPlay[0];
+    $('#map-play').dataset.tip = tip;
+    $('#map-play').title = pk ? `${tip} (${TFKeys.label(pk)})` : tip;
     $('#map-restart').hidden = !rp;
     $('#map-play .ic').innerHTML = M.play ? ICONS.stop : ICONS.play;
     $('#map-follow').hidden = !M.play;
@@ -356,6 +397,7 @@
     M.map.bg = M.map.bg || { kind: 'builtin', id: 'dots' };
     M.selected = null; M.selPath = null; M.pathMode = false; M.from = null;
     if (!M.map.stops.length) M.map.view = { x: board.clientWidth / 2, y: board.clientHeight / 2, zoom: 1 };
+    resetHistory();
     tf.settings({ lastMapId: id }).catch(() => {});
     applyView();
     render();
@@ -548,7 +590,7 @@
     const step = (now) => {
       const f = Math.min(1, (now - t0) / ms);
       const line = S.view === 'map' && world.querySelector(`.mpath[data-id="${p.id}"] .line`);
-      if (line) {
+      if (line && S.settings.mapDot !== false) {
         const q = line.getPointAtLength(line.getTotalLength() * f);
         const v = M.map.view;
         dot.hidden = false;
@@ -601,7 +643,7 @@
       if (pts && pts.length) { old.pts = pts; save(); toast('Path redrawn'); } else toast('These songs are already connected that way. Click the path to select it.');
       return;
     }
-    const p = { id: newId(), from: fromId, to: toId, chance: 0, locked: false, blend: { type: 'crossfade', secs: 3 }, color: null, style: 'solid', name: '' };
+    const p = { id: newId(), from: fromId, to: toId, chance: 0, locked: false, blend: { ...(S.settings.mapJoin || { type: 'crossfade', secs: 3 }) }, color: null, style: 'solid', name: '' };
     if (pts && pts.length) p.pts = pts;
     M.map.paths.push(p);
     TFChance.evenSplit(pathsFrom(fromId)); // every path out of this song gets the same share
@@ -935,19 +977,7 @@
   $('#map-zoom').addEventListener('input', (e) => zoomCenter(+e.target.value / 100));
   $('#map-zoom-in').addEventListener('click', () => zoomCenter(M.map.view.zoom * 1.2));
   $('#map-zoom-out').addEventListener('click', () => zoomCenter(M.map.view.zoom / 1.2));
-  document.addEventListener('keydown', (e) => {
-    if (S.view !== 'map' || !M.map || $('.modal-back')) return;
-    if (e.target.closest('input, textarea, select') && e.target.type !== 'range') return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    const k = e.key.toLowerCase();
-    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeSelected(); }
-    else if (k === 'p') setPathMode(!M.pathMode);
-    else if (k === 's') setStart();
-    else if (k === 'f') fit();
-    else if (e.key === 'Escape') {
-      if (M.from) { M.from = null; render(); } else if (M.pathMode) setPathMode(false); else { M.selected = null; M.selPath = null; render(); }
-    }
-  });
+  // keys: see renderer/shortcuts.js
 
   // ---------- open ----------
   // Loads the map the first time the page opens. Called twice at once? Both wait for the same loading.
@@ -962,6 +992,8 @@
         M.map = m;
         M.map.bg = M.map.bg || { kind: 'builtin', id: 'dots' };
         if (!M.map.stops.length) M.map.view = { x: board.clientWidth / 2, y: board.clientHeight / 2, zoom: 1 };
+        M.noFollow = S.settings.mapFollow === false;
+        resetHistory();
         return true;
       })();
     }
@@ -975,5 +1007,39 @@
   for (const [sel, name] of [['#map-zoom-in', 'zoomIn'], ['#map-zoom-out', 'zoomOut']]) $(sel).innerHTML = ICONS[name];
   for (const n of $$('#map-toolbar .ic')) n.innerHTML = ICONS[n.dataset.icon];
 
-  window.TFMap = { show, onEnded, stopPlay, skipGap, importMapFile, get map() { return M.map; }, get playing() { return M.play; } };
+  // Actions the keyboard shortcuts can run (Settings → Keyboard).
+  const actions = {
+    playStop: () => $('#map-play').click(),
+    chooseNumber: (n) => {
+      if (!M.play) return false;
+      const p = outsOf(M.play.stopId)[n - 1];
+      if (!p) return false;
+      choose(p.id);
+      return true;
+    },
+    pathTool: () => setPathMode(!M.pathMode),
+    addSongs: () => openPicker(),
+    setStart: () => setStart(),
+    lock: () => {
+      const p = M.map.paths.find((x) => x.id === M.selPath);
+      if (!p) { toast('Click a path first, then press L to lock it.'); return; }
+      p.locked = !p.locked;
+      render();
+      save();
+      toast(p.locked ? 'Path locked 🔒' : 'Path unlocked', { ms: 1500 });
+    },
+    background: () => openBackgrounds(),
+    fit: () => fit(),
+    remove: () => removeSelected(),
+    maps: () => openMaps(),
+    undo: () => undoRedo(-1),
+    redo: () => undoRedo(1),
+    escape: () => {
+      if (M.from) { M.from = null; render(); } else if (M.pathMode) setPathMode(false); else if (M.selected || M.selPath) { M.selected = null; M.selPath = null; render(); } else return false;
+      return true;
+    },
+    refresh: () => { if (M.map) { M.noFollow = S.settings.mapFollow === false; render(); } },
+    continueIfAny: () => { if (!M.play && resumePoint()) $('#map-play').click(); },
+  };
+  window.TFMap = { show, onEnded, stopPlay, skipGap, importMapFile, actions, get map() { return M.map; }, get playing() { return M.play; } };
 })();

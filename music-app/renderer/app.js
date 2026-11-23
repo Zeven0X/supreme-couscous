@@ -171,7 +171,8 @@ function updateGain(now) {
   const dur = audio.duration || (t && t.duration) || 0;
   let xf = 1; // fading in during a crossfade
   if (S.fadeIn) { xf = Math.min(1, (actx.currentTime - S.fadeIn.t0) / S.fadeIn.secs); if (xf >= 1) S.fadeIn = null; }
-  const target = S.muted ? 0 : (fx.volume / 100) * ((S.master ?? 100) / 100) * envelope(audio.currentTime, fx, dur) * xf;
+  const vol = Math.min(fx.volume, S.settings.volumeLimit || 500);
+  const target = S.muted ? 0 : (vol / 100) * ((S.master ?? 100) / 100) * envelope(audio.currentTime, fx, dur) * xf;
   if (now) gainNode.gain.setValueAtTime(target, actx.currentTime);
   else gainNode.gain.setTargetAtTime(target, actx.currentTime, 0.015);
 }
@@ -203,7 +204,7 @@ function loadTrack(id, { autoplay = false, keepQueue = true, stop = null } = {})
   if (!stop && window.TFMap) window.TFMap.stopPlay(); // a normal song was started: the map stops leading
   S.playStop = stop; // set when a song is played from the map: { fx, title, save }
   S.playFx = stop ? stop.fx : null;
-  if (!keepQueue || !S.queue.includes(id)) S.queue = visibleTracks().map((x) => x.id);
+  if (!keepQueue || !S.queue.includes(id)) S.queue = makeQueue(id);
   audio.src = t.mediaUrl;
   audio.load();
   applyFx();
@@ -217,11 +218,39 @@ function loadTrack(id, { autoplay = false, keepQueue = true, stop = null } = {})
   drawWave();
   if (autoplay) play();
 }
+// The order songs play in: the library as shown, or shuffled (Settings → Playing). The chosen song goes first.
+function makeQueue(id) {
+  const ids = visibleTracks().map((x) => x.id);
+  if (!S.settings.shuffle) { if (!ids.includes(id)) ids.unshift(id); return ids; }
+  const rest = ids.filter((x) => x !== id);
+  for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+  return [id, ...rest];
+}
 function playTrack(id) {
-  S.queue = visibleTracks().map((x) => x.id);
-  if (!S.queue.includes(id)) S.queue.unshift(id);
+  S.queue = makeQueue(id);
   loadTrack(id, { autoplay: true });
 }
+// Next / previous song (also used by the keyboard).
+function nextSong() {
+  if (window.TFMap && window.TFMap.playing) { window.TFMap.onEnded(); return; }
+  const n = upNext()[0];
+  if (n) loadTrack(n.id, { autoplay: true }); else toast('This is the last song.', { ms: 1500 });
+}
+function prevSong() {
+  if (audio.currentTime > 3 || (window.TFMap && window.TFMap.playing)) { seek(0); return; }
+  const i = S.queue.indexOf(S.currentId);
+  if (i > 0) loadTrack(S.queue[i - 1], { autoplay: true }); else seek(0);
+}
+// Blend library songs (Settings → Playing): start the next song a little before this one ends.
+setInterval(() => {
+  const secs = +S.settings.libraryBlend || 0;
+  if (!secs || audio.paused || !(audio.duration > 0) || S.playFx || (window.TFMap && window.TFMap.playing)) return;
+  if (S.settings.whenEnds !== 'next') return;
+  const left = (audio.duration - audio.currentTime) / (audio.playbackRate || 1);
+  const n = upNext()[0];
+  if (!n || left > Math.min(secs, audio.duration / 2) || left < 0.15) return;
+  if (beginCrossfade(left)) loadTrack(n.id, { autoplay: true });
+}, 100);
 function upNext() {
   const i = S.queue.indexOf(S.currentId);
   return S.queue.slice(i + 1).map((id) => S.byId.get(id)).filter(Boolean);
@@ -233,6 +262,8 @@ onAudio('pause', () => setPlayIcon(false));
 onAudio('ended', () => {
   if (window.TFMap && window.TFMap.onEnded()) return; // a map is playing: it picks the next song itself
   if (S.playFx) { setPlayIcon(false); return; }
+  if (S.settings.whenEnds === 'repeat') { audio.currentTime = 0; play(); return; }
+  if (S.settings.whenEnds === 'stop') { setPlayIcon(false); return; }
   const n = upNext()[0];
   if (n) loadTrack(n.id, { autoplay: true }); else { setPlayIcon(false); }
 });
@@ -390,7 +421,14 @@ function renderNext() {
 // ---------------------------------------------------------------- waveform
 const wave = $('#wave');
 const css = (n, d) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || d;
-const WAVE_DONE = css('--accent', '#e3923a'), WAVE_TODO = 'rgba(255,255,255,.22)';
+// waveform colors come from the theme; refreshed when the look changes
+let WAVE_DONE = '#c9d6ff', WAVE_TODO = 'rgba(255,255,255,.22)';
+function refreshWaveColors() {
+  const st = getComputedStyle(document.body);
+  WAVE_DONE = st.getPropertyValue('--accent').trim() || WAVE_DONE;
+  WAVE_TODO = st.getPropertyValue('--wave-todo').trim() || WAVE_TODO;
+  drawWave();
+}
 function drawWave() {
   const box = $('#wave-box');
   const dpr = window.devicePixelRatio || 1;
@@ -477,7 +515,7 @@ function renderGrid() {
   }
   for (const t of list) {
     const card = h('div', { class: 'card', 'data-id': t.id, title: [t.title, t.artist, t.album].filter(Boolean).join(' — ') },
-      h('div', { class: 'art' }, coverEl(t), t.isVideo ? h('span', { class: 'badge' }, 'from video') : null,
+      h('div', { class: 'art' }, coverEl(t), t.isVideo && S.settings.videoBadge !== false ? h('span', { class: 'badge' }, 'from video') : null,
         h('button', { class: 'hover-play', title: 'Play', html: ICONS.play, onclick: (e) => { e.stopPropagation(); playTrack(t.id); } })),
       h('div', { class: 'name' }, t.title),
       h('div', { class: 'artist' }, t.artist || 'Unknown artist'));
@@ -645,7 +683,7 @@ window.addEventListener('drop', (e) => {
 async function removeSelected() {
   const ids = [...S.selected];
   if (!ids.length) return;
-  const ok = await confirmModal(`Remove ${ids.length === 1 ? `"${S.byId.get(ids[0]).title}"` : `${ids.length} songs`} from the library?`, 'Your original files are not deleted. Converted MP3s made from videos are deleted.', 'Remove');
+  const ok = S.settings.confirmRemove === false || await confirmModal(`Remove ${ids.length === 1 ? `"${S.byId.get(ids[0]).title}"` : `${ids.length} songs`} from the library?`, 'Your original files are not deleted. Converted MP3s made from videos are deleted.', 'Remove');
   if (!ok) return;
   await guard(() => tf.removeTracks(ids));
   for (const id of ids) {
@@ -918,24 +956,17 @@ $('#log-clear').addEventListener('click', () => { $('#terminal').innerHTML = '';
 
 // ---------------------------------------------------------------- settings
 function renderSettings() {
-  $('#set-export-dir').value = S.settings.exportDir || '';
-  $('#set-ask').checked = !!S.settings.askWhereToSave;
-  $('#set-bitrate').value = String(S.settings.bitrate || 320);
   renderConvert();
+  if (window.TFSettings && S.view === 'settings') window.TFSettings.render();
 }
 async function patchSettings(p) {
   const s = await guard(() => tf.settings(p));
   if (s) { S.settings = s; renderSettings(); }
 }
-$('#set-export-pick').addEventListener('click', async () => { const d = await guard(() => tf.pickDir(S.settings.exportDir)); if (d) patchSettings({ exportDir: d }); });
-$('#set-export-open').addEventListener('click', () => tf.openPath(S.settings.exportDir));
-$('#set-ask').addEventListener('change', (e) => patchSettings({ askWhereToSave: e.target.checked }));
-$('#set-bitrate').addEventListener('change', (e) => patchSettings({ bitrate: +e.target.value }));
-$('#set-lib-open').addEventListener('click', () => tf.openPath($('#set-lib-dir').value));
 
 // ---------------------------------------------------------------- views
 // Hidden until each button is planned with the user. The code is kept.
-const HIDDEN_VIEWS = ['editor', 'tools', 'settings'];
+const HIDDEN_VIEWS = ['editor', 'tools'];
 function showView(v) {
   if (HIDDEN_VIEWS.includes(v)) return;
   S.view = v;
@@ -945,6 +976,8 @@ function showView(v) {
   if (v === 'tools') { const term = $('#terminal'); term.scrollTop = term.scrollHeight; }
   if (v !== 'map' && S.edit) setEdit(null); // away from the map, the Sound panel edits the playing song again
   if (v === 'map' && window.TFMap) window.TFMap.show();
+  if (v === 'settings' && window.TFSettings) window.TFSettings.render();
+  if ((v === 'library' || v === 'map') && S.settings && S.settings.lastView !== v) { S.settings.lastView = v; tf.settings({ lastView: v }).catch(() => {}); }
   requestAnimationFrame(drawWave);
 }
 for (const b of $$('.nav')) {
@@ -968,20 +1001,7 @@ $('#back5').addEventListener('click', () => skip(-5));
 $('#fwd5').addEventListener('click', () => skip(5));
 $('#fwd30').addEventListener('click', () => skip(30));
 $('#play').addEventListener('click', togglePlay);
-document.addEventListener('keydown', (e) => {
-  const typing = e.target.closest('input, textarea, select') && e.target.type !== 'range' && e.target.type !== 'checkbox';
-  const mod = e.ctrlKey || e.metaKey;
-  if (mod && e.key.toLowerCase() === 'f') { e.preventDefault(); showView('library'); $('#search').focus(); $('#search').select(); return; }
-  if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); if (!$('.modal-back')) openSaveModal(); return; }
-  if (mod && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); showView(['library', 'map', 'tools', 'settings'][+e.key - 1]); return; }
-  if (typing || $('.modal-back')) return;
-  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
-  else if (e.key === 'ArrowLeft') { e.preventDefault(); skip(e.shiftKey ? -30 : -5); }
-  else if (e.key === 'ArrowRight') { e.preventDefault(); skip(e.shiftKey ? 30 : 5); }
-  else if (mod && e.key.toLowerCase() === 'a' && S.view === 'library') { e.preventDefault(); S.selected = visibleTracks().map((t) => t.id); markSelection(); }
-  else if (e.key === 'Delete' && S.view === 'library' && S.selected.length) removeSelected();
-  else if (e.key === 'Enter' && S.view === 'library' && S.selected.length === 1) playTrack(S.selected[0]);
-});
+// keys: see renderer/shortcuts.js
 // Keep the space bar from "clicking" the last pressed button.
 document.addEventListener('keyup', (e) => { if (e.key === ' ' && e.target.tagName === 'BUTTON') e.preventDefault(); });
 document.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && !b.closest('.modal')) b.blur(); });
@@ -1001,6 +1021,8 @@ tf.onLog(({ level, msg, time }) => addLog(level, msg, time));
 
 // ---------------------------------------------------------------- start
 (async function init() {
+  // Wait until every script file (map, settings, shortcuts…) has loaded before starting.
+  if (document.readyState === 'loading') await new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
   const NAV = { library: ['search', 'Library'], map: ['map', 'Map'], editor: ['page', 'Details'], tools: ['caliper', 'Edit'], settings: ['gear', 'Settings'] };
   for (const b of $$('.nav')) { const [ic, label] = NAV[b.dataset.view]; b.innerHTML = `<span class="nav-ic">${ICONS[ic]}</span><span class="nav-l">${label}</span>`; }
   $('#logo').innerHTML = ICONS.note;
@@ -1013,16 +1035,18 @@ tf.onLog(({ level, msg, time }) => addLog(level, msg, time));
   const st = await tf.state();
   setTracks(st.tracks);
   S.settings = st.settings;
-  setMaster(S.settings.master ?? 100, false);
+  setMaster(S.settings.rememberMaster === false ? 100 : (S.settings.master ?? 100), false);
   S.limits = st.limits;
   S.defaults = st.defaults;
-  $('#set-lib-dir').value = st.libraryDir;
+  S.libraryDir = st.libraryDir;
+  if (window.TFSettings) window.TFSettings.applyAll(); // look, text size, volume limit…
   buildFxCards();
   setZoom(S.settings.zoom || 150);
-  showView('library');
+  const first = S.settings.openOn === 'map' ? 'map' : S.settings.openOn === 'library' ? 'library' : (S.settings.lastView === 'map' ? 'map' : 'library');
+  showView(first);
   renderAll();
-  tf.ffmpegInfo().then((i) => { $('#ffmpeg-info').textContent = `Audio engine: ${i.version}`; }).catch((e) => {
-    $('#ffmpeg-info').textContent = `ffmpeg not found: ${e.message}`;
+  if (S.settings.continueOnOpen && window.TFMap) window.TFMap.show().then(() => window.TFMap.actions.continueIfAny());
+  tf.ffmpegInfo().catch(() => {
     toast('ffmpeg was not found, so converting and saving will not work. See README.', { type: 'error', ms: 12000 });
   });
   window.__tfReady = true;

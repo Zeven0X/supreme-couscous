@@ -6,6 +6,7 @@
   <title>Tonix</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="midnight.css">
+  <link rel="stylesheet" href="themes.css">
 </head>
 <body>
   <header id="topbar">
@@ -147,42 +148,9 @@
 
       <!-- Settings -->
       <div class="view" id="view-settings">
-        <div class="tools-scroll">
-          <section class="panel">
-            <h2>Saving</h2>
-            <label class="field">Save folder
-              <div class="row"><input id="set-export-dir" readonly><button class="btn" id="set-export-pick">Change…</button><button class="btn" id="set-export-open">Open</button></div>
-            </label>
-            <label class="check"><input type="checkbox" id="set-ask"> Ask where to save every time (off = save instantly into the save folder)</label>
-            <label class="field">MP3 quality
-              <select id="set-bitrate">
-                <option value="320">320 kbps (best)</option>
-                <option value="256">256 kbps</option>
-                <option value="192">192 kbps</option>
-                <option value="128">128 kbps (smallest)</option>
-              </select>
-            </label>
-          </section>
-          <section class="panel">
-            <h2>Library</h2>
-            <p class="muted">Music files stay where they are. Videos are converted to MP3 and kept in the library folder.</p>
-            <div class="row"><input id="set-lib-dir" readonly><button class="btn" id="set-lib-open">Open</button></div>
-            <p class="muted" id="ffmpeg-info"></p>
-          </section>
-          <section class="panel">
-            <h2>Keyboard</h2>
-            <table class="keys">
-              <tr><td>Space</td><td>Play / pause</td></tr>
-              <tr><td>← / →</td><td>Back / forward 5 seconds</td></tr>
-              <tr><td>Shift + ← / →</td><td>Back / forward 30 seconds</td></tr>
-              <tr><td>Ctrl + F</td><td>Search</td></tr>
-              <tr><td>Ctrl + S</td><td>Save song</td></tr>
-              <tr><td>Ctrl + A</td><td>Select all songs</td></tr>
-              <tr><td>Ctrl/Shift + click</td><td>Select several songs</td></tr>
-              <tr><td>Double-click</td><td>Play song</td></tr>
-              <tr><td>Delete</td><td>Remove selected songs from library</td></tr>
-            </table>
-          </section>
+        <div class="sp">
+          <nav class="snav" id="snav"></nav>
+          <div class="sbody" id="sbody"></div>
         </div>
       </div>
     </section>
@@ -231,7 +199,10 @@
   <script src="chance.js"></script>
   <script src="pathshape.js"></script>
   <script src="backgrounds.js"></script>
+  <script src="keys.js"></script>
   <script src="app.js"></script>
   <script src="map.js"></script>
+  <script src="settings.js"></script>
+  <script src="shortcuts.js"></script>
 </body>
 </html>
