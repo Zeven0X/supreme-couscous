@@ -15,7 +15,8 @@
       <button class="nav" data-view="library" title="Library and search (Ctrl+1)"></button>
       <button class="nav" data-view="map" title="Map (Ctrl+2)"></button>
       <button class="nav" data-view="editor" title="Song details and open songs"></button>
-      <button class="nav" data-view="tools" title="Tools: convert to MP3 and log (Ctrl+3)"></button>
+      <button class="nav" data-view="edit" title="Edit a song: cut, keep, save in 3 ways (Ctrl+3)"></button>
+      <button class="nav" data-view="tools" title="Tools: convert to MP3 and log"></button>
       <button class="nav" data-view="settings" title="Settings (Ctrl+4)"></button>
     </nav>
     <div class="top-search"><span class="ts-ic" id="ts-ic"></span><input id="search" placeholder="Search songs, artists, albums…" spellcheck="false"><kbd>Ctrl F</kbd></div>
@@ -119,6 +120,9 @@
         <div id="editor-body"></div>
       </div>
 
+      <!-- Edit: the sound editor -->
+      <div class="view" id="view-edit"></div>
+
       <!-- Tools -->
       <div class="view" id="view-tools">
         <div class="tools-scroll">
@@ -214,6 +218,7 @@
   <script src="studio.js"></script>
   <script src="app.js"></script>
   <script src="playlists.js"></script>
+  <script src="edit.js"></script>
   <script src="map.js"></script>
   <script src="settings.js"></script>
   <script src="shortcuts.js"></script>

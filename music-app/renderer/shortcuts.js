@@ -32,7 +32,7 @@
     mapBg: () => map().background(), mapFit: () => map().fit(), mapRemove: () => map().remove(), mapMaps: () => map().maps(),
     undo: () => map().undo(), redo: () => map().redo(),
     page1: () => showView('library'), page2: () => showView('map'),
-    page3: () => toast('The sound editor (Edit) is designed but not built yet.', { ms: 2500 }),
+    page3: () => showView('edit'),
     page4: () => showView('settings'), settings: () => showView('settings'),
     cheat: () => cheat(),
   };

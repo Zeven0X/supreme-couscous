@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: **Smart playlists** built: Tonix makes one per genre + exact stars ("6⭐ Rock", "2⭐ Pop") that fill themselves. Next: you try everything on your PC; then the sound editor (designed, not built).
+- 2026-11-23: **Sound editor part 1** built: the Edit page (waveform, select, zoom, cut out / keep only, undo / redo, save in 3 modes). Next: part 2, Trim (silent start / end).
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -18,17 +18,18 @@
 3. [Sound panel](docs/sound-panel.md): pitch (studio quality, Natural voice), speed, volume, fades.
 4. [Saving songs](docs/saving.md): the save window, Fill from name, file types.
 5. [Library](docs/library.md): Clear all music, Playlists, smart shuffle, saving a playlist, stars 1–10, information inside saved files, smart playlists (genre + stars).
-6. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
+6. [Sound editor](docs/sound-editor.md): part 1 of 8 built.: Trim, Split, Effects, Loop, Layers (designed, not built).
 
 ## Top bar buttons
 | Button | Status |
 |---|---|
 | 🔍 Search (library) | ✅ Working |
 | 🗺 Map | ✅ Working (all 8 steps done) |
-| 📏 Sound editor | 🎨 Designed, not built yet |
+| 📏 Sound editor | 🔨 Part 1 of 8 built (page, cut / keep, save) |
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: **Sound editor part 1**: 📏 Edit page (Ctrl+3, or right-click → Edit…), big zoomable waveform, select, cut out, keep only, undo / redo, save as Keep both / New takes the name / Replace the original (to the Recycle Bin, asks first).
 - 2026-11-23: **Smart playlists made by Tonix**: one for each genre + exact stars, e.g. "6⭐ Rock". They update by themselves when you rate a song or change its genre.
 - 2026-11-23: Star filter moved to the top of the Filters panel.
 - 2026-11-23: **Stars 1–10** (song cards, save windows, Filters → Stars: or more / exactly / or less) and **information inside saved files** (label, track number, stars, blacklist / favourite, plays; read back on upload). M4A saves now keep the label.

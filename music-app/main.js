@@ -9,6 +9,8 @@ const ff = require('./lib/ffmpeg');
 const { Library } = require('./lib/library');
 const { MapStore } = require('./lib/maps');
 const { Studio } = require('./lib/studio');
+const { Editor } = require('./lib/editor');
+let editor = null;
 let maps = null;
 let studio = null;
 
@@ -73,6 +75,7 @@ function startServer() {
       const t = lib.byId(parts[2]);
       if (parts[1] === 'media' && t) return serveFile(req, res, t.mediaPath);
       if (parts[1] === 'mapasset' && /^[a-f0-9]{12}-[a-f0-9]{8}\.png$/.test(parts[2] || '')) return serveFile(req, res, path.join(maps.assetDir, parts[2]));
+      if (parts[1] === 'edit' && editor && /^[a-f0-9]{10}$/.test(parts[2] || '') && /^v[\d-]+\.flac$/.test(parts[3] || '')) return serveFile(req, res, path.join(editor.dir, parts[2], parts[3]));
       if (parts[1] === 'studio' && studio) { const f = studio.fileFor(parts[2] || ''); if (f) return serveFile(req, res, f); }
       if (parts[1] === 'plcover') { const p = lib.playlistById(parts[2]); if (p && p.cover) return serveFile(req, res, path.join(lib.coverDir, p.cover)); }
       if (parts[1] === 'cover' && t && t.cover) return serveFile(req, res, lib.coverPath(t));
@@ -494,6 +497,50 @@ function registerIpc() {
   handle('studio-clear', () => { studio.clear(); return true; });
   handle('track-played', (id) => { const t = lib.played(id); return t ? { track: trackForUi(t), clock: lib.playClock } : null; });
   handle('track-mark', (ids, mark, n) => lib.mark(ids, mark, n).map(trackForUi));
+  // ---- sound editor (Edit page)
+  const editView = async (st) => {
+    const buckets = Math.round(Math.min(30000, Math.max(1600, st.duration * 60)));
+    return { ...st, url: `${baseUrl}/edit/${st.id}/${path.basename(st.file)}`, peaks: await ff.peaks(st.file, buckets), file: undefined };
+  };
+  handle('edit-open', async (id) => {
+    const t = lib.byId(id);
+    if (!t || !fs.existsSync(t.mediaPath)) throw new Error('Song file not found');
+    log('info', `Edit: opening "${t.title}"`);
+    return editView(await editor.open(id, t.mediaPath));
+  });
+  handle('edit-apply', async (sid, op) => editView(await editor.apply(sid, op)));
+  handle('edit-undo', async (sid) => editView(await editor.undo(sid)));
+  handle('edit-redo', async (sid) => editView(await editor.redo(sid)));
+  handle('edit-close', (sid) => { editor.close(sid); return true; });
+  handle('edit-save', async (sid, mode) => {
+    const s = editor.get(sid);
+    const t = lib.byId(s.trackId);
+    if (!t) throw new Error('This song is not in the library any more.');
+    const ext = path.extname(t.srcPath).slice(1).toLowerCase();
+    const format = ff.FORMATS[ext] ? ext : 'mp3'; // videos and other types are saved as MP3
+    const cover = ff.FORMATS[format].cover && lib.coverPath(t) && fs.existsSync(lib.coverPath(t)) ? lib.coverPath(t) : null;
+    const encodeArgs = [...(cover ? ff.coverOutArgs(1) : []), '-map_metadata', '-1', ...ff.tagArgs(tagsOf(t), format), ...ff.FORMATS[format].codec(lib.settings.bitrate)];
+    const r = await editor.save(sid, { orig: t.srcPath, mode, format, encodeArgs, extraInputs: cover ? [cover] : [], trash: (f) => shell.trashItem(f) });
+    const { info } = await ff.probe(r.dest);
+    const copyCover = (to) => { if (!t.cover) return null; const name = `${to}.jpg`; try { fs.copyFileSync(lib.coverPath(t), path.join(lib.coverDir, name)); return name; } catch (_) { return null; } };
+    const fresh = (title) => {
+      const id = lib.newId();
+      return lib.add({ ...tagsOf(t), id, title, srcPath: r.dest, mediaPath: r.dest, converted: false, duration: info.duration, cover: copyCover(id), fx: { ...t.fx }, stars: t.stars || null, isVideo: false });
+    };
+    let changed = [], added = null;
+    if (mode === 'both') added = fresh(`${t.title} New`);
+    else if (mode === 'newname') {
+      lib.setTrackFile(t.id, { srcPath: r.old, ...(t.converted ? {} : { mediaPath: r.old }), title: `${t.title} Old` });
+      changed = [t];
+      added = fresh(t.title.replace(/ Old$/, ''));
+    } else { // replace: the song now plays the new file
+      if (t.converted && t.mediaPath.startsWith(lib.mediaDir)) fs.rmSync(t.mediaPath, { force: true });
+      lib.setTrackFile(t.id, { srcPath: r.dest, mediaPath: r.dest, converted: false, duration: info.duration });
+      changed = [t];
+    }
+    log('ok', `Edit saved: ${r.dest}${r.old && r.old !== t.srcPath ? ` (original now: ${path.basename(r.old)})` : ''}${mode === 'replace' ? ' (original moved to the Recycle Bin)' : ''}`);
+    return { dest: r.dest, changed: changed.map(trackForUi), added: added ? trackForUi(added) : null };
+  });
   handle('playlist-create', (name, trackIds) => playlistForUi(lib.createPlaylist(name, trackIds)));
   handle('playlist-update', (id, patch) => { const p = lib.updatePlaylist(id, patch); if (!p) throw new Error('Playlist not found'); return playlistForUi(p); });
   handle('playlist-delete', (id) => lib.deletePlaylist(id));
@@ -605,6 +652,7 @@ app.whenReady().then(async () => {
   lib = new Library(path.join(app.getPath('userData'), 'library'));
   maps = new MapStore(path.join(lib.dataDir, 'maps'));
   studio = new Studio(path.join(lib.dataDir, 'studio-pitch'), ff, log);
+  editor = new Editor(path.join(lib.dataDir, 'editing'), ff);
   await startServer();
   registerIpc();
   await createWindow();
@@ -612,6 +660,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  if (editor) for (const id of [...editor.sessions.keys()]) editor.close(id);
   if (studio) studio.stopAll();
   if (lib) lib.flush();
   if (server) server.close();

@@ -313,5 +313,5 @@ module.exports = {
   AUDIO_EXT, VIDEO_EXT, LIMITS, DEFAULT_FX, FORMATS, formatOf,
   resolveFfmpeg, isSupported, extOf, normalizeFx, buildFilter, renderPitched,
   parseFfmetadata, parseInfo, pickTags,
-  run, probe, toMp3, extractCover, imageToJpg, peaks, exportOne, exportCombined,
+  run, probe, toMp3, extractCover, imageToJpg, peaks, exportOne, exportCombined, tagArgs, coverOutArgs,
 };

@@ -170,6 +170,15 @@ class Library {
     return this.data.settings;
   }
 
+  // The sound editor saved a new file for this song: point the song at it (only these fields).
+  setTrackFile(id, fields) {
+    const t = this.byId(id);
+    if (!t) return null;
+    for (const k of ['srcPath', 'mediaPath', 'converted', 'duration', 'title']) if (k in fields) t[k] = fields[k];
+    fs.rmSync(path.join(this.peakDir, `${t.id}.json`), { force: true }); // the waveform is made again
+    this.save();
+    return t;
+  }
   coverPath(t) { return t && t.cover ? path.join(this.coverDir, t.cover) : null; }
 
   save() {

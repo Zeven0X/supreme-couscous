@@ -1,5 +1,5 @@
 'use strict';
-/* global ICONS, tf, TFStudio, TFSaveName, TFPlaylists, TFShuffle, TFStars, TFSmart */
+/* global ICONS, tf, TFStudio, TFSaveName, TFPlaylists, TFShuffle, TFStars, TFSmart, TFEdit */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 function h(tag, attrs = {}, ...kids) {
@@ -184,6 +184,7 @@ function updateGain(now) {
 }
 async function play() {
   if (!cur()) { const first = visibleTracks()[0]; if (first) return playTrack(first.id); return; }
+  TFEdit.stop(); // one thing plays at a time
   await ensureEngine();
   if (actx.state === 'suspended') await actx.resume();
   const waitFrom = actx.currentTime;
@@ -758,6 +759,7 @@ function showCardMenu(x, y, id) {
   const items = [
     ['Play', () => playTrack(id)],
     ['Change picture…', () => changeCover(id)],
+    ['📏 Edit…', () => TFEdit.open(id)],
     null,
     [many ? `Add ${S.selected.length} songs to playlist…` : 'Add to playlist…', () => TFPlaylists.pickFor(many ? [...S.selected] : [id])],
     null,
@@ -1280,6 +1282,7 @@ function showView(v) {
   if (v !== 'map' && S.edit) setEdit(null); // away from the map, the Sound panel edits the playing song again
   if (v === 'map' && window.TFMap) window.TFMap.show();
   if (v === 'settings' && window.TFSettings) window.TFSettings.render();
+  if (v === 'edit') TFEdit.render(); else TFEdit.stop();
   if ((v === 'library' || v === 'map') && S.settings && S.settings.lastView !== v) { S.settings.lastView = v; tf.settings({ lastView: v }).catch(() => {}); }
   requestAnimationFrame(drawWave);
 }
@@ -1327,7 +1330,7 @@ tf.onLog(({ level, msg, time }) => addLog(level, msg, time));
 (async function init() {
   // Wait until every script file (map, settings, shortcuts…) has loaded before starting.
   if (document.readyState === 'loading') await new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
-  const NAV = { library: ['search', 'Library'], map: ['map', 'Map'], editor: ['page', 'Details'], tools: ['caliper', 'Edit'], settings: ['gear', 'Settings'] };
+  const NAV = { library: ['search', 'Library'], map: ['map', 'Map'], edit: ['caliper', 'Edit'], editor: ['page', 'Details'], tools: ['page', 'Tools'], settings: ['gear', 'Settings'] };
   for (const b of $$('.nav')) { const [ic, label] = NAV[b.dataset.view]; b.innerHTML = `<span class="nav-ic">${ICONS[ic]}</span><span class="nav-l">${label}</span>`; }
   $('#logo').innerHTML = ICONS.note;
   $('#vol-ic').innerHTML = ICONS.speaker;
