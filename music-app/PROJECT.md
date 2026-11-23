@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: **Sound editor part 1** built: the Edit page (waveform, select, zoom, cut out / keep only, undo / redo, save in 3 modes). Next: part 2, Trim (silent start / end).
+- 2026-11-23: **Sound editor finished** (all 8 parts: Trim, Split, Effects, Loop, Layers, Smart connect…). Next: you try it on your PC and tell me what feels wrong.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -18,17 +18,18 @@
 3. [Sound panel](docs/sound-panel.md): pitch (studio quality, Natural voice), speed, volume, fades.
 4. [Saving songs](docs/saving.md): the save window, Fill from name, file types.
 5. [Library](docs/library.md): Clear all music, Playlists, smart shuffle, saving a playlist, stars 1–10, information inside saved files, smart playlists (genre + stars).
-6. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers. Part 1 of 8 built (the Edit page).
+6. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers, Smart connect. All built.
 
 ## Top bar buttons
 | Button | Status |
 |---|---|
 | 🔍 Search (library) | ✅ Working |
 | 🗺 Map | ✅ Working (all 8 steps done) |
-| 📏 Sound editor | 🔨 Part 1 of 8 built (page, cut / keep, save) |
+| 📏 Sound editor | ✅ Working (Trim, Split, Effects, Loop, Layers, Smart connect) |
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: **Sound editor parts 2–8**: Trim, Split (+ Same loudness, save parts), Effects (Echo, Slowed + reverb, Nightcore, Bass boost, 8D, 1D), Loop (+ smart loop), Layers (songs, 6 built-in sounds, voice recording, match beat, auto-quiet, repeat), Smart connect. Preview before every change.
 - 2026-11-23: **Sound editor part 1**: 📏 Edit page (Ctrl+3, or right-click → Edit…), big zoomable waveform, select, cut out, keep only, undo / redo, save as Keep both / New takes the name / Replace the original (to the Recycle Bin, asks first).
 - 2026-11-23: **Smart playlists made by Tonix**: one for each genre + exact stars, e.g. "6⭐ Rock". They update by themselves when you rate a song or change its genre.
 - 2026-11-23: Star filter moved to the top of the Filters panel.

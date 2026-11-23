@@ -2,17 +2,77 @@
 
 Its own page: the **📏 Edit** button in the top bar (or **Ctrl+3**), or right-click a song → **📏 Edit…**
 Tabs: **Trim · Split · Effects · Loop · Layers**.
-Status: **part 1 of 8 built** (the page, the waveform, cut / keep, undo / redo, the 3 save modes). The tabs are shown but greyed out until their part is built.
+Status: **all 8 parts built** (2026-11-23). Click a tab to open its panel under the waveform; click it again to close it.
 
-## Build plan (agreed 2026-11-23)
+## Build plan (agreed 2026-11-23; you chose "all at once" for parts 2–8)
 1. ✅ The Edit page: big waveform, select, zoom, cut out / keep only, Undo / Redo, Save in 3 modes.
-2. Trim (silent start / end).
-3. Split + Same loudness.
-4. Effects (Echo, Slowed + reverb, Nightcore, Bass boost, 8D, 1D).
-5. Loop + smart loop.
-6. Layers part 1 (songs, built-in sounds, your voice on top).
-7. Layers part 2: Smart connect.
-8. Layers part 3: auto-quiet, match beat, repeat.
+2. ✅ Trim (silent start / end).
+3. ✅ Split + Same loudness.
+4. ✅ Effects (Echo, Slowed + reverb, Nightcore, Bass boost, 8D, 1D).
+5. ✅ Loop + smart loop.
+6. ✅ Layers part 1 (songs, built-in sounds, your voice on top).
+7. ✅ Layers part 2: Smart connect.
+8. ✅ Layers part 3: auto-quiet, match beat, repeat.
+
+## Every tab, in short
+- Every change makes a new working copy, so **Undo** works for all of them. **▶ Preview / Listen** buttons let you hear a change first: a blue bar says "You are hearing how it would sound. Nothing is changed yet." with **Stop preview**.
+- Nothing touches your files until you press **Save** (or Split's **Save all parts**).
+
+## Part 2 — Trim ✅
+- Opens with the song checked straight away. The silent start and end turn **red** on the waveform, with "Silent start: 1.50 s · Silent end: 1.00 s".
+- **What counts as silent:** Very quiet (near-total silence) / Quiet (also soft hiss) / A bit quiet (also quiet intros and endings).
+- **▶ Listen to the result**, then **✓ Confirm: remove them**.
+- If the whole song is quieter than the level, nothing is trimmed and it says so.
+
+## Part 3 — Split ✅
+- **🔍 Find the songs:** finds quiet gaps between songs in one long file and puts an **orange cut** in the middle of each. Gap length: Short gaps / Normal / Long gaps.
+- **Drag** an orange line to move a cut. **+ Add a cut at the playhead** adds one. **✕** on a part removes the cut after it (joins it with the next).
+- **Each part:** a name (e.g. "Mix - Part 1"), its time, **Speed / Pitch / Volume** boxes, **▶** to play it.
+- **🔊 Same loudness:** measures how loud each part is on average (the way radio stations measure it) and sets the volumes so they all sound equally loud.
+- **💾 Save all N parts as songs:** each part becomes its own file **next to the original** (never replacing anything), with its own speed / pitch / volume, track number "1/5", picture and information, and joins your library.
+
+## Part 4 — Effects ✅
+- 6 cards, each with an on / off switch and a **strength** slider:
+  - **Echo:** repeats, like a big hall.
+  - **Slowed + reverb:** slower and lower, with a soft room. (The song gets longer.)
+  - **Nightcore:** faster and higher. (The song gets shorter.)
+  - **Bass boost:** stronger low sounds.
+  - **8D:** the sound slowly moves around your head (best with headphones).
+  - **1D:** every speaker plays the same; nothing moves left or right.
+- Several can be on together. **▶ Preview**, then **✓ Apply effects**. A limiter stops it from getting too loud.
+
+## Part 5 — Loop ✅
+- Select the part on the waveform: start = **A**, end = **B** (green letters, with "×3").
+- **✨ Smart loop:** moves A and B a tiny bit (at most 0.25 s) to the spot where the end flows into the start without a bump. It tells you how far it moved them.
+- **Play it − 3 + times**, with **New length: 4:21 (now 3:10)**.
+- **▶ Listen to the join** plays the moment where B jumps back to A. **✓ Apply loop**.
+
+## Parts 6–8 — Layers + Smart connect ✅
+- **Add a layer** (it starts at the playhead):
+  - **+ Song…**: any song from your library.
+  - **+ Built-in sound…**: Rain, Ocean waves, Vinyl crackle, Wind, Campfire, Beat (120 BPM click). Tonix makes these itself from noise and tones; nothing is copied. They repeat until the song ends.
+  - **🎙 Record your voice**: the song plays while you record, so you can talk or sing along. Your voice gets **Auto-quiet** switched on.
+- **The layer lanes:** each layer as a strip with its little waveform, on the same timeline as the song. **Drag a strip** left or right to move it.
+- **Each layer:** Starts at, Part (from – to: use only a piece of it), Volume, Left ⟷ Right, Repeat (1× / 2× / 4× / 8× / Until the end), **♪ Match beat** (speeds the layer up or down so its beat matches the song), **🔉 Auto-quiet** (the song gets quieter while this layer sounds), **M** mute, **S** solo, **✕** remove. Plus **Song volume** for the song itself.
+- **▶ Preview the mix**, then **✓ Mix in** (one change; Undo takes the layers out again).
+- **Smart connect** (bottom of the Layers panel):
+  1. **The piece:** "Use the selection" (a part of this song) or "From another song…" (pick a song, type from / to).
+  2. **Where it goes:** move the playhead there, "Use the playhead" (a green line shows it).
+  3. **How:** Hard cut / Smooth (0.5 s blend) / Long blend (3 s), and "Then the song goes on" or "The song ends there", and **Land on the beat** (moves the cuts to the nearest beat, at most 0.25 s).
+  - **▶ Preview** (starts 3 s before the join), then **✓ Connect**.
+
+## How it works (simple words)
+- **Silence and gaps:** Tonix listens for parts quieter than the chosen level (in decibels).
+- **Loudness:** measured like radio stations do (LUFS), then each part's volume is set to reach the average.
+- **Smart loop:** Tonix compares the sound right after A with the sound around B and picks the B that looks most alike, so the jump back is smooth.
+- **Beats:** Tonix looks for the moments the sound suddenly gets louder (drums), finds how often that repeats (the tempo), and puts the beats on that grid. It prefers usual tempos (60–180) because half or double speed look alike.
+- **Recording:** your microphone recording becomes a normal sound file right away (in the library folder, "recordings").
+
+## Checked (parts 2–8)
+- Automatic tests (9 groups, real sound): trim finds 1.5 s / 1.0 s of silence; split finds the gap at 5.5 s; same loudness makes two parts equally loud (within 0.3 dB); smart loop lands on whole sound waves; the 120 BPM beat is found; all 6 effects alone and together; loop × 3 gives the right length; layers with delay, repeat-until-end, auto-quiet, mute and solo; smart connect from this or another song, also at the very start and the very end.
+- In the real app (17/17) on a test file with 2 songs: trim 29.0 → 26.5 s; split finds the cut at 13.25 s; same loudness sets 58 % / 171 %; 2 part files saved; effects preview + apply; loop × 3; rain + a song + a recorded voice (fake microphone) mixed in; smart connect; tab switching doesn't pile up listeners.
+- An independent code review found 10 problems (a smart connect at 0:00 gave a broken file, a trim failure could retry forever, a recording timer could run forever, mouse listeners piled up, preview edge cases, numbers not checked); all fixed and tested.
+- **Not yet tried by you**, and the microphone was only tested with a fake one.
 
 ## Part 1 — the Edit page ✅ (2026-11-23)
 ### What you see
@@ -55,5 +115,6 @@ Status: **part 1 of 8 built** (the page, the waveform, cut / keep, undo / redo, 
 | 9 | "Replace the original" also deletes the **real file on the PC**, always after an "are you sure?" question. (Decided 2026-11-23.) |
 
 ## History
+- 2026-11-23: Parts 2–8 built in one go (your choice): Trim, Split + Same loudness, Effects, Loop + smart loop, Layers with built-in sounds and voice recording, Smart connect, auto-quiet, match beat, repeat. Previews for every change.
 - 2026-11-23: Part 1 built (the Edit page). The 📏 Edit button is back in the top bar.
 - 2026-11-23: designed. Before: the caliper button was hidden with no plan.

@@ -10,6 +10,7 @@ const { Library } = require('./lib/library');
 const { MapStore } = require('./lib/maps');
 const { Studio } = require('./lib/studio');
 const { Editor } = require('./lib/editor');
+const T = require('./lib/audiotools');
 let editor = null;
 let maps = null;
 let studio = null;
@@ -75,7 +76,7 @@ function startServer() {
       const t = lib.byId(parts[2]);
       if (parts[1] === 'media' && t) return serveFile(req, res, t.mediaPath);
       if (parts[1] === 'mapasset' && /^[a-f0-9]{12}-[a-f0-9]{8}\.png$/.test(parts[2] || '')) return serveFile(req, res, path.join(maps.assetDir, parts[2]));
-      if (parts[1] === 'edit' && editor && /^[a-f0-9]{10}$/.test(parts[2] || '') && /^v[\d-]+\.flac$/.test(parts[3] || '')) return serveFile(req, res, path.join(editor.dir, parts[2], parts[3]));
+      if (parts[1] === 'edit' && editor && /^[a-f0-9]{10}$/.test(parts[2] || '') && /^v[\w-]+\.flac$/.test(parts[3] || '')) return serveFile(req, res, path.join(editor.dir, parts[2], parts[3]));
       if (parts[1] === 'studio' && studio) { const f = studio.fileFor(parts[2] || ''); if (f) return serveFile(req, res, f); }
       if (parts[1] === 'plcover') { const p = lib.playlistById(parts[2]); if (p && p.cover) return serveFile(req, res, path.join(lib.coverDir, p.cover)); }
       if (parts[1] === 'cover' && t && t.cover) return serveFile(req, res, lib.coverPath(t));
@@ -512,6 +513,147 @@ function registerIpc() {
   handle('edit-undo', async (sid) => editView(await editor.undo(sid)));
   handle('edit-redo', async (sid) => editView(await editor.redo(sid)));
   handle('edit-close', (sid) => { editor.close(sid); return true; });
+
+  // ---- the editor's tabs. The page sends what it wants (op); the files and recipes are worked out here.
+  const soundDir = () => { const d = path.join(lib.dataDir, 'sounds'); fs.mkdirSync(d, { recursive: true }); return d; };
+  const recDir = () => { const d = path.join(lib.dataDir, 'recordings'); fs.mkdirSync(d, { recursive: true }); return d; };
+  async function sourceFile(src = {}) { // a layer / piece: a library song, a built-in sound, or a recording of your voice
+    if (src.kind === 'track') { const t = lib.byId(src.id); if (!t || !fs.existsSync(t.mediaPath)) throw new Error('That song is not on your PC any more.'); return { file: t.mediaPath, name: t.title }; }
+    if (src.kind === 'sound') {
+      if (!Object.hasOwn(T.SOUNDS, src.key)) throw new Error('Unknown sound');
+      const f = path.join(soundDir(), `${src.key}.flac`);
+      if (!fs.existsSync(f)) await T.makeSound(ff, src.key, f);
+      return { file: f, name: T.SOUNDS[src.key].name };
+    }
+    if (src.kind === 'rec' && /^voice-\d+\.flac$/.test(src.name || '')) return { file: path.join(recDir(), src.name), name: 'Your voice' };
+    throw new Error('Unknown sound source');
+  }
+  const bpmCache = new Map();
+  async function bpmOf(file) {
+    const st = fs.statSync(file), k = `${file}|${st.mtimeMs}`;
+    if (!bpmCache.has(k)) {
+      bpmCache.set(k, T.beats(await T.decodeMono(ff, file, 22050, 0, 900), 22050)); // the whole song (up to 15 min)
+      if (bpmCache.size > 40) bpmCache.delete(bpmCache.keys().next().value);
+    }
+    return bpmCache.get(k);
+  }
+  async function resolveOp(sid, op) {
+    const s = editor.get(sid), cur = editor.current(s);
+    const dur = (await ff.probe(cur)).info.duration;
+    const t = (x) => Math.min(dur, Math.max(0, +x)); // a time inside the song
+    for (const k of ['a', 'b', 'P', 'head', 'tail']) if (k in op && !Number.isFinite(+op[k])) throw new Error('A time is not a number.');
+    switch (op.type) {
+      case 'cut': case 'keep': return op;
+      case 'trim': return { type: 'keep', a: t(op.head), b: t(op.tail), label: 'Trimmed silent start / end' };
+      case 'effects': {
+        const graph = T.effectChain(op.fx || {});
+        if (!graph) throw new Error('Switch on at least one effect.');
+        return { type: 'graph', graph, label: `Effects: ${Object.keys(op.fx).join(', ')}` };
+      }
+      case 'loop': {
+        const a = t(op.a), b = t(op.b), times = Math.round(+op.times);
+        if (!(b - a >= 0.05)) throw new Error('Select a longer part to loop.');
+        if (!(times >= 1 && times <= 200)) throw new Error('Choose how many times (1 to 200).');
+        return { type: 'graph', graph: T.loopGraph(a, b, times, dur), label: `Loop ${(b - a).toFixed(2)} s × ${times}` };
+      }
+      case 'layers': {
+        const inputs = [], layers = [];
+        const song = op.layers.some((L) => L.matchBeat) ? await bpmOf(cur) : null;
+        for (const L of op.layers) {
+          const { file } = await sourceFile(L.src);
+          inputs.push(file);
+          const tempo = L.matchBeat && song && song.bpm ? T.tempoMatch(song.bpm, (await bpmOf(file)).bpm) : 1;
+          layers.push({ ...L, tempo });
+        }
+        if (!layers.length) throw new Error('Add a layer first.');
+        return { type: 'graph', graph: T.mixGraph(layers, dur, { songVolume: op.songVolume ?? 100 }), inputs, label: `Mixed in ${layers.filter((L) => !L.mute).length} layer(s)` };
+      }
+      case 'connect': {
+        let P = t(op.P), a = Math.max(0, +op.a), b = Math.max(0, +op.b);
+        const other = op.src && op.src.kind === 'track' && op.src.id !== s.trackId;
+        const srcFile = other ? (await sourceFile(op.src)).file : cur;
+        if (op.snap) { // land the cuts on the beat
+          P = T.snapToBeat(P, (await bpmOf(cur)).times);
+          const bt = (await bpmOf(srcFile)).times;
+          a = T.snapToBeat(a, bt); b = T.snapToBeat(b, bt);
+        }
+        const srcDur = other ? (await ff.probe(srcFile)).info.duration : dur;
+        b = Math.min(b, srcDur);
+        if (b - a < 0.2) throw new Error('The piece is too short.');
+        const c = T.connectGraph({ P, a, b, src: other ? 1 : 0, after: op.after, blend: op.blend, dur });
+        return { type: 'graph', graph: c.graph, inputs: other ? [srcFile] : [], label: `Smart connect (${(b - a).toFixed(1)} s piece at ${P.toFixed(1)} s)` };
+      }
+      default: throw new Error(`Unknown change: ${op.type}`);
+    }
+  }
+  handle('edit-do', async (sid, op) => editView(await editor.apply(sid, await resolveOp(sid, op))));
+  handle('edit-preview', async (sid, op) => {
+    const p = await editor.preview(sid, await resolveOp(sid, op));
+    return { url: `${baseUrl}/edit/${sid}/${path.basename(p.file)}`, duration: p.duration };
+  });
+  handle('edit-trim-find', async (sid, level) => {
+    const s = editor.get(sid), cur = editor.current(s);
+    const dur = (await ff.probe(cur)).info.duration;
+    const db = Object.hasOwn(T.TRIM_LEVELS, level) ? T.TRIM_LEVELS[level] : -45;
+    return { ...T.trimPoints(await T.silences(ff, cur, db, 0.08), dur), duration: dur, version: s.at };
+  });
+  handle('edit-split-find', async (sid, gap = 1.2) => {
+    const s = editor.get(sid), cur = editor.current(s);
+    const dur = (await ff.probe(cur)).info.duration;
+    return T.splitPoints(await T.silences(ff, cur, -42, Math.max(0.3, +gap || 1.2)), dur);
+  });
+  handle('edit-loudness', async (sid, ranges) => {
+    const cur = editor.current(editor.get(sid));
+    const louds = [];
+    for (const [a, b] of ranges) louds.push(await T.loudness(ff, cur, a, b));
+    return T.sameLoudness(louds);
+  });
+  handle('edit-smartloop', async (sid, a, b) => {
+    const cur = editor.current(editor.get(sid));
+    const from = Math.max(0, a - 0.5);
+    const x = await T.decodeMono(ff, cur, 22050, from, b - from + 1);
+    const r = T.smartLoop(x, 22050, a - from, b - from);
+    return { a: r.a + from, b: r.b + from, score: r.score };
+  });
+  handle('edit-sounds', () => Object.entries(T.SOUNDS).map(([key, s]) => ({ key, name: s.name })));
+  handle('edit-source', async (src) => { // a layer's length and little waveform
+    const { file, name } = await sourceFile(src);
+    return { name, duration: (await ff.probe(file)).info.duration, peaks: await ff.peaks(file, 600) };
+  });
+  handle('edit-recording', async (bytes) => {
+    // the browser's recording has no length inside, so it becomes a normal FLAC file right away
+    const stamp = Date.now(), raw = path.join(recDir(), `voice-${stamp}.webm`), name = `voice-${stamp}.flac`;
+    fs.writeFileSync(raw, Buffer.from(bytes));
+    try { await ff.run(['-y', '-i', raw, '-map', '0:a:0', '-ar', '44100', '-ac', '2', '-c:a', 'flac', path.join(recDir(), name)]); } finally { fs.rmSync(raw, { force: true }); }
+    return { kind: 'rec', name };
+  });
+  // Split: every part becomes its own song file next to the original, with its own speed / pitch / volume.
+  handle('edit-split-save', async (sid, parts) => {
+    const s = editor.get(sid), cur = editor.current(s);
+    const t = lib.byId(s.trackId);
+    if (!t) throw new Error('This song is not in the library any more.');
+    const dir = fs.existsSync(path.dirname(t.srcPath)) ? path.dirname(t.srcPath) : exportDir();
+    const ext = path.extname(t.srcPath).slice(1).toLowerCase();
+    const format = ff.FORMATS[ext] ? ext : 'mp3';
+    const out = [];
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      const name = safeName(p.name || `${t.title} - Part ${i + 1}`);
+      const dest = uniquePath(path.join(dir, `${name}.${format}`));
+      const { filter } = ff.buildFilter(p.fx || {}, p.b - p.a);
+      const tags = { ...tagsOf(t), title: name, track: `${i + 1}/${parts.length}` };
+      await ff.run(['-y', '-ss', p.a.toFixed(4), '-to', p.b.toFixed(4), '-i', cur, '-map', '0:a:0', '-af', filter, '-map_metadata', '-1', ...ff.tagArgs(tags, format), ...ff.FORMATS[format].codec(lib.settings.bitrate), dest],
+        { duration: p.b - p.a, onProgress: (x) => send('export-progress', { p: (i + x) / parts.length, label: name }) });
+      const info = (await ff.probe(dest)).info;
+      const id = lib.newId();
+      let cover = null;
+      if (t.cover) { try { fs.copyFileSync(lib.coverPath(t), path.join(lib.coverDir, `${id}.jpg`)); cover = `${id}.jpg`; } catch (_) { /* no picture */ } }
+      out.push(trackForUi(lib.add({ ...tagsOf(t), id, title: name, track: `${i + 1}/${parts.length}`, srcPath: dest, mediaPath: dest, converted: false, duration: info.duration, cover, isVideo: false })));
+    }
+    send('export-progress', { p: 1, label: 'Split' });
+    log('ok', `Split "${t.title}" into ${out.length} songs in ${dir}`);
+    return { dir, added: out };
+  });
   handle('edit-save', async (sid, mode) => {
     const s = editor.get(sid);
     const t = lib.byId(s.trackId);

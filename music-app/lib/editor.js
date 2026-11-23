@@ -42,9 +42,8 @@ class Editor {
     return { id: s.id, file: this.current(s), duration: info.duration, version: s.at, versions: s.versions.map((v) => v.label), canUndo: s.at > 0, canRedo: s.at < s.versions.length - 1 };
   }
 
-  // Make a new version with an ffmpeg filter graph from the current one. Later redo steps are dropped.
-  async apply(id, op) {
-    const s = this.get(id);
+  // The ffmpeg graph for a change (op), from the current version of session s.
+  async graphFor(s, op) {
     const { info } = await this.ff.probe(this.current(s));
     const dur = info.duration;
     let graph, label;
@@ -62,12 +61,32 @@ class Editor {
       if (b - a < 0.05) throw new Error('Select a longer part first.');
       graph = `[0:a]atrim=${fix(a)}:${fix(b)},asetpts=N/SR/TB,afade=t=in:st=0:d=${FADE},afade=t=out:st=${fix(b - a - FADE)}:d=${FADE}[out]`;
       label = `Kept ${(b - a).toFixed(2)} s`;
-    } else if (op.type === 'graph') { // used by the later tabs (Trim, Effects, Loop…)
+    } else if (op.type === 'graph') { // used by the tabs (Trim, Split, Effects, Loop, Layers)
       graph = op.graph;
       label = op.label || 'Change';
     } else throw new Error(`Unknown change: ${op.type}`);
+    return { graph, label, inputs: (op.inputs || []).filter((f) => typeof f === 'string') };
+  }
+  async render(s, op, file) {
+    const { graph, label, inputs } = await this.graphFor(s, op);
+    for (const f of inputs) if (!fs.existsSync(f)) throw new Error(`A sound file is missing: ${path.basename(f)}`);
+    await this.ff.run(['-y', '-i', this.current(s), ...inputs.flatMap((f) => ['-i', f]), '-filter_complex', graph, '-map', '[out]', '-ar', '44100', '-c:a', 'flac', '-compression_level', '0', file]);
+    return label;
+  }
+  // Hear a change before making it: the result plays, but it is not a version (Undo is not needed).
+  async preview(id, op) {
+    const s = this.get(id);
+    const file = path.join(s.folder, `v${Date.now()}-preview.flac`);
+    for (const f of fs.readdirSync(s.folder)) if (f.endsWith('-preview.flac')) rm(path.join(s.folder, f));
+    await this.render(s, op, file);
+    const { info } = await this.ff.probe(file);
+    return { file, duration: info.duration };
+  }
+  // Make a new version from the current one. Later redo steps are dropped.
+  async apply(id, op) {
+    const s = this.get(id);
     const file = path.join(s.folder, `v${Date.now()}-${s.versions.length}.flac`);
-    await this.ff.run(['-y', '-i', this.current(s), '-filter_complex', graph, '-map', '[out]', '-c:a', 'flac', '-compression_level', '0', file]);
+    const label = await this.render(s, op, file);
     for (const v of s.versions.splice(s.at + 1)) rm(v.file); // a new change after Undo: the undone copies go
     s.versions.push({ file, label });
     s.at = s.versions.length - 1;

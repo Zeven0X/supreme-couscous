@@ -1,9 +1,9 @@
 'use strict';
-/* global S, h, $, tf, guard, toast, coverEl, fmtTime, modal, confirmModal, upsertTrack, renderGrid, pause, ICONS, TFPlaylists, addLog */
+/* global S, h, tf, guard, toast, coverEl, fmtTime, modal, confirmModal, upsertTrack, renderGrid, pause, ICONS, TFPlaylists, TFEditTabs */
 // The Edit page (📏): one song at a time. A big waveform: drag to select a part, click to jump, Ctrl + wheel
 // to zoom. Every change makes a new working copy (Undo / Redo); Save writes it next to the original file.
 window.TFEdit = (() => {
-  const E = { s: null, sel: null, zoom: 1, scroll: 0, busy: false, mode: 'both' };
+  const E = { s: null, sel: null, zoom: 1, scroll: 0, busy: false, mode: 'both', tab: '', preview: null };
   const player = new Audio();
   player.preload = 'auto';
   const el = (id) => document.getElementById(id);
@@ -21,6 +21,7 @@ window.TFEdit = (() => {
     window.showView('edit');
     if (E.s) { tf.editClose(E.s.id).catch(() => {}); E.s = null; }
     E.sel = null; E.zoom = 1; E.scroll = 0;
+    TFEditTabs.reset();
     busy(`Opening "${t.title}"…`);
     const st = await guard(() => tf.editOpen(trackId), 'Edit: ');
     busy(null);
@@ -29,7 +30,9 @@ window.TFEdit = (() => {
   }
   function show(st) {
     const keep = E.s ? E.s.trackId : st.trackId;
+    E.preview = null;
     E.s = { ...st, trackId: st.trackId || keep };
+    TFEditTabs.onVersion();
     const at = player.currentTime;
     player.src = st.url;
     player.currentTime = Math.min(at || 0, st.duration);
@@ -95,6 +98,37 @@ window.TFEdit = (() => {
     open(next);
   }
 
+  // ---------- previews: hear a change before making it ----------
+  async function preview(op, { from = null, label = 'Preview' } = {}) {
+    if (!E.s || E.busy) return;
+    player.pause();
+    busy('Making a preview…');
+    const p = await guard(() => tf.editPreview(E.s.id, op), 'Preview: ');
+    busy(null);
+    if (!p) return;
+    const back = E.preview ? E.preview.back : player.currentTime; // a new preview during a preview: go back to the edit's spot
+    E.preview = { ...p, label, back };
+    E.stopAt = null;
+    player.src = p.url;
+    player.addEventListener('loadedmetadata', () => {
+      if (!E.preview || !player.src.endsWith(p.url.split('/').pop())) return; // stopped or replaced meanwhile
+      player.currentTime = Math.max(0, Math.min(p.duration - 0.1, from ?? back));
+      pause();
+      player.play().catch(() => {});
+    }, { once: true });
+    render();
+  }
+  function stopPreview() {
+    if (!E.preview) return;
+    const back = E.preview.back;
+    E.preview = null;
+    E.stopAt = null;
+    player.pause();
+    player.src = E.s.url;
+    player.addEventListener('loadedmetadata', () => { player.currentTime = Math.min(back, E.s.duration); }, { once: true });
+    render();
+  }
+
   // ---------- playing ----------
   function playPause() {
     if (!E.s) return;
@@ -158,6 +192,7 @@ window.TFEdit = (() => {
       g.fillStyle = 'rgba(120,160,255,.18)'; g.fillRect(a, ruler, b - a, Hd - ruler);
       g.fillStyle = accent; g.fillRect(a - dpr, ruler, 2 * dpr, Hd - ruler); g.fillRect(b - dpr, ruler, 2 * dpr, Hd - ruler);
     }
+    if (!E.preview) TFEditTabs.overlay(g, { dpr, Wd, Hd, ruler, xAt, view: v, duration: E.s.duration, tab: E.tab });
     // the wave: one bar per pixel column
     const played = player.currentTime;
     for (let x = 0; x < Wd; x++) {
@@ -169,13 +204,12 @@ window.TFEdit = (() => {
       g.fillStyle = t1 <= played ? accent : todo;
       g.fillRect(x, mid - hgt, 1, hgt * 2);
     }
-    // playhead
-    const px = xAt(played) * dpr;
-    g.fillStyle = '#fff'; g.fillRect(px - dpr / 2, ruler, dpr * 1.5, Hd - ruler);
+    // playhead (not while a preview plays: the preview has its own length)
+    if (!E.preview) { const px = xAt(played) * dpr; g.fillStyle = '#fff'; g.fillRect(px - dpr / 2, ruler, dpr * 1.5, Hd - ruler); }
   }
   function drawBar() {
     if (!E.s) return;
-    const t = el('ed-time'); if (t) t.textContent = `${fmt(player.currentTime)} / ${fmt(E.s.duration)}`;
+    const t = el('ed-time'); if (t) t.textContent = `${fmt(player.currentTime)} / ${fmt(E.preview ? E.preview.duration : E.s.duration)}`;
     const p = el('ed-play'); if (p) p.innerHTML = player.paused ? ICONS.play : ICONS.pause;
     const s = el('ed-sel');
     if (s) s.textContent = E.sel ? `Selected ${fmt(E.sel.a)} – ${fmt(E.sel.b)} (${(E.sel.b - E.sel.a).toFixed(2)} s)` : 'Drag across the waveform to select a part';
@@ -184,11 +218,17 @@ window.TFEdit = (() => {
     const sb = el('ed-scroll');
     if (sb) { const max = Math.max(0, E.s.duration - view().span); sb.max = String(max); sb.value = String(E.scroll); sb.disabled = max <= 0; }
   }
+  let wired = null; // listeners of the current page; removed when the page is drawn again
   function wireCanvas(c) {
+    if (wired) wired.abort();
+    wired = new AbortController();
+    const signal = wired.signal;
     let down = null;
     c.addEventListener('mousedown', (e) => {
       if (!E.s || e.button !== 0) return;
       const r = c.getBoundingClientRect(), x = e.clientX - r.left, t = timeAt(x);
+      const own = !E.preview && TFEditTabs.mouseDown({ x, t, xAt, e, tab: E.tab });
+      if (own) { down = { own }; e.preventDefault(); return; }
       // grab an edge of the selection to move it
       const near = (tt) => Math.abs(xAt(tt) - x) < 6;
       if (E.sel && near(E.sel.a)) down = { edge: 'a' };
@@ -198,19 +238,21 @@ window.TFEdit = (() => {
       e.preventDefault();
     });
     window.addEventListener('mousemove', (e) => {
-      if (!down || !E.s) return;
+      if (!down || !E.s || !c.isConnected) return;
       const r = c.getBoundingClientRect(), x = Math.max(0, Math.min(r.width, e.clientX - r.left)), t = timeAt(x);
+      if (down.own) { down.own.move(t); draw(); return; }
       if (down.edge) { E.sel[down.edge] = t; if (E.sel.a > E.sel.b) { [E.sel.a, E.sel.b] = [E.sel.b, E.sel.a]; down.edge = down.edge === 'a' ? 'b' : 'a'; } }
       else if (Math.abs(x - down.x) > 3) { down.moved = true; E.sel = { a: Math.min(down.start, t), b: Math.max(down.start, t) }; }
       draw(); drawBar();
-    });
+    }, { signal });
     window.addEventListener('mouseup', () => {
       if (!down) return;
-      if (!down.edge && !down.moved) { player.currentTime = down.start; E.sel = null; } // a click: jump there
+      if (down.own) { if (down.own.up) down.own.up(); down = null; draw(); return; }
+      if (!down.edge && !down.moved && !E.preview) { player.currentTime = down.start; E.sel = null; } // a click: jump there
       if (E.sel && E.sel.b - E.sel.a < 0.01) E.sel = null;
       down = null;
       draw(); drawBar();
-    });
+    }, { signal });
     c.addEventListener('wheel', (e) => {
       if (!E.s) return;
       e.preventDefault();
@@ -218,7 +260,9 @@ window.TFEdit = (() => {
       if (e.ctrlKey) zoomTo(E.zoom * (e.deltaY < 0 ? 1.25 : 0.8), e.clientX - r.left);
       else { E.scroll += (e.deltaY + e.deltaX) / view().pps; clampScroll(); draw(); drawBar(); }
     }, { passive: false });
-    new ResizeObserver(() => draw()).observe(c);
+    const ro = new ResizeObserver(() => draw());
+    ro.observe(c);
+    signal.addEventListener('abort', () => ro.disconnect());
   }
 
   // ---------- the page ----------
@@ -236,12 +280,12 @@ window.TFEdit = (() => {
         h('div', { id: 'ed-busy', class: 'ed-busy', hidden: true })));
       return;
     }
-    const tabs = [['Trim', 2], ['Split', 3], ['Effects', 4], ['Loop', 5], ['Layers', 6]];
-    root.append(
+    const tabs = [['trim', 'Trim', 'Remove silent bits at the start and end'], ['split', 'Split', 'Cut one long file into separate songs'], ['effects', 'Effects', 'Echo, slowed + reverb, nightcore, bass, 8D, 1D'], ['loop', 'Loop', 'Repeat a part, with a smooth join'], ['layers', 'Layers', 'Sounds on top, your voice, smart connect']];
+    root.append(...[
       h('div', { class: 'ed-top' },
         h('div', { class: 'ed-song' }, h('div', { class: 'pl-mini' }, coverEl(t)),
           h('div', {}, h('b', {}, t.title), h('span', {}, `${t.artist || 'Unknown artist'} · ${E.s.versions[E.s.version]}${E.s.version ? ` (change ${E.s.version})` : ''}`))),
-        h('div', { class: 'ed-tabs seg' }, ...tabs.map(([n, part]) => h('button', { disabled: true, title: `${n}: coming in part ${part} of the sound editor` }, n))),
+        h('div', { class: 'ed-tabs seg' }, ...tabs.map(([k, n, tip]) => h('button', { class: E.tab === k ? 'on' : '', title: tip, onclick: () => { E.tab = E.tab === k ? '' : k; if (E.preview) stopPreview(); render(); } }, n))),
         h('div', { class: 'ed-top-r' },
           h('button', { class: 'tb', disabled: !E.s.canUndo, title: 'Undo (Ctrl+Z)', onclick: undo }, '↶ Undo'),
           h('button', { class: 'tb', disabled: !E.s.canRedo, title: 'Redo (Ctrl+Y)', onclick: redo }, '↷ Redo'),
@@ -262,7 +306,10 @@ window.TFEdit = (() => {
           h('span', { id: 'ed-zoom', title: 'Ctrl + mouse wheel on the waveform zooms too' }),
           h('button', { class: 'tb', onclick: () => zoomTo(E.zoom * 1.5), title: 'Zoom in' }, '+'),
           h('button', { class: 'tb', onclick: () => zoomTo(1), title: 'See the whole song' }, 'Fit'))),
-      saveBox());
+      E.preview ? h('div', { class: 'ed-preview' }, h('b', {}, `🎧 ${E.preview.label}`), h('span', {}, 'You are hearing how it would sound. Nothing is changed yet.'), h('span', { class: 'grow' }),
+        h('button', { class: 'tb', onclick: stopPreview }, 'Stop preview')) : null,
+      E.tab ? h('div', { class: 'ed-panel' }, TFEditTabs.panel(E.tab)) : null,
+      saveBox()].filter(Boolean));
     wireCanvas(el('ed-canvas'));
     requestAnimationFrame(() => { draw(); drawBar(); });
   }
@@ -289,5 +336,14 @@ window.TFEdit = (() => {
   }, true);
 
   const stop = () => { if (!player.paused) player.pause(); };
-  return { open, render, pick, stop, get session() { return E.s; } };
+  // what the tabs (edittabs.js) can use
+  const api = {
+    get session() { return E.s; }, get sel() { return E.sel; }, set sel(v) { E.sel = v; draw(); drawBar(); },
+    get busy() { return E.busy; }, get previewing() { return !!E.preview; }, player, fmt, track,
+    draw: () => { draw(); drawBar(); }, render, change, preview, stopPreview, busy, timeAt: (x) => timeAt(x),
+    seek: (t) => { player.currentTime = t; draw(); drawBar(); },
+    xAt: (t) => xAt(t), view: () => view(),
+    playRange: (a, b) => { if (!E.s) return; pause(); player.currentTime = a; E.stopAt = b; player.play().catch(() => {}); },
+  };
+  return { open, render, pick, stop, api, get session() { return E.s; } };
 })();
