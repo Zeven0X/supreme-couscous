@@ -14,7 +14,6 @@ Status: designed (concept pictures shown 2026-11-23), **not built yet**.
 | 6 | Layers: put other songs, beats, built-in sounds (rain, vinyl crackle, ocean…) or your recorded voice on top. As many layers as wanted. Tools: move, cut, volume, left/right, mute/solo, auto-quiet, match beat, repeat, record. |
 | 7 | **Smart connect** (Layers): cut a part of a song and join it to a different part (same or other song). Tonix moves the cut so it lands on the beat and blends the join: Hard cut / Smooth / Long blend. |
 | 8 | Save has 3 modes: **Keep both** (new = "Name New", original keeps its name) · **New takes the name** (original becomes "Name Old") · **Replace the original** (save new, delete original, asks first). |
-
 | 9 | "Replace the original" also deletes the **real file on the PC**, always after an "are you sure?" question. (Decided 2026-11-23.) |
 
 ## History
