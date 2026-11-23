@@ -23,7 +23,7 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 
 ## Build steps
 1. ✅ Map page: board, add songs, move, zoom, Start.
-2. ⬜ Path button.
+2. ✅ Path button.
 3. ⬜ Path settings.
 4. ⬜ Song settings on the map.
 5. ⬜ Playing a map.
@@ -54,6 +54,27 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 - **Now:** every change saves by itself, about half a second later. Each map is its own file in the library folder (`maps\`). Moving around and zoom are remembered too.
 - **History:** 2026-11-23 added.
 
+### Path button
+- **Now:** "Path" in the toolbar (or the P key) turns Path mode on: the button glows and the cursor becomes a cross.
+  - Click a song (it gets a white ring), then click the song the path goes to. A dotted line follows the mouse in between.
+  - Dragging from one song and letting go on another also works.
+  - Click the same song twice for a **loop** (the song can repeat itself).
+  - Path mode stays on, so you can connect many songs in a row. Esc cancels the half-made path; Esc again (or the button) turns Path mode off.
+  - Right-click a song → "Start a path from here".
+  - Connecting the same two songs the same way twice is refused with a message.
+- **History:** 2026-11-23 added.
+
+### Paths
+- **Now:** curved lines with an arrow. A→B and B→A bend to opposite sides so both stay visible. A loop is an arc over the cover.
+  - Each path shows its chance in a small label, and **thicker lines = more likely**.
+  - A new path splits the song's chances evenly (2 paths = 50/50, 3 = 34/33/33). Always whole numbers adding to 100.
+  - Click a path (or its label) to select it. Delete or right-click → "Remove path", with Undo. The other paths from that song grow back to 100%, keeping their sizes relative to each other.
+  - Removing a song also removes its paths and fixes the chances of songs that pointed to it.
+  - Songs with no paths out show a grey **END** badge (the music stops there). It only appears once the map has at least one path.
+  - Every path already stores its blend (crossfade 3 s), color, line style and name, ready for step 3.
+- **History:** 2026-11-23 added.
+
 ## How it works (simple words)
 - The map is a list of stops. Each stop remembers which song it is, where it sits (x, y) and its own effects.
+- A path remembers: which song it starts from, which song it goes to, and its chance. The chance math lives in `renderer/chance.js` and is tested on its own (6 tests): whole numbers, always 100, locks respected, and luck really follows the chances (70/30 over 20,000 tries).
 - The view is like a camera over a big table: moving changes where the camera is, zoom changes how close it is. Songs keep their real place on the table.

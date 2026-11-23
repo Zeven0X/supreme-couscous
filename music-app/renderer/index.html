@@ -50,15 +50,16 @@
       <!-- Map: songs connected by paths -->
       <div class="view" id="view-map">
         <div id="map-board">
-          <svg id="map-lines"></svg>
           <div id="map-world"></div>
           <div id="map-empty" hidden><div>This map is empty.<br><b>Click “Add songs”</b> below to put songs on it,<br>then drag them anywhere.</div></div>
           <div id="map-name"></div>
+          <div id="map-hint" hidden></div>
         </div>
         <div id="map-toolbar">
           <button class="mtool" id="map-add" title="Add songs from your library"><span class="ic" data-icon="plus"></span>Add songs</button>
+          <button class="mtool" id="map-path" title="Path: connect songs (P)"><span class="ic" data-icon="path"></span>Path</button>
           <button class="mtool" id="map-start" title="Make the selected song the Start (S)" disabled><span class="ic" data-icon="flag"></span>Set start</button>
-          <button class="mtool" id="map-remove" title="Remove the selected song from the map (Delete)" disabled><span class="ic" data-icon="trash"></span>Remove</button>
+          <button class="mtool" id="map-remove" title="Remove the selected song or path (Delete)" disabled><span class="ic" data-icon="trash"></span>Remove</button>
           <span class="grow"></span>
           <button class="mtool" id="map-fit" title="Show all songs (F)"><span class="ic" data-icon="fit"></span>Show all</button>
           <div class="zoom">
@@ -183,6 +184,7 @@
   <div id="modal-root"></div>
   <div id="toasts"></div>
   <script src="icons.js"></script>
+  <script src="chance.js"></script>
   <script src="app.js"></script>
   <script src="map.js"></script>
 </body>

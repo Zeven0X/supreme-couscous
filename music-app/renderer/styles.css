@@ -281,3 +281,24 @@ input[type=range]:hover::-webkit-slider-thumb { background: #fff; }
 .pick-art { aspect-ratio: 1; position: relative; font-size: 12px; overflow: hidden; border-radius: 3px; }
 .pick-n { position: absolute; right: 4px; top: 4px; min-width: 22px; height: 22px; border-radius: 11px; background: var(--orange); color: #000; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 12px; }
 .pick-name { margin-top: 5px; text-align: center; font: 600 13px var(--head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* map paths */
+#map-board.path-mode { cursor: crosshair; }
+#map-board.path-mode .mstop { cursor: copy; }
+.mstop.from .mart { box-shadow: 0 0 0 4px #fff, 0 0 0 8px var(--orange), 0 0 26px 6px rgba(227,146,58,.7); }
+.mstop .mend { position: absolute; left: -10px; top: -6px; background: #555; color: #fff; font: 700 10px var(--body); padding: 2px 6px; border-radius: 8px; letter-spacing: .5px; }
+svg.mlines { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.mpath { pointer-events: visiblePainted; cursor: pointer; }
+.mpath .hit { fill: none; stroke: transparent; stroke-width: 22; }
+.mpath .line { fill: none; stroke: currentColor; stroke-linecap: round; opacity: .85; }
+.mpath .head { fill: currentColor; }
+.mpath .pill { fill: #1b1b1b; stroke: currentColor; stroke-width: 1.5; }
+.mpath .pct { fill: #fff; font: 700 13px var(--body); text-anchor: middle; }
+.mpath:hover .line { opacity: 1; filter: drop-shadow(0 0 4px currentColor); }
+.mpath.selected .line { opacity: 1; filter: drop-shadow(0 0 6px #fff); }
+.mpath.selected .pill { fill: #fff; }
+.mpath.selected .pct { fill: #000; }
+#map-board.path-mode .mpath { pointer-events: none; }
+.rubber { stroke: #fff; stroke-width: 3; stroke-dasharray: 2 9; stroke-linecap: round; opacity: .8; }
+#map-hint { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: var(--orange); color: #000; font-weight: 700; padding: 6px 14px; border-radius: 16px; pointer-events: none; white-space: nowrap; box-shadow: 0 3px 10px rgba(0,0,0,.5); }
+.mtool.on { background: var(--orange); color: #000; }
+.mtool.on:hover:not(:disabled) { background: var(--orange-hi); color: #000; }

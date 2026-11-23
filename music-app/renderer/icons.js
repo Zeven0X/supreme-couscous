@@ -52,5 +52,6 @@
   I.flag = '<svg viewBox="0 0 24 24"><path d="M6 21V3.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path fill="currentColor" d="M7 4c3-1.6 5.5 1.4 8.5 0S19 3 19 3v9s-1.5 1.2-3.5 1.6c-3 .6-5.5-2.2-8.5-.6Z"/></svg>';
   I.trash = '<svg viewBox="0 0 24 24"><path d="M4 6.5h16M9.5 6.5V4h5v2.5M6.5 6.5l1 13.5h9l1-13.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   I.fit = '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  I.path = '<svg viewBox="0 0 24 24"><circle cx="5" cy="18" r="2.6" fill="currentColor"/><circle cx="19" cy="6" r="2.6" fill="currentColor"/><path d="M7 16.5C12 15 9 9 16.6 7.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M13.8 5.2l3.4 1.9-1.6 3.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   window.ICONS = I;
 })();

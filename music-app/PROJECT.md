@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: Map step 1 done (board, add songs, drag, zoom, Start, autosave). Next: Map step 2, the Path button.
+- 2026-11-23: Map step 2 done (Path button, curved paths with chances). Next: Map step 3, path settings.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -19,11 +19,12 @@
 | Button | Status |
 |---|---|
 | 🔍 Search (library) | ✅ Working |
-| 🗺 Map | 🧪 Being built (step 1 of 8 done) |
+| 🗺 Map | 🧪 Being built (step 2 of 8 done) |
 | 📏 Sound editing tool | 💤 Hidden, not planned yet |
 | ⚙ Settings | 💤 Hidden, not planned yet |
 
 ## Recent changes
+- 2026-11-23: Map step 2. Path button, paths with even-split chances, loops, remove with Undo.
 - 2026-11-23: Map step 1. Map button with the loop-trail icon.
 - 2026-11-23: Page, caliper and gear buttons hidden (code kept) until planned with the user.
 
