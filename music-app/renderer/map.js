@@ -9,7 +9,9 @@
     pathMode: false, // Path button is on
     from: null, // in Path mode: the song a new path starts from
     pointer: null, // mouse position in map coordinates (for the line that follows the mouse)
+    draw: null, // points of the line being drawn by hand right now
   };
+  const Sh = window.TFShape;
   const board = $('#map-board');
   const world = $('#map-world');
   const STOP = 96; // cover size in map pixels
@@ -89,6 +91,15 @@
     const bx = end[0] - ux * size * 1.5, by = end[1] - uy * size * 1.5;
     return `${end[0]},${end[1]} ${bx - uy * size},${by + ux * size} ${bx + uy * size},${by - ux * size}`;
   }
+  // The full shape of a path: the automatic curve, or a smooth line through its hand-drawn points.
+  function geom(p, a, b) {
+    const pts = (p.pts || []).map((q) => Sh.fromNorm(a, b, q));
+    if (!pts.length) return { ...curve(a, b), pts, mids: [] };
+    const edge = (c, to, pad) => { const l = Math.hypot(to[0] - c.x, to[1] - c.y) || 1; return [c.x + ((to[0] - c.x) / l) * pad, c.y + ((to[1] - c.y) / l) * pad]; };
+    const end = edge(b, pts[pts.length - 1], R + 7);
+    const sp = Sh.spline([edge(a, pts[0], R + 4), ...pts, end]);
+    return { d: sp.d, end, dir: [end[0] - sp.lastC2[0], end[1] - sp.lastC2[1]], pts, mids: sp.mids };
+  }
   const el = (tag, attrs) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
 
   // ---------- drawing ----------
@@ -99,26 +110,35 @@
     for (const p of M.map.paths) {
       const a = stopById(p.from), b = stopById(p.to);
       if (!a || !b) continue;
-      const c = curve(a, b);
+      const c = geom(p, a, b);
       const w = 2.5 + (p.chance / 100) * 6; // thick line = likely path
-      const g = el('g', { class: `mpath${p.id === M.selPath ? ' selected' : ''}`, 'data-id': p.id, style: `color:${p.color || '#e3923a'}` });
-      g.append(
-        el('path', { d: c.d, class: 'hit' }),
-        el('path', { d: c.d, class: 'line', 'stroke-width': w }),
-        el('polygon', { points: arrowHead(c.end, c.dir, 5 + w * 0.6), class: 'head' }),
-      );
+      const sel = p.id === M.selPath;
+      const g = el('g', { class: `mpath${sel ? ' selected' : ''}`, 'data-id': p.id, style: `color:${p.color || '#e3923a'}` });
+      const line = el('path', { d: c.d, class: 'line', 'stroke-width': w });
+      g.append(el('path', { d: c.d, class: 'hit' }), line, el('polygon', { points: arrowHead(c.end, c.dir, 5 + w * 0.6), class: 'head' }));
+      svg.append(g);
+      // the chance label sits halfway along the line, whatever its shape
+      const len = line.getTotalLength();
+      const at = (f) => { const q = line.getPointAtLength(len * f); return [q.x, q.y]; };
+      const mid = at(0.5);
       const label = `${p.chance}%`;
       const lw = 12 + label.length * 8;
-      g.append(el('rect', { x: c.mid[0] - lw / 2, y: c.mid[1] - 11, width: lw, height: 22, rx: 11, class: 'pill' }));
-      const t = el('text', { x: c.mid[0], y: c.mid[1] + 5, class: 'pct' });
+      g.append(el('rect', { x: mid[0] - lw / 2, y: mid[1] - 11, width: lw, height: 22, rx: 11, class: 'pill' }));
+      const t = el('text', { x: mid[0], y: mid[1] + 5, class: 'pct' });
       t.textContent = label;
       g.append(t);
-      svg.append(g);
+      // bend handles: big dots are the path's points, small faint dots add a new point
+      if (sel && !M.pathMode) {
+        const ghosts = c.pts.length ? c.mids.map((m, i) => [m, i]) : [[at(0.28), 0], [at(0.72), 0]];
+        for (const [m, i] of ghosts) g.append(el('circle', { cx: m[0], cy: m[1], r: 6, class: 'handle ghost', 'data-i': i }));
+        c.pts.forEach((q, i) => g.append(el('circle', { cx: q[0], cy: q[1], r: 8, class: 'handle', 'data-i': i })));
+      }
     }
-    // the line that follows the mouse while you pick the second song
-    if (M.pathMode && M.from && M.pointer) {
+    // while making a path: your drawing so far, or a straight line that follows the mouse
+    if (M.pathMode && M.from) {
       const a = stopById(M.from);
-      if (a) svg.append(el('line', { x1: a.x, y1: a.y, x2: M.pointer[0], y2: M.pointer[1], class: 'rubber' }));
+      if (M.draw && M.draw.length > 1) svg.append(el('polyline', { points: M.draw.map((q) => q.join(',')).join(' '), class: 'rubber drawn' }));
+      else if (a && M.pointer) svg.append(el('line', { x1: a.x, y1: a.y, x2: M.pointer[0], y2: M.pointer[1], class: 'rubber' }));
     }
   }
 
@@ -145,20 +165,28 @@
     $('#map-path').classList.toggle('on', M.pathMode);
     board.classList.toggle('path-mode', M.pathMode);
     const hint = $('#map-hint');
-    hint.hidden = !M.pathMode;
-    hint.textContent = !M.from ? 'Path: click the song the path starts from' : 'Now click the song it goes to (click the same song for a loop) · Esc to cancel';
+    const selP = !M.pathMode && M.map.paths.find((p) => p.id === M.selPath);
+    hint.hidden = !M.pathMode && !selP;
+    hint.textContent = selP ? 'Drag the dots to bend this path · double-click a dot to remove it'
+      : !M.from ? 'Path: click a song, or press on it and draw your path to another song'
+        : M.draw ? 'Keep drawing to the song it goes to, then let go'
+          : 'Now click the song it goes to (click the same song for a loop) · Esc to cancel';
+    $('#map-straighten').hidden = !(selP && selP.pts && selP.pts.length);
   }
   function select(id) { M.selected = id; M.selPath = null; render(); }
   function selectPath(id) { M.selPath = id; M.selected = null; render(); }
 
   // ---------- paths ----------
   function newId() { return Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, '0')).join(''); }
-  function addPath(fromId, toId) {
-    if (M.map.paths.some((p) => p.from === fromId && p.to === toId)) {
-      toast('These songs are already connected that way. Click the path to select it.');
+  function addPath(fromId, toId, pts) {
+    const old = M.map.paths.find((p) => p.from === fromId && p.to === toId);
+    if (old) {
+      // drawing over an existing path gives it the new shape
+      if (pts && pts.length) { old.pts = pts; save(); toast('Path redrawn'); } else toast('These songs are already connected that way. Click the path to select it.');
       return;
     }
     const p = { id: newId(), from: fromId, to: toId, chance: 0, locked: false, blend: { type: 'crossfade', secs: 3 }, color: '#e3923a', style: 'solid', name: '' };
+    if (pts && pts.length) p.pts = pts;
     M.map.paths.push(p);
     TFChance.evenSplit(pathsFrom(fromId)); // every path out of this song gets the same share
     save();
@@ -167,19 +195,53 @@
     M.pathMode = on;
     M.from = null;
     M.pointer = null;
+    M.draw = null;
     render();
+  }
+  // Turn a hand-drawn line into a path: keep the few points that matter, drop the bits on top of the covers.
+  function drawnPoints(a, b, raw) {
+    const clear = (q, s) => Math.hypot(q[0] - s.x, q[1] - s.y) > R + 12;
+    return Sh.simplifyTo(raw, 14, 14).filter((q) => clear(q, a) && clear(q, b)).map((q) => Sh.toNorm(a, b, q));
+  }
+  function straighten() {
+    const p = M.map.paths.find((x) => x.id === M.selPath);
+    if (!p || !p.pts) return;
+    const before = snapshot();
+    delete p.pts;
+    render();
+    save();
+    undoToast('Path straightened', before);
   }
 
   // ---------- mouse ----------
   let drag = null;
   board.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || e.target.closest('button')) return;
     const stopEl = e.target.closest('.mstop');
     const pathEl = e.target.closest('.mpath');
+    const handle = e.target.closest('.handle');
+    if (handle && !M.pathMode) {
+      const p = M.map.paths.find((x) => x.id === M.selPath);
+      const a = stopById(p.from), b = stopById(p.to);
+      const i = +handle.dataset.i;
+      if (handle.classList.contains('ghost')) {
+        // a faint dot becomes a real point where it sits, then follows the mouse
+        p.pts = p.pts || [];
+        p.pts.splice(i, 0, Sh.toNorm(a, b, [+handle.getAttribute('cx'), +handle.getAttribute('cy')]));
+        render();
+      }
+      drag = { kind: 'handle', p, a, b, i, moved: false };
+      e.preventDefault();
+      return;
+    }
     if (M.pathMode && stopEl) {
       const id = stopEl.dataset.id;
-      if (!M.from) { M.from = id; M.pointer = toWorld(e.clientX, e.clientY); render(); drag = { kind: 'connect', id }; }
-      else { addPath(M.from, id); M.from = null; render(); }
+      if (!M.from) {
+        M.from = id;
+        M.pointer = toWorld(e.clientX, e.clientY);
+        drag = { kind: 'connect', id, raw: [M.pointer], sx: e.clientX, sy: e.clientY, moved: false };
+        render();
+      } else { addPath(M.from, id); M.from = null; render(); }
       e.preventDefault();
       return;
     }
@@ -198,7 +260,20 @@
   window.addEventListener('mousemove', (e) => {
     if (M.pathMode && M.from) { M.pointer = toWorld(e.clientX, e.clientY); drawLines(); }
     if (!drag) return;
-    if (drag.kind === 'connect') return;
+    if (drag.kind === 'connect') {
+      // drawing by hand: remember where the mouse has been
+      if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 8) drag.moved = true;
+      const last = drag.raw[drag.raw.length - 1];
+      if (Math.hypot(M.pointer[0] - last[0], M.pointer[1] - last[1]) > 5) drag.raw.push(M.pointer);
+      if (drag.moved) { const first = !M.draw; M.draw = drag.raw; if (first) render(); else drawLines(); }
+      return;
+    }
+    if (drag.kind === 'handle') {
+      drag.p.pts[drag.i] = Sh.toNorm(drag.a, drag.b, toWorld(e.clientX, e.clientY));
+      drag.moved = true;
+      drawLines();
+      return;
+    }
     const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
     if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
     if (drag.kind === 'stop') {
@@ -215,12 +290,22 @@
   });
   window.addEventListener('mouseup', (e) => {
     if (!drag) return;
+    if (drag.kind === 'handle') { save(); drag = null; return; }
     if (drag.kind === 'connect') {
-      // dragging from one song and letting go on another also makes a path
+      // letting go on a song finishes the drawing; a plain click just picks the first song
+      const d = drag;
+      drag = null;
+      M.draw = null;
+      if (!d.moved || M.from !== d.id) { drawLines(); return; }
       const target = document.elementFromPoint(e.clientX, e.clientY);
       const stopEl = target && target.closest && target.closest('.mstop');
-      if (stopEl && stopEl.dataset.id !== drag.id && M.from === drag.id) { addPath(M.from, stopEl.dataset.id); M.from = null; render(); }
-      drag = null;
+      if (!stopEl) { toast('To draw a path, end your line on a song.'); M.from = null; render(); return; }
+      const a = stopById(d.id), b = stopById(stopEl.dataset.id);
+      const pts = drawnPoints(a, b, d.raw);
+      if (a === b && !pts.length) { render(); return; } // a tiny wiggle on one song is not a loop
+      addPath(a.id, b.id, pts);
+      M.from = null;
+      render();
       return;
     }
     if (drag.moved) save();
@@ -257,9 +342,20 @@
     } else if (pathEl) {
       e.preventDefault();
       selectPath(pathEl.dataset.id);
-      menu(e.clientX, e.clientY, [['Remove path', removeSelected]]);
+      const p = M.map.paths.find((x) => x.id === pathEl.dataset.id);
+      menu(e.clientX, e.clientY, [...(p && p.pts ? [['Straighten path', straighten]] : []), ['Remove path', removeSelected]]);
     }
   });
+  board.addEventListener('dblclick', (e) => {
+    const handle = e.target.closest('.handle:not(.ghost)');
+    const p = handle && M.map.paths.find((x) => x.id === M.selPath);
+    if (!p || !p.pts) return;
+    p.pts.splice(+handle.dataset.i, 1);
+    if (!p.pts.length) delete p.pts;
+    render();
+    save();
+  });
+  $('#map-straighten').addEventListener('click', straighten);
 
   // ---------- actions ----------
   function setStart() {

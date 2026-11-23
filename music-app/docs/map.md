@@ -19,11 +19,14 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 | 12 | Export = one file with songs, names, covers, paths, changes + a map cover. |
 | 13 | Others open it in Tonix and it becomes their copy. |
 | 14 | One map open at a time, as many maps as wanted, autosave + resume where playback stopped. |
+| 15 | Paths can be **drawn by hand** (freehand route) and reshaped with **bend handles**. (Added 2026-11-23.) |
+| 16 | Each map has its own **background**: 20 built-in ones (mix of themes) or the user's own picture (repeats like tiles, travels inside the export file). It moves and zooms with the map. (Decided 2026-11-23, not built yet.) |
 | — | Icon: torn page with a loop trail to an X. Page style: dark "winding trail". |
 
 ## Build steps
 1. ✅ Map page: board, add songs, move, zoom, Start.
-2. ✅ Path button.
+2. ✅ Path button. 🔄 2026-11-23: + draw paths by hand, bend handles.
+2b. ⬜ Backgrounds: previews of 20 first, then the Background button.
 3. ⬜ Path settings.
 4. ⬜ Song settings on the map.
 5. ⬜ Playing a map.
@@ -64,6 +67,21 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
   - Connecting the same two songs the same way twice is refused with a message.
 - **History:** 2026-11-23 added.
 
+### Drawing paths by hand
+- **Now:** in Path mode, press on a song and **draw** to another song, then let go. The path follows your drawing.
+  - Your line is cleaned up: shaky bits are smoothed and only the important points are kept (14 at most).
+  - A quick click on one song then another still makes the automatic curve. A nearly straight drawing also becomes the automatic curve.
+  - Draw away from a song and back onto it for a hand-drawn **loop**.
+  - Drawing between two songs that are already connected that way **redraws** that path.
+  - Letting go on empty space cancels, with a message.
+  - Move a song and its drawn paths **stretch and turn with it**, keeping their shape.
+- **History:** 2026-11-23 added. Before: paths could only be connected, always as an automatic curve.
+
+### Bend handles
+- **Now:** click a path to select it. White dots are its points: drag them to bend the path. Small faint dots add a new point when dragged. Double-click a white dot to remove it.
+  - **Straighten** (button above the map, or right-click the path) goes back to the automatic curve, with Undo.
+- **History:** 2026-11-23 added.
+
 ### Paths
 - **Now:** curved lines with an arrow. A→B and B→A bend to opposite sides so both stay visible. A loop is an arc over the cover.
   - Each path shows its chance in a small label, and **thicker lines = more likely**.
@@ -77,4 +95,5 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 ## How it works (simple words)
 - The map is a list of stops. Each stop remembers which song it is, where it sits (x, y) and its own effects.
 - A path remembers: which song it starts from, which song it goes to, and its chance. The chance math lives in `renderer/chance.js` and is tested on its own (6 tests): whole numbers, always 100, locks respected, and luck really follows the chances (70/30 over 20,000 tries).
+- A drawn path stores a few points measured from its two songs (how far along the way from A to B, and how far to the side). That is why the drawing follows when a song moves. This math is in `renderer/pathshape.js` with 6 tests.
 - The view is like a camera over a big table: moving changes where the camera is, zoom changes how close it is. Songs keep their real place on the table.

@@ -302,3 +302,10 @@ svg.mlines { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overf
 #map-hint { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: var(--orange); color: #000; font-weight: 700; padding: 6px 14px; border-radius: 16px; pointer-events: none; white-space: nowrap; box-shadow: 0 3px 10px rgba(0,0,0,.5); }
 .mtool.on { background: var(--orange); color: #000; }
 .mtool.on:hover:not(:disabled) { background: var(--orange-hi); color: #000; }
+/* drawn paths + bend handles */
+.rubber.drawn { fill: none; stroke-dasharray: none; stroke-linejoin: round; opacity: .9; }
+.handle { fill: #fff; stroke: currentColor; stroke-width: 3; pointer-events: all; cursor: grab; }
+.handle:hover { fill: var(--orange-hi); }
+.handle.ghost { fill: currentColor; stroke: #fff; stroke-width: 1.5; opacity: .55; }
+.handle.ghost:hover { opacity: 1; }
+#map-straighten { position: absolute; left: 50%; top: 50px; transform: translateX(-50%); box-shadow: 0 3px 10px rgba(0,0,0,.5); }

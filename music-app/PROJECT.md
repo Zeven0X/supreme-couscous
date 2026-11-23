@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: Map step 2 done (Path button, curved paths with chances). Next: Map step 3, path settings.
+- 2026-11-23: Map step 2 upgraded (draw paths by hand, bend handles). Next: previews of 20 map backgrounds, then the Background button. After that: step 3, path settings.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -24,6 +24,7 @@
 | ⚙ Settings | 💤 Hidden, not planned yet |
 
 ## Recent changes
+- 2026-11-23: Paths can be drawn by hand and bent with handles.
 - 2026-11-23: Map step 2. Path button, paths with even-split chances, loops, remove with Undo.
 - 2026-11-23: Map step 1. Map button with the loop-trail icon.
 - 2026-11-23: Page, caliper and gear buttons hidden (code kept) until planned with the user.
