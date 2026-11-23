@@ -33,3 +33,12 @@ Scope: Genesis Forge only. GTS (Giantess mod) notes in that file are out of scop
 - Planned gear tiers: two future sets at 75x and 100x vanilla enchant max (not created). Enchant reworks in `docs/enchantment-rework-plan.md`.
 - New item needed: Galaxium Fishing Rod (for the Luck of the Sea rework). Look, abilities and recipe decided; see docs/enchantment-rework-plan.md. Not built (needs the jar).
 - New ideas (not built): Galaxium final boss (summon after 8 mini-bosses), 10th Omni Nexus tab, new Galaxium weapon/tool, more enchantment reworks (e.g. Unbreaking, Efficiency, Fortune, Thorns).
+
+<!-- zeven-harness:start (managed by install.ps1, edits inside are overwritten) -->
+@AGENTS.md
+
+## Claude Code only
+- Slash commands (skills): `/z-start`, `/z-idea`, `/z-game`, `/z-research`, `/z-docs`, `/z-plan`, `/z-review`, `/z-debug`, `/z-ship`, `/z-feedback`, `/z-brief`, `/z-reel`.
+- Subagents: `z-planner`, `z-reviewer`, `z-tester`, `z-creative-director`. Use `z-reviewer` before calling a coding task done when the change touches more than a few files. Use `z-creative-director` before publishing creative work.
+- Questions: always write them as text in the HARD rule 1 layout (`1-` / `A1-` … `Other:`). Don't use the AskUserQuestion pop-up; it can't show that layout.
+<!-- zeven-harness:end -->
