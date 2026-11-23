@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS = {
   // Saving
   format: 'mp3',
   albumFormat: 'mp3', // saving many songs remembers its own type
+  smartShuffle: {}, // smart playlists (genre + stars): shuffle on / off, by playlist
   albumMode: 'album', // saving many songs: 'album' (one file per song) or 'single' (one big file)
   fileNames: 'artist-title', // 'artist-title' | 'title' | 'title-artist'
   // Library

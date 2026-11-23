@@ -1,10 +1,16 @@
 'use strict';
-/* global S, h, $, tf, guard, toast, coverEl, placeholder, fmtTime, modal, confirmModal, loadTrack, upsertTrack, renderGrid, ICONS, TFShuffle, startShuffle, setMark, openAlbumModal */
+/* global S, h, $, tf, guard, toast, coverEl, placeholder, fmtTime, modal, confirmModal, loadTrack, upsertTrack, renderGrid, ICONS, TFShuffle, startShuffle, setMark, openAlbumModal, TFSmart */
 // Playlists: a tab in the Library. Each playlist keeps its songs in your order. Songs get in by
 // right-click → Add to playlist, by dragging song cards onto a playlist, or with "Add files".
 window.TFPlaylists = (() => {
   const P = { list: [], openId: null, dragIds: null };
-  const byId = (id) => P.list.find((p) => p.id === id);
+  // your own playlists (P.list) + the smart ones Tonix makes from genre and stars (P.smart, rebuilt on every draw)
+  P.smart = [];
+  const byId = (id) => P.list.find((p) => p.id === id) || P.smart.find((p) => p.id === id);
+  function buildSmart() {
+    const sh = S.settings.smartShuffle || {};
+    P.smart = TFSmart.build(S.tracks).map((p) => ({ ...p, shuffle: !!sh[p.id] }));
+  }
   const songs = (p) => p.trackIds.map((id) => S.byId.get(id)).filter(Boolean);
   const view = () => $('#pl-view');
 
@@ -19,6 +25,13 @@ window.TFPlaylists = (() => {
 
   // ---------- changes (saved right away) ----------
   async function save(p, patch) {
+    if (p.smart) { // smart playlists only remember shuffle on / off
+      const sh = { ...(S.settings.smartShuffle || {}), [p.id]: !!patch.shuffle };
+      S.settings.smartShuffle = sh;
+      tf.settings({ smartShuffle: sh }).catch(() => {});
+      render();
+      return p;
+    }
     const r = await guard(() => tf.playlistUpdate(p.id, patch));
     if (r) { replace(r); render(); }
     return r;
@@ -92,16 +105,27 @@ window.TFPlaylists = (() => {
     if (!v || S.libTab !== 'playlists') return;
     if (P.rowDrag) { P.redraw = true; return; } // never redraw under a row that is being dragged
     v.innerHTML = '';
+    buildSmart();
     const side = h('div', { class: 'pl-side' },
       h('button', { class: 'tb pri pl-new', onclick: () => create() }, '+ New playlist'));
-    for (const p of P.list) {
-      const row = h('div', { class: `pl-item${p.id === P.openId ? ' on' : ''}${p.id === S.playlistId ? ' playing' : ''}`, 'data-id': p.id, onclick: () => { P.openId = p.id; render(); } },
+    const item = (p) => {
+      const row = h('div', { class: `pl-item${p.id === P.openId ? ' on' : ''}${p.id === S.playlistId ? ' playing' : ''}${p.smart ? ' smart' : ''}`, 'data-id': p.id, onclick: () => { P.openId = p.id; render(); } },
         h('div', { class: 'pl-mini' }, plCover(p)),
         h('div', { class: 'pl-item-t' }, h('b', {}, p.name), h('span', {}, `${p.trackIds.length} song${p.trackIds.length === 1 ? '' : 's'}`)));
-      dropTarget(row, p);
-      side.append(row);
-    }
+      if (!p.smart) dropTarget(row, p);
+      return row;
+    };
+    side.append(h('div', { class: 'pl-group' }, 'Your playlists'));
+    for (const p of P.list) side.append(item(p));
     if (!P.list.length) side.append(h('p', { class: 'pl-none' }, 'No playlists yet.'));
+    side.append(h('div', { class: 'pl-group', title: 'Tonix makes one for each genre and star count. Rate songs and give them a genre to fill them.' }, 'Made by Tonix (genre + stars)'));
+    let lastGenre = null;
+    for (const p of P.smart) {
+      if (p.genre !== lastGenre) { side.append(h('div', { class: 'pl-genre' }, p.genre)); lastGenre = p.genre; }
+      side.append(item(p));
+    }
+    if (!P.smart.length) side.append(h('p', { class: 'pl-none' }, 'Rate songs with stars and give them a genre: Tonix then makes playlists like "6⭐ Rock" by itself.'));
+    if (P.openId && !byId(P.openId)) P.openId = (P.list[0] || P.smart[0] || {}).id || null; // a smart playlist that emptied
     const p = byId(P.openId);
     v.append(side, p ? detail(p) : h('div', { class: 'pl-detail pl-empty' },
       h('div', {}, h('b', {}, 'Make your first playlist'), h('p', {}, 'Press "+ New playlist". Then add songs: right-click songs in All → Add to playlist, drag song cards onto a playlist, or use Add files.'))));
@@ -115,6 +139,7 @@ window.TFPlaylists = (() => {
       const r = await guard(() => tf.playlistCover(p.id, img), 'Picture: ');
       if (r) { replace(r); render(); }
     });
+    if (p.smart) return smartDetail(p, list, art);
     const title = h('h2', { class: 'pl-title', title: 'Click to rename' }, p.name);
     title.addEventListener('click', async () => { const n = await askName('Rename playlist', p.name, 'Rename'); if (n !== undefined) save(p, { name: n }); });
     const head = h('div', { class: 'pl-head' }, art,
@@ -164,6 +189,30 @@ window.TFPlaylists = (() => {
       rows.append(row);
     });
     if (!list.length) rows.append(h('div', { class: 'pl-hint' }, 'Empty playlist. Add songs: right-click songs in All → Add to playlist, drag song cards onto a playlist name, or use 📂 Add files.'));
+    return h('div', { class: 'pl-detail' }, head, rows);
+  }
+  function smartDetail(p, list, art) {
+    art.replaceWith(h('div', { class: 'pl-art' }, plCover(p)));
+    const head = h('div', { class: 'pl-head' }, h('div', { class: 'pl-art' }, plCover(p)),
+      h('div', { class: 'pl-info' },
+        h('div', { class: 'pl-kind' }, 'Made by Tonix'), h('h2', { class: 'pl-title smart' }, p.name),
+        h('div', { class: 'pl-meta' }, `${list.length} song${list.length === 1 ? '' : 's'} · ${fmtTime(totalTime(p))} · ${p.genre} songs with exactly ${p.stars}⭐`),
+        h('div', { class: 'pl-btns' },
+          h('button', { class: 'tb pri', onclick: () => play(p), html: `${ICONS.play}<span>Play</span>` }),
+          h('button', { class: `tb pl-shuffle${p.shuffle ? ' on' : ''}`, title: 'Smart shuffle: random order, songs played a lot come less often, ♥ more, 🚫 much less', onclick: () => save(p, { shuffle: !p.shuffle }) }, `🔀 Shuffle ${p.shuffle ? 'on' : 'off'}`)),
+        h('div', { class: 'pl-btns pl-btns2' },
+          h('button', { class: 'tb', title: 'Save the whole playlist: one file per song, or one big file', onclick: () => openAlbumModal(list.map((t) => t.id), { playlist: p }) }, '💾 Save'))));
+    const rows = h('div', { class: 'pl-rows' });
+    list.forEach((t, i) => {
+      const row = h('div', { class: `pl-row smart${t.id === S.currentId && S.playlistId === p.id ? ' playing' : ''}`, 'data-id': t.id, title: 'Double-click to play' },
+        h('span'), h('span', { class: 'n' }, i + 1), h('div', { class: 'pl-mini' }, coverEl(t)),
+        h('div', { class: 'pl-row-t' }, h('b', {}, t.title), h('span', {}, t.artist || 'Unknown artist')),
+        markEl(t, list.length),
+        h('span', { class: 'pl-len' }, fmtTime((t.duration || 0) / ((t.fx.speed || 100) / 100))), h('span'));
+      row.addEventListener('dblclick', () => play(p, t.id));
+      rows.append(row);
+    });
+    rows.append(h('div', { class: 'pl-hint' }, `This playlist fills itself. Give a song ${p.stars}⭐ and the genre "${p.genre}" and it comes here; change its stars or genre and it moves to the right playlist.`));
     return h('div', { class: 'pl-detail' }, head, rows);
   }
   // ♥ / 🚫 for smart shuffle. The mark shows while it counts (songs x 4 plays), then the song is normal again.
@@ -222,5 +271,5 @@ window.TFPlaylists = (() => {
     for (const p of P.list) p.trackIds = p.trackIds.filter((id) => !gone.has(id));
     render();
   }
-  return { setAll, render, pickFor, startDrag, endDrag, onTracksRemoved, play, get list() { return P.list; }, get open() { return byId(P.openId); } };
+  return { get smart() { buildSmart(); return P.smart; }, setAll, render, pickFor, startDrag, endDrag, onTracksRemoved, play, get list() { return P.list; }, get open() { return byId(P.openId); } };
 })();

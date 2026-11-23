@@ -10,14 +10,14 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: All 5 playlist parts done: playlists, smart shuffle, save a playlist, **stars 1–10 + star filter**, **all information inside saved files** (read back on upload). Next: you try it on your PC; then the sound editor (designed, not built).
+- 2026-11-23: **Smart playlists** built: Tonix makes one per genre + exact stars ("6⭐ Rock", "2⭐ Pop") that fill themselves. Next: you try everything on your PC; then the sound editor (designed, not built).
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
 2. [Settings and keyboard shortcuts](docs/settings.md): 9 sections, 7 looks, 46 shortcuts you can change, map undo/redo.
 3. [Sound panel](docs/sound-panel.md): pitch (studio quality, Natural voice), speed, volume, fades.
 4. [Saving songs](docs/saving.md): the save window, Fill from name, file types.
-5. [Library](docs/library.md): Clear all music, Playlists, smart shuffle, saving a playlist, stars 1–10, information inside saved files.
+5. [Library](docs/library.md): Clear all music, Playlists, smart shuffle, saving a playlist, stars 1–10, information inside saved files, smart playlists (genre + stars).
 6. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
 
 ## Top bar buttons
@@ -29,6 +29,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: **Smart playlists made by Tonix**: one for each genre + exact stars, e.g. "6⭐ Rock". They update by themselves when you rate a song or change its genre.
 - 2026-11-23: Star filter moved to the top of the Filters panel.
 - 2026-11-23: **Stars 1–10** (song cards, save windows, Filters → Stars: or more / exactly / or less) and **information inside saved files** (label, track number, stars, blacklist / favourite, plays; read back on upload). M4A saves now keep the label.
 - 2026-11-23: **Smart shuffle** (playlists + library) and **Save a playlist** (new window, one file per song or one big MP3/M4A with chapters). Fixed: the Library page didn't fill its panel; shuffle could bounce between 2 songs; the "ask where to save" setting works again in the new save windows.

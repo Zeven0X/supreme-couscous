@@ -1,5 +1,5 @@
 'use strict';
-/* global ICONS, tf, TFStudio, TFSaveName, TFPlaylists, TFShuffle, TFStars */
+/* global ICONS, tf, TFStudio, TFSaveName, TFPlaylists, TFShuffle, TFStars, TFSmart */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 function h(tag, attrs = {}, ...kids) {
@@ -680,6 +680,7 @@ async function setStars(id, n) {
   if (!t) return;
   upsertTrack(t);
   if (S.filters.stars && S.filters.stars.n) renderGrid(); // it may now match the star filter, or not
+  TFPlaylists.render(); // smart playlists (genre + stars) move the song by themselves
 }
 // Filters → Stars: pick a number of stars, then "or more" / "exactly" / "or less". Click the star again to clear.
 function renderStarFilter() {
@@ -1289,6 +1290,7 @@ for (const b of $$('.nav')) {
 
 function renderAll() {
   renderGrid();
+  TFPlaylists.render();
   renderNow();
   renderNext();
   renderFx();

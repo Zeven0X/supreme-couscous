@@ -124,5 +124,21 @@ The Library page holds all your songs: upload, search, tabs, filters, picture si
 ### History
 - 2026-11-23: Built. Your words: "the music that is saved from Tonix should have all the properties like label, number, star rating, black listing. And etc", "The information should be saved with the video".
 
+## Smart playlists (made by Tonix) — current state ✅ (2026-11-23)
+- **What:** Tonix makes a playlist for **every genre + star count** by itself, e.g. **"6⭐ Rock"** = Rock songs with **exactly** 6 stars, **"2⭐ Pop"** = Pop songs with exactly 2 stars (your choices: exact stars, Tonix makes them, no maximum size).
+- **Where:** Library → Playlists, under **"Made by Tonix (genre + stars)"**, grouped by genre, best stars first. Your own playlists stay on top under "Your playlists".
+- **They fill themselves:** rate a song or change its genre and it moves to the right playlist straight away. A playlist with no songs left disappears. Songs without stars or without a genre are not in any smart playlist.
+- A song with two genres (like "Rock; Pop") is in both.
+- **You can:** ▶ Play, 🔀 Shuffle (remembered for each smart playlist), 💾 Save (the album name becomes "6⭐ Rock"), and ♥ / 🚫 the songs.
+- **You can't:** rename, change the picture, reorder, add or take out songs by hand, or delete. Tonix decides from the stars and the genre. The order is by song title.
+
+### Checked
+- Automatic test: one playlist per genre + exact stars, any spelling of the genre ("Rock" / "rock"), two genres = both playlists, a re-rated song moves.
+- In the real app (8/8): none before rating; after rating "2⭐ Pop, 9⭐ Rock, 6⭐ Rock" appear by themselves; 6⭐ Rock has the 2 right songs; no rename / delete / add buttons; re-rating moves a song; play; Save names the album "9⭐ Rock"; shuffle kept after a restart.
+- **Not yet tried by you.**
+
+### History
+- 2026-11-23: Built. Your words: "A playlist of the stars amount for that genre. 6⭐️ rock. 2⭐️ pop", exact stars (B1), Tonix makes them (B2), no maximum (B4).
+
 ## Ideas for later (playlists)
 - Show stars in playlist rows too; sort a playlist by stars.
