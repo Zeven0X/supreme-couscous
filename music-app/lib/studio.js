@@ -8,6 +8,7 @@ const crypto = require('crypto');
 
 function rm(f) { try { fs.rmSync(f, { force: true }); } catch (_) { /* in use: next time */ } }
 const MAX_BYTES = 2 * 1024 ** 3; // keep at most about 2 GB of whole-song copies, oldest removed first
+const PARTS_MAX = 300 * 1024 ** 2; // short parts: at most about 300 MB during a session
 
 class Studio {
   constructor(dir, ff, log = () => {}) {
@@ -17,6 +18,7 @@ class Studio {
     this.log = log;
     this.jobs = new Map(); // key -> promise
     this.groups = new Map(); // group -> { key, proc }
+    this.procs = new Set(); // every running ffmpeg job (stopped when Tonix closes)
     fs.mkdirSync(this.partDir, { recursive: true });
     for (const f of fs.readdirSync(this.partDir)) rm(path.join(this.partDir, f));
     for (const f of fs.readdirSync(dir)) if (f.endsWith('.tmp.flac')) rm(path.join(dir, f));
@@ -62,11 +64,11 @@ class Studio {
     const g = group ? { key, proc: null } : null;
     if (g) this.groups.set(group, g);
     const t0 = Date.now();
-    const job = this.ff.renderPitched({ src: file, dest: tmp, pitch, natural, start, len, duration, onSpawn: (p) => { if (g) g.proc = p; } })
+    const job = this.ff.renderPitched({ src: file, dest: tmp, pitch, natural, start, len, duration, onSpawn: (p) => { if (g) g.proc = p; this.procs.add(p); p.on('close', () => this.procs.delete(p)); } })
       .then(() => {
         fs.renameSync(tmp, dest);
         this.log('info', `Studio pitch ${Math.round(pitch * 1000) / 10}%${whole ? '' : ` (part from ${start.toFixed(1)} s)`} ready in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
-        if (whole) this.prune();
+        try { if (whole) this.prune(); else this.prune(PARTS_MAX, this.partDir); } catch (_) { /* tidying can wait */ }
         return result;
       })
       .catch((e) => {
@@ -84,9 +86,11 @@ class Studio {
 
   touch(f) { try { const now = new Date(); fs.utimesSync(f, now, now); } catch (_) { /* ignore */ } }
 
-  prune(max = MAX_BYTES) {
-    const files = fs.readdirSync(this.dir).filter((f) => /^[a-f0-9]{40}\.flac$/.test(f))
-      .map((f) => { const p = path.join(this.dir, f); const st = fs.statSync(p); return { p, size: st.size, t: st.mtimeMs }; })
+  stopAll() { for (const p of this.procs) { try { p.kill(); } catch (_) { /* gone */ } } }
+
+  prune(max = MAX_BYTES, dir = this.dir) {
+    const files = fs.readdirSync(dir).filter((f) => /^[a-f0-9]{40}\.flac$/.test(f))
+      .map((f) => { const p = path.join(dir, f); const st = fs.statSync(p); return { p, size: st.size, t: st.mtimeMs }; })
       .sort((a, b) => b.t - a.t);
     let total = 0;
     for (const f of files) { total += f.size; if (total > max) rm(f.p); }

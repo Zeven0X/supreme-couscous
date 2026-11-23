@@ -50,7 +50,8 @@ window.TFStudio = (() => {
       .catch((err) => { if (e.partP === p) e.partP = null; fail(e, err); });
   }
   // r.end 0 = until the end of the song
-  const covers = (r, pos) => !!r && r.start <= pos + 0.02 && (!r.end || pos < r.end - 0.35);
+  // A part is used from 0.5 s after its start (the studio tool settles in during the first moments).
+  const covers = (r, pos) => !!r && !r.bad && (r.start ? r.start + 0.5 : 0) <= pos + 0.02 && (!r.end || pos < r.end - 0.35);
   function best(e, pos) {
     if (covers(e.whole, pos)) return e.whole;
     let b = null;
@@ -107,12 +108,20 @@ window.TFStudio = (() => {
       s = st.slots.find((x) => x !== st.on);
       s.loading = r; s.ready = false; s.r = null;
       s.el.src = r.url;
+      const ac = new AbortController();
       try {
         await new Promise((res, rej) => {
-          s.el.addEventListener('loadedmetadata', res, { once: true });
-          s.el.addEventListener('error', () => rej(new Error('could not open the pitched copy')), { once: true });
+          s.el.addEventListener('loadedmetadata', res, { signal: ac.signal });
+          s.el.addEventListener('error', () => rej(new Error('could not open the pitched copy')), { signal: ac.signal });
         });
-      } catch (err) { s.loading = null; return; }
+      } catch (err) {
+        if (s.loading !== r) return;
+        s.loading = null;
+        r.bad = true; // never try this copy again; a new one is made
+        const e = st.want && entry(st.want);
+        if (e) { if (e.whole === r) e.whole = null; e.parts = e.parts.filter((x) => x !== r); fail(e, err); }
+        return;
+      } finally { ac.abort(); }
       if (s.loading !== r) return; // replaced meanwhile
       s.loading = null; s.r = r; s.ready = true;
     }
@@ -139,13 +148,13 @@ window.TFStudio = (() => {
     if (b) {
       b.key = keyOf(st.want);
       if (st.on && st.on !== 'orig' && st.on.r === b) {
-        if (main && !e.whole && b.end && pos > b.end - AHEAD) requestPart(e, b.end - 2, 'part');
+        if (!e.whole && b.end && pos > b.end - AHEAD) requestPart(e, b.end - 2, main ? 'part' : 'oldpart');
         return;
       }
       loadSlot(d, b);
       return;
     }
-    if (main) requestPart(e, pos, 'part');
+    requestPart(e, pos - 0.5, main ? 'part' : 'oldpart'); // starts a little earlier, so it is usable right here. The fading-out song also keeps its clean sound
     // nothing ready here yet: keep the old sound after a pitch change, otherwise stay quiet for a moment
     const keepOld = st.keep && (st.on === 'orig' || (st.on && covers(st.on.r, pos)));
     if (!keepOld && st.on !== null) audible(d, null);
@@ -183,9 +192,15 @@ window.TFStudio = (() => {
     });
   }
   // Prepare the start of a song that may play soon (next song, next map stops).
+  let prefetching = 0;
   function prefetch(id, fx) {
     const w = wantOf(id, fx);
-    if (w) requestPart(entry(w), 0, null);
+    if (!w || prefetching >= 3) return;
+    const e = entry(w);
+    if (e.whole || e.partP || e.parts.some((r) => r.start === 0)) return;
+    prefetching++;
+    requestPart(e, 0, null);
+    (e.partP || Promise.resolve()).finally(() => { prefetching--; });
   }
   function kick() { for (const d of decks) tick(d); }
   // For the Pitch card: 'off' (pitch 100%), 'ready', 'preparing', 'fallback'

@@ -533,6 +533,20 @@ async function createWindow() {
   win.once('ready-to-show', () => win.show());
   // Links never open inside the app.
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // Right-click menu: Cut / Copy / Paste in typing boxes, Copy on selected text.
+  win.webContents.on('context-menu', (_e, p) => {
+    const f = p.editFlags || {};
+    let items = [];
+    if (p.isEditable) {
+      items = [
+        { role: 'undo', label: 'Undo', enabled: f.canUndo }, { role: 'redo', label: 'Redo', enabled: f.canRedo }, { type: 'separator' },
+        { role: 'cut', label: 'Cut', enabled: f.canCut }, { role: 'copy', label: 'Copy', enabled: f.canCopy },
+        { role: 'paste', label: 'Paste', enabled: f.canPaste }, { role: 'delete', label: 'Delete', enabled: f.canDelete },
+        { type: 'separator' }, { role: 'selectAll', label: 'Select all', enabled: f.canSelectAll },
+      ];
+    } else if (p.selectionText && p.selectionText.trim()) items = [{ role: 'copy', label: 'Copy' }];
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+  });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(baseUrl)) e.preventDefault(); });
   await win.loadURL(`${baseUrl}/app/index.html`);
 }
@@ -549,6 +563,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  if (studio) studio.stopAll();
   if (lib) lib.flush();
   if (server) server.close();
   app.quit();

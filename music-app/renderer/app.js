@@ -186,7 +186,9 @@ async function play() {
   if (!cur()) { const first = visibleTracks()[0]; if (first) return playTrack(first.id); return; }
   await ensureEngine();
   if (actx.state === 'suspended') await actx.resume();
-  await TFStudio.ready(deck); // a changed pitch: wait (about a second) for the clean studio copy
+  const waitFrom = actx.currentTime;
+  await TFStudio.ready(deck, S.fadeIn ? 2500 : 6000); // a changed pitch: wait (about a second) for the clean studio copy
+  if (S.fadeIn && actx.currentTime - waitFrom > 0.1) S.fadeIn.t0 = actx.currentTime; // waited: the blend-in starts now
   updateGain(true);
   try { await audio.play(); } catch (e) { if (e.name !== 'AbortError') toast(`Can't play this file: ${e.message}`, { type: 'error' }); }
 }
