@@ -18,7 +18,7 @@
 3. [Sound panel](docs/sound-panel.md): pitch (studio quality, Natural voice), speed, volume, fades.
 4. [Saving songs](docs/saving.md): the save window, Fill from name, file types.
 5. [Library](docs/library.md): Clear all music, Playlists, smart shuffle, saving a playlist, stars 1–10, information inside saved files, smart playlists (genre + stars).
-6. [Sound editor](docs/sound-editor.md): part 1 of 8 built.: Trim, Split, Effects, Loop, Layers (designed, not built).
+6. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers. Part 1 of 8 built (the Edit page).
 
 ## Top bar buttons
 | Button | Status |
