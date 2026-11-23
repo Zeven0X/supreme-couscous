@@ -726,7 +726,23 @@ async function removeSelected() {
   if (!ids.length) return;
   const ok = S.settings.confirmRemove === false || await confirmModal(`Remove ${ids.length === 1 ? `"${S.byId.get(ids[0]).title}"` : `${ids.length} songs`} from the library?`, 'Your original files are not deleted. Converted MP3s made from videos are deleted.', 'Remove');
   if (!ok) return;
-  await guard(() => tf.removeTracks(ids));
+  await forgetTracks(ids);
+}
+// Clear all music: every song leaves Tonix. Original files stay on the PC; maps are kept (their songs show as missing).
+async function clearAll() {
+  const n = S.tracks.length;
+  if (!n) { toast('The library is already empty.'); return; }
+  const videos = S.tracks.filter((t) => t.isVideo).length;
+  const ok = await confirmModal(`Clear all ${n} song${n === 1 ? '' : 's'} from Tonix?`,
+    `Your music files stay on your PC: you can upload them again any time. ${videos ? `The ${videos} MP3 copy${videos === 1 ? '' : 'ies'} Tonix made from videos ${videos === 1 ? 'is' : 'are'} deleted (the videos stay). ` : ''}Maps are kept, but their songs will show as missing. This can't be undone.`,
+    `Clear all ${n}`);
+  if (!ok) return;
+  if (window.TFMap) window.TFMap.stopPlay();
+  await forgetTracks(S.tracks.map((t) => t.id));
+  toast(`Cleared ${n} song${n === 1 ? '' : 's'}. Your files are still on your PC.`, { type: 'ok' });
+}
+async function forgetTracks(ids) {
+  if (await guard(() => tf.removeTracks(ids)) === undefined) return;
   for (const id of ids) {
     S.byId.delete(id);
     S.tabs = S.tabs.filter((x) => x !== id);
@@ -769,7 +785,7 @@ function confirmModal(title, text, okLabel = 'OK') {
   return modal((box, close) => {
     box.style.width = 'min(480px, 94vw)';
     box.append(h('h2', {}, title), h('p', { class: 'muted' }, text),
-      h('div', { class: 'foot' }, h('span', { class: 'muted' }), h('button', { class: 'btn', onclick: () => close(false) }, 'Cancel'), h('button', { class: 'btn primary danger', onclick: () => close(true) }, okLabel)));
+      h('div', { class: 'foot' }, h('span', { class: 'muted' }), h('button', { class: 'btn', autofocus: true, onclick: () => close(false) }, 'Cancel'), h('button', { class: 'btn primary danger', onclick: () => close(true) }, okLabel)));
   });
 }
 function saveTargetText() {
@@ -979,6 +995,7 @@ async function openAlbumModal() {
 }
 $('#btn-save').addEventListener('click', () => openSaveModal());
 $('#btn-save-many').addEventListener('click', () => openAlbumModal());
+$('#btn-clear-all').addEventListener('click', () => clearAll());
 
 // ---------------------------------------------------------------- editor (tabs + details)
 function openTab(id, activate = true) {

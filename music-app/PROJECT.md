@@ -10,14 +10,15 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: Pitch fixed (studio quality, Natural voice). Right-click Copy/Paste added. **New Save song window** built (Fill from name, Swap, 5 types, quality, file name, folder, remembered choices). Next: part 2, the Save album window in the same style. Then the sound editor.
+- 2026-11-23: Speed fixed while listening (you: "90%, very good"). **Clear all music** button built. Next, in your order: Playlists (Library tab + shuffle mode), then star ratings 1–10 with a star filter. The Save album window restyle waits until then (it will become the playlist save).
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
 2. [Settings and keyboard shortcuts](docs/settings.md): 9 sections, 7 looks, 46 shortcuts you can change, map undo/redo.
 3. [Sound panel](docs/sound-panel.md): pitch (studio quality, Natural voice), speed, volume, fades.
 4. [Saving songs](docs/saving.md): the save window, Fill from name, file types.
-5. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
+5. [Library](docs/library.md): Clear all music; playlists and stars planned.
+6. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
 
 ## Top bar buttons
 | Button | Status |
@@ -28,6 +29,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: **Clear all** button in the Library toolbar (songs leave Tonix, files stay on your PC, maps kept).
 - 2026-11-23: **Speed fixed while listening.** It used the player's own simple speed control (the bad sound you heard); now the studio tool makes the copy at the new speed too. Pitch checks 21/21.
 - 2026-11-23: **New Save song window**: Fill from name (reads artist and title from the original file name), ⇄ Swap, all boxes shown, Type (MP3 / M4A / FLAC / WAV / OGG), Quality with file size, File name, Save in + Change…, last choices remembered. OGG imports now keep their names.
 - 2026-11-23: **Right-click menu** added everywhere you type (Undo, Redo, Cut, Copy, Paste, Delete, Select all) and on selected text (Copy). Before: right-click did nothing. Found by you in the save window. Pitch fixes from the code review: a broken copy no longer leaves the song silent, the song blending out keeps its clean pitch, at most 3 songs are prepared ahead, short parts are tidied up, all jobs stop when Tonix closes.
@@ -54,5 +56,6 @@
 - 2026-11-23: Page, caliper and gear buttons hidden (code kept) until planned with the user.
 
 ## Ideas for later
+- Compare speed/pitch tools by ear (Rubber Band vs Signalsmith Stretch) with one good-quality song, for the last 10% of quality.
 - Lyrics, equalizer, visualizer.
 - Drag songs straight from the Search page onto the Map.
