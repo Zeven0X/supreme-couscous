@@ -27,6 +27,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: **Right-click menu** added everywhere you type (Undo, Redo, Cut, Copy, Paste, Delete, Select all) and on selected text (Copy). Before: right-click did nothing. Found by you in the save window. Pitch fixes from the code review: a broken copy no longer leaves the song silent, the song blending out keeps its clean pitch, at most 3 songs are prepared ahead, short parts are tidied up, all jobs stop when Tonix closes.
 - 2026-11-23: **Pitch fixed.** A professional pitch tool (Rubber Band) now does pitch and speed for saved files, and makes a clean pitched copy for listening (first 20 s ready in under a second, whole song a few seconds later, kept for next time). New **Natural voice** switch on the Pitch card. Settings → Library shows the space the copies use, with Clear. Checks: 44 automatic tests, pitch check 18/18, final check 21/21.
 - 2026-11-23: Renamed everything to Tonix (1.1.0). Undo now keeps quick actions as separate steps. Final check script: `test/e2e/final-check.js`.
 - 2026-11-23: Settings page (9 sections, 7 looks), keyboard shortcuts for everything (changeable, cheat sheet with ? / F1), map undo/redo (Ctrl+Z / Ctrl+Y), number keys choose the next map path. Fixed a start-up timing bug.
