@@ -165,7 +165,14 @@ function run(args, { onProgress, duration, onLine, onSpawn } = {}) {
 async function probe(file) {
   const { stdout, stderr } = await run(['-i', file, '-f', 'ffmetadata', '-']);
   const info = parseInfo(stderr);
-  const tags = pickTags(parseFfmetadata(stdout.toString('utf8')), file);
+  let raw = parseFfmetadata(stdout.toString('utf8'));
+  if (!raw.title && info.hasAudio) { // OGG / Opus keep their tags on the sound stream, not on the file
+    try {
+      const s = await run(['-i', file, '-map_metadata', '0:s:a:0', '-f', 'ffmetadata', '-']);
+      raw = { ...parseFfmetadata(s.stdout.toString('utf8')), ...raw };
+    } catch (_) { /* no stream tags */ }
+  }
+  const tags = pickTags(raw, file);
   const ext = extOf(file);
   info.isVideo = VIDEO_EXT.includes(ext) || info.hasVideo;
   info.directPlay = !info.isVideo && DIRECT_EXT.includes(ext) && DIRECT_CODECS.includes(info.audioCodec);
@@ -220,17 +227,26 @@ function coverOutArgs(streamIndex) {
   return ['-map', `${streamIndex}:v:0`, '-c:v', 'mjpeg', '-disposition:v:0', 'attached_pic', '-metadata:s:v:0', 'title=Album cover', '-metadata:s:v:0', 'comment=Cover (front)'];
 }
 
-// Export one song with its effects (+ cover + tags). format: 'mp3' | 'wav'
+// File types a song can be saved as. lossy = has a quality (kbps); cover = can hold a picture.
+const FORMATS = {
+  mp3: { label: 'MP3', lossy: true, cover: true, codec: (b) => ['-c:a', 'libmp3lame', '-b:a', bitrateArg(b), '-id3v2_version', '3'] },
+  m4a: { label: 'M4A', lossy: true, cover: true, codec: (b) => ['-c:a', 'aac', '-b:a', bitrateArg(b), '-movflags', '+faststart'] },
+  flac: { label: 'FLAC', lossy: false, cover: true, codec: () => ['-c:a', 'flac', '-sample_fmt', 's16'] },
+  wav: { label: 'WAV', lossy: false, cover: false, codec: () => ['-c:a', 'pcm_s16le'] },
+  ogg: { label: 'OGG', lossy: true, cover: false, codec: (b) => ['-c:a', 'libvorbis', '-b:a', bitrateArg(b)] },
+};
+const formatOf = (f) => (FORMATS[f] ? f : 'mp3');
+
+// Export one song with its effects (+ cover + tags). format: a key of FORMATS
 function exportOne({ src, dest, fx, duration, tags, coverPath, format = 'mp3', bitrate = 320, onProgress }) {
+  format = formatOf(format);
   const { filter, outDuration } = buildFilter(fx, duration);
   const args = ['-y', '-i', src];
-  const withCover = format === 'mp3' && coverPath && fs.existsSync(coverPath);
+  const withCover = FORMATS[format].cover && coverPath && fs.existsSync(coverPath);
   if (withCover) args.push('-i', coverPath);
   args.push('-map', '0:a:0', '-af', filter);
   if (withCover) args.push(...coverOutArgs(1));
-  args.push('-map_metadata', '-1', ...tagArgs(tags));
-  if (format === 'wav') args.push('-c:a', 'pcm_s16le');
-  else args.push('-c:a', 'libmp3lame', '-b:a', bitrateArg(bitrate), '-id3v2_version', '3');
+  args.push('-map_metadata', '-1', ...tagArgs(tags), ...FORMATS[format].codec(bitrate));
   args.push(dest);
   return run(args, { duration: outDuration, onProgress });
 }
@@ -271,7 +287,7 @@ async function exportCombined({ items, dest, tags, coverPath, bitrate = 320, tmp
 }
 
 module.exports = {
-  AUDIO_EXT, VIDEO_EXT, LIMITS, DEFAULT_FX,
+  AUDIO_EXT, VIDEO_EXT, LIMITS, DEFAULT_FX, FORMATS, formatOf,
   resolveFfmpeg, isSupported, extOf, normalizeFx, buildFilter, renderPitched,
   parseFfmetadata, parseInfo, pickTags,
   run, probe, toMp3, extractCover, imageToJpg, peaks, exportOne, exportCombined,

@@ -118,7 +118,8 @@ function exportDir() {
   return d;
 }
 function trackForUi(t) {
-  return { ...t, coverUrl: t.cover ? `${baseUrl}/cover/${t.id}?v=${t.coverVersion || 0}` : null, mediaUrl: `${baseUrl}/media/${t.id}` };
+  const origName = t.imported ? t.title : path.basename(t.srcPath || '', path.extname(t.srcPath || ''));
+  return { ...t, origName, coverUrl: t.cover ? `${baseUrl}/cover/${t.id}?v=${t.coverVersion || 0}` : null, mediaUrl: `${baseUrl}/media/${t.id}` };
 }
 // How saved songs are named (Settings → Saving).
 function fileName(t) {
@@ -211,14 +212,20 @@ async function exportTrack(id, opts = {}) {
   if (!t) throw new Error('Song not found');
   if (opts.tags) lib.update(id, opts.tags);
   if (opts.coverImage) await setCoverFromImage(t, opts.coverImage);
-  const format = (opts.format || lib.settings.format) === 'wav' ? 'wav' : 'mp3';
-  const dest = await chooseDest(fileName(t), format);
+  const format = ff.formatOf(opts.format || lib.settings.format);
+  const bitrate = [128, 192, 256, 320].includes(+opts.bitrate) ? +opts.bitrate : lib.settings.bitrate;
+  let dest;
+  if (opts.dir) { // the save window chose the folder and the file name
+    fs.mkdirSync(opts.dir, { recursive: true });
+    dest = uniquePath(path.join(opts.dir, `${safeName(opts.name || fileName(t))}.${format}`));
+    lib.setSettings({ format, bitrate, exportDir: opts.dir }); // remembered for next time
+  } else dest = await chooseDest(fileName(t), format);
   if (!dest) return { canceled: true };
   log('info', `Saving "${t.title}" (speed ${t.fx.speed}%, pitch ${t.fx.pitch}%, volume ${t.fx.volume}%, fade in ${t.fx.fadeIn}s, fade out ${t.fx.fadeOut}s)...`);
   const started = Date.now();
   await ff.exportOne({
     src: t.mediaPath, dest, fx: t.fx, duration: t.duration, tags: tagsOf(t), coverPath: lib.coverPath(t),
-    format, bitrate: lib.settings.bitrate,
+    format, bitrate,
     onProgress: (p) => send('export-progress', { p, label: t.title }),
   });
   send('export-progress', { p: 1, label: t.title });
@@ -461,6 +468,7 @@ function registerIpc() {
   handle('studio-size', () => studio.size());
   handle('studio-clear', () => { studio.clear(); return true; });
   handle('export-track', (id, opts) => exportTrack(id, opts));
+  handle('file-exists', (dir, name, ext) => fs.existsSync(path.join(dir, `${safeName(name)}.${ext}`)));
   handle('export-many', (ids, opts) => exportMany(ids, opts));
   handle('convert-files', async (paths, outDir) => {
     const files = collectFiles(paths);

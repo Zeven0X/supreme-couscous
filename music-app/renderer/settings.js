@@ -156,8 +156,8 @@
     return card('saving', 'Saving',
       row('Save folder', '', pathBox(S.settings.exportDir), btn('Change…', async () => { const d = await guard(() => tf.pickDir(S.settings.exportDir)); if (d) { await patch('exportDir', d); render(); } }), btn('Open', () => tf.openPath(S.settings.exportDir))),
       row('Ask where to save every time', 'Off = save instantly into the save folder', tog('askWhereToSave', false)),
-      row('Saved file type', 'For single songs. Albums are always MP3', seg('format', [['mp3', 'MP3'], ['wav', 'WAV']])),
-      row('MP3 quality', 'Higher = better sound, bigger files', seg('bitrate', [[128, '128'], [192, '192'], [256, '256'], [320, '320']])),
+      row('Saved file type', 'For single songs (the save window remembers your last choice). Albums are always MP3', seg('format', [['mp3', 'MP3'], ['m4a', 'M4A'], ['flac', 'FLAC'], ['wav', 'WAV'], ['ogg', 'OGG']])),
+      row('Quality (MP3, M4A, OGG)', 'Higher = better sound, bigger files', seg('bitrate', [[128, '128'], [192, '192'], [256, '256'], [320, '320']])),
       row('File names', 'How saved songs are named', seg('fileNames', [['artist-title', 'Artist - Title'], ['title', 'Title'], ['title-artist', 'Title - Artist']])));
   }
   let missing = null;

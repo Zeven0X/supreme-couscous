@@ -145,3 +145,21 @@ test('video -> mp3 import path, cover + tags on save, combined file with chapter
   assert.match(stderr, /Chapters:/);
   assert.match(stderr, /title\s*:\s*Two/);
 });
+
+test('save as every file type: right codec, tags, picture where the type can hold one', async () => {
+  const src = path.join(tmp, 'tone6.wav');
+  await makeTone(src, 440, 3);
+  const cover = path.join(tmp, 'cover6.jpg');
+  await ff.run(['-y', '-f', 'lavfi', '-i', 'color=c=blue:s=200x200', '-frames:v', '1', cover]);
+  const want = { mp3: 'mp3', m4a: 'aac', flac: 'flac', wav: 'pcm_s16le', ogg: 'vorbis' };
+  for (const [fmt, codec] of Object.entries(want)) {
+    const dest = path.join(tmp, `typed.${fmt}`);
+    await ff.exportOne({ src, dest, fx: { pitch: 110 }, duration: 3, format: fmt, bitrate: 192, tags: { title: 'Typed', artist: 'Me' }, coverPath: cover });
+    const { info, tags } = await ff.probe(dest);
+    assert.strictEqual(info.audioCodec, codec, fmt);
+    assert.ok(Math.abs(info.duration - 3) < 0.15, `${fmt} length ${info.duration}`);
+    assert.strictEqual(tags.title, 'Typed', `${fmt} title`);
+    if (fmt !== 'wav') assert.strictEqual(tags.artist, 'Me', `${fmt} artist`);
+    assert.strictEqual(info.coverStream !== null, ff.FORMATS[fmt].cover, `${fmt} picture`);
+  }
+});

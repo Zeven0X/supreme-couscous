@@ -20,7 +20,7 @@ await k(']');await k('Shift+Minus');ok('speed/pitch keys',await ev(()=>cur().fx.
 await k('Alt+r');ok('reset sound',await ev(()=>cur().fx.speed===100&&cur().fx.pitch===100));
 await w.fill('.fx[data-key=speed] .fx-val','110');await w.press('.fx[data-key=speed] .fx-val','Enter');
 // 3 save a song (instant) + album
-await w.click('.card >> nth=0');await k('Control+s');await wait(300);await w.click('.modal .btn.primary');await wait(2500);
+await w.click('.card >> nth=0');await k('Control+s');await wait(300);await w.click('.save-win .foot .btn.primary');await wait(2500);
 ok('song saved',fs.readdirSync(OUT).some(f=>f.endsWith('.mp3')),fs.readdirSync(OUT).join(','));
 // 4 map: add 3 songs, connect, play
 await k('Control+2');await wait(700);

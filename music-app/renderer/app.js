@@ -1,5 +1,5 @@
 'use strict';
-/* global ICONS, tf, TFStudio */
+/* global ICONS, tf, TFStudio, TFSaveName */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 function h(tag, attrs = {}, ...kids) {
@@ -796,40 +796,119 @@ async function afterSave(r) {
   toast(`Saved: ${r.path}`, { type: 'ok', action: () => tf.showItem(r.path), actionLabel: 'Show', ms: 8000 });
 }
 
-// 6.2 save one song as MP3 with picture
+// 6.2 save one song (with picture, tags, file type, quality, name and folder)
+const SAVE_TYPES = [
+  { id: 'mp3', label: 'MP3', lossy: true, cover: true, hint: 'Plays everywhere' },
+  { id: 'm4a', label: 'M4A', lossy: true, cover: true, hint: 'Good for iPhone and Apple Music' },
+  { id: 'flac', label: 'FLAC', lossy: false, cover: true, hint: 'Lossless: perfect sound, bigger file' },
+  { id: 'wav', label: 'WAV', lossy: false, cover: false, hint: 'Lossless, biggest file, no picture inside' },
+  { id: 'ogg', label: 'OGG', lossy: true, cover: false, hint: 'Small and good, no picture inside' },
+];
+const fmtSize = (b) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(2)} GB` : `${(b / 1024 ** 2).toFixed(1)} MB`);
+function nameFor(artist, title) {
+  const mode = S.settings.fileNames;
+  if (!artist || mode === 'title') return title;
+  return mode === 'title-artist' ? `${title} - ${artist}` : `${artist} - ${title}`;
+}
 async function openSaveModal(id) {
   id = id || (S.selected.length === 1 ? S.selected[0] : S.currentId) || S.selected[0];
   const t = S.byId.get(id);
   if (!t) { toast('Pick a song first (click one in the library).'); return; }
   let coverImage = null;
+  let type = SAVE_TYPES.find((x) => x.id === S.settings.format) || SAVE_TYPES[0];
+  let kbps = [128, 192, 256, 320].includes(+S.settings.bitrate) ? +S.settings.bitrate : 320;
+  let dir = S.settings.exportDir;
+  let nameTouched = false;
   await modal((box, close) => {
+    box.classList.add('save-win');
     const fields = {};
-    const field = (k, label, cls = '') => h('label', { class: `field ${cls}` }, label, (fields[k] = h('input', { value: t[k] || '', spellcheck: 'false' })));
-    const art = h('div', { class: 'cover-pick', title: 'Click to choose a picture' }, coverEl(t));
-    const warn = h('div', { class: 'warn-text', hidden: !!t.coverUrl }, 'No picture yet — click the square to choose one.');
+    const inp = (k) => (fields[k] = h('input', { value: t[k] || '', spellcheck: 'false' }));
+    const field = (k, label) => h('label', { class: 'field' }, label, inp(k));
+    // picture
+    const art = h('div', { class: 'cover-pick', title: 'Click to choose a picture' }, coverEl(t), h('span', { class: 'sv-art-tip' }, 'Click to change picture'));
+    const warn = h('div', { class: 'warn-text' });
     art.addEventListener('click', async () => {
       const img = await guard(() => tf.pickImage());
       if (!img) return;
       coverImage = img;
-      art.innerHTML = '';
-      art.append(await chosenPicture(img));
-      warn.hidden = true;
+      art.firstChild.replaceWith(await chosenPicture(img));
+      update();
     });
+    // fill from the original name + swap
+    const fillMsg = h('span', { class: 'sv-fillmsg' });
+    const fill = () => {
+      const r = TFSaveName.parseName(t.origName || t.title);
+      if (r.artist) fields.artist.value = r.artist;
+      fields.title.value = r.title || fields.title.value;
+      fillMsg.textContent = r.artist ? '' : 'No artist found in the name, only the title was filled.';
+      update();
+    };
+    const swap = () => { [fields.artist.value, fields.title.value] = [fields.title.value, fields.artist.value]; update(); };
+    // type, quality, name, folder
+    const typeSeg = h('div', { class: 'seg' });
+    const typeHint = h('span', { class: 'sv-hint' });
+    const qSeg = h('div', { class: 'seg' });
+    const qHint = h('span', { class: 'sv-hint' });
+    const nameIn = h('input', { class: 'sv-name', spellcheck: 'false' });
+    const extEl = h('span', { class: 'sv-ext' });
+    const nameHint = h('div', { class: 'sv-hint sv-exists' });
+    const dirEl = h('div', { class: 'sv-dir', title: '' });
+    const saveBtn = h('button', { class: 'btn primary' });
+    nameIn.addEventListener('input', () => { nameTouched = !!nameIn.value.trim(); update(); });
+    let existsTimer = null;
+    function update() {
+      if (!nameTouched) nameIn.value = nameFor(fields.artist.value.trim(), fields.title.value.trim() || t.title);
+      typeSeg.innerHTML = '';
+      for (const x of SAVE_TYPES) typeSeg.append(h('button', { class: x === type ? 'on' : '', onclick: () => { type = x; update(); } }, x.label));
+      typeHint.textContent = type.hint;
+      qSeg.innerHTML = '';
+      for (const q of [128, 192, 256, 320]) qSeg.append(h('button', { class: type.lossy && q === kbps ? 'on' : '', disabled: !type.lossy, onclick: () => { kbps = q; update(); } }, q === 320 ? '320 kbps' : String(q)));
+      const secs = (t.duration || 0) / ((t.fx.speed || 100) / 100);
+      const bytes = type.lossy ? (kbps * 1000 / 8) * secs : (type.id === 'wav' ? 176400 : 176400 * 0.6) * secs;
+      qHint.textContent = `${type.lossy ? 'About' : 'Best quality, about'} ${fmtSize(bytes)}`;
+      extEl.textContent = `.${type.id}`;
+      dirEl.textContent = dir;
+      dirEl.title = dir;
+      saveBtn.textContent = `Save ${type.label}`;
+      const hasPic = coverImage || t.coverUrl;
+      warn.textContent = !type.cover ? `${type.label} files can't hold a picture. The song is saved without it.` : (hasPic ? '' : 'No picture yet: click the square to choose one.');
+      clearTimeout(existsTimer);
+      existsTimer = setTimeout(async () => {
+        const ex = await tf.fileExists(dir, nameIn.value.trim() || t.title, type.id).catch(() => false);
+        nameHint.textContent = ex ? 'A file with this name is already there. The new one gets "(2)" at the end, nothing is replaced.' : '';
+      }, 150);
+    }
     const doSave = async () => {
       const tags = Object.fromEntries(Object.entries(fields).map(([k, i]) => [k, i.value.trim()]));
       if (!tags.title) tags.title = t.title;
       close();
-      await afterSave(await guard(() => tf.exportTrack(t.id, { tags, coverImage }), 'Save: '));
+      const r = await guard(() => tf.exportTrack(t.id, { tags, coverImage, format: type.id, bitrate: kbps, name: nameIn.value.trim() || tags.title, dir }), 'Save: ');
+      if (r && r.path) Object.assign(S.settings, { format: type.id, bitrate: kbps, exportDir: dir }); // remembered for next time
+      await afterSave(r);
     };
+    const row = (label, ...kids) => [h('span', { class: 'sv-l' }, label), h('div', { class: 'sv-r' }, ...kids)];
     box.append(
-      h('h2', {}, 'Save song as MP3'),
-      h('div', { class: 'ed' },
-        h('div', {}, art, warn),
-        h('div', { class: 'form' }, field('title', 'Title', 'full'), field('artist', 'Artist'), field('album', 'Album'), field('date', 'Date'), field('genre', 'Genre'), field('label', 'Label', 'full'))),
-      h('p', { class: 'muted', style: { marginTop: '14px' } }, fxSummary(t.fx)),
-      h('div', { class: 'foot' }, h('span', { class: 'muted' }, saveTargetText()), h('button', { class: 'btn', onclick: () => close() }, 'Cancel'), h('button', { class: 'btn primary', onclick: doSave }, 'Save MP3')),
+      h('h2', {}, 'Save song'),
+      h('div', { class: 'sv-sub' }, fxSummary(t.fx).replace(/^Effects: /, 'The song keeps its sound settings: ').replace('No effects (original sound)', 'No sound changes: the original sound is saved.')),
+      h('div', { class: 'sv-top' },
+        h('div', { class: 'sv-left' }, art, warn),
+        h('div', { class: 'sv-right' },
+          h('div', { class: 'sv-src' }, h('span', { class: 'sv-orig', title: t.origName || t.title }, 'Original name: ', h('b', {}, t.origName || t.title)),
+            h('button', { class: 'btn primary sv-fill', onclick: fill, title: 'Read the artist and title from the original name' }, '✨ Fill from name')),
+          fillMsg,
+          h('div', { class: 'sv-pair' }, field('artist', 'Artist'), h('button', { class: 'sv-swap', title: 'Swap artist and title', onclick: swap, html: '&#8644;' }), field('title', 'Title')),
+          h('div', { class: 'sv-grid' }, field('album', 'Album'), field('date', 'Date'), field('genre', 'Genre'), field('label', 'Label')))),
+      h('div', { class: 'sv-opts' },
+        ...row('Type', typeSeg, typeHint),
+        ...row('Quality', qSeg, qHint),
+        h('span', { class: 'sv-l' }, 'File name'), h('div', { class: 'sv-r sv-col' }, h('div', { class: 'sv-namebox' }, nameIn, extEl), nameHint),
+        ...row('Save in', dirEl, h('button', { class: 'btn', onclick: async () => { const d = await guard(() => tf.pickDir(dir)); if (d) { dir = d; update(); } } }, 'Change…'))),
+      h('div', { class: 'foot' }, h('span', { class: 'muted' }), h('button', { class: 'btn', onclick: () => close() }, 'Cancel'), saveBtn),
     );
-    box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSave(); } });
+    saveBtn.addEventListener('click', doSave);
+    for (const k of ['artist', 'title']) fields[k].addEventListener('input', update);
+    update();
+    box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); doSave(); } });
   });
 }
 

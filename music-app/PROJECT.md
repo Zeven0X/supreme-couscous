@@ -10,13 +10,14 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: You tried Tonix and found two problems: bad pitch sound, and no Edit menu (it is designed but not built yet). **Pitch fixed** with a studio pitch tool, for listening and saved files, plus a Natural voice switch. Next: you listen to it on your PC, then we build the sound editor.
+- 2026-11-23: Pitch fixed (studio quality, Natural voice). Right-click Copy/Paste added. **New Save song window** built (Fill from name, Swap, 5 types, quality, file name, folder, remembered choices). Next: part 2, the Save album window in the same style. Then the sound editor.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
 2. [Settings and keyboard shortcuts](docs/settings.md): 9 sections, 7 looks, 46 shortcuts you can change, map undo/redo.
 3. [Sound panel](docs/sound-panel.md): pitch (studio quality, Natural voice), speed, volume, fades.
-4. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
+4. [Saving songs](docs/saving.md): the save window, Fill from name, file types.
+5. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
 
 ## Top bar buttons
 | Button | Status |
@@ -27,6 +28,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: **New Save song window**: Fill from name (reads artist and title from the original file name), ⇄ Swap, all boxes shown, Type (MP3 / M4A / FLAC / WAV / OGG), Quality with file size, File name, Save in + Change…, last choices remembered. OGG imports now keep their names.
 - 2026-11-23: **Right-click menu** added everywhere you type (Undo, Redo, Cut, Copy, Paste, Delete, Select all) and on selected text (Copy). Before: right-click did nothing. Found by you in the save window. Pitch fixes from the code review: a broken copy no longer leaves the song silent, the song blending out keeps its clean pitch, at most 3 songs are prepared ahead, short parts are tidied up, all jobs stop when Tonix closes.
 - 2026-11-23: **Pitch fixed.** A professional pitch tool (Rubber Band) now does pitch and speed for saved files, and makes a clean pitched copy for listening (first 20 s ready in under a second, whole song a few seconds later, kept for next time). New **Natural voice** switch on the Pitch card. Settings → Library shows the space the copies use, with Clear. Checks: 44 automatic tests, pitch check 18/18, final check 21/21.
 - 2026-11-23: Renamed everything to Tonix (1.1.0). Undo now keeps quick actions as separate steps. Final check script: `test/e2e/final-check.js`.

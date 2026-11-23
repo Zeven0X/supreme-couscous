@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('tf', {
   studioSize: () => call('studio-size'),
   studioClear: () => call('studio-clear'),
   exportTrack: (id, opts) => call('export-track', id, opts),
+  fileExists: (dir, name, ext) => call('file-exists', dir, name, ext),
   exportMany: (ids, opts) => call('export-many', ids, opts),
   convertFiles: (paths, outDir) => call('convert-files', paths, outDir),
   settings: (patch) => call('settings', patch),
