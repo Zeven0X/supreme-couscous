@@ -29,6 +29,7 @@ const S = {
   view: 'library', selected: [], anchor: null,
   currentId: null, queue: [], tabs: [], activeTab: null,
   filters: { q: '', artist: '', date: '', label: '', genre: '' },
+  libTab: 'all', // All / Recently added / From videos
   muted: false, peaks: null, logs: [],
 };
 const cur = () => S.byId.get(S.currentId) || null;
@@ -382,26 +383,32 @@ function visibleTracks() {
   const f = S.filters;
   const q = f.q.trim().toLowerCase();
   const has = (v, needle) => !needle || String(v || '').toLowerCase().includes(needle.trim().toLowerCase());
-  return S.tracks.filter((t) => {
+  const list = S.tracks.filter((t) => {
+    if (S.libTab === 'video' && !t.isVideo) return false;
     if (q && ![t.title, t.artist, t.album, t.label, t.genre, t.date].some((v) => String(v || '').toLowerCase().includes(q))) return false;
     return has(t.artist, f.artist) && has(t.date, f.date) && has(t.label, f.label) && has(t.genre, f.genre);
   });
+  if (S.libTab === 'recent') list.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+  return list;
 }
 function renderGrid() {
   const grid = $('#grid');
   grid.innerHTML = '';
   const list = visibleTracks();
   grid.classList.toggle('fixed', list.length < 6);
+  const artists = new Set(S.tracks.map((t) => (t.artist || '').trim().toLowerCase()).filter(Boolean)).size;
+  $('#lib-count').textContent = `${S.tracks.length} song${S.tracks.length === 1 ? '' : 's'} · ${artists} artist${artists === 1 ? '' : 's'}`;
   if (!S.tracks.length) {
     grid.append(h('div', { class: 'empty', style: { gridColumn: '1 / -1' }, html: 'Your library is empty.<br><b>Drop music or video files here</b>, or use the upload buttons below.<br>Videos are turned into MP3 automatically.' }));
   } else if (!list.length) {
-    grid.append(h('div', { class: 'empty', style: { gridColumn: '1 / -1' } }, 'No songs match your search or filters.'));
+    grid.append(h('div', { class: 'empty', style: { gridColumn: '1 / -1' } }, S.libTab === 'video' ? 'No songs came from video files yet.' : 'No songs match your search or filters.'));
   }
   for (const t of list) {
     const card = h('div', { class: 'card', 'data-id': t.id, title: [t.title, t.artist, t.album].filter(Boolean).join(' — ') },
       h('div', { class: 'art' }, coverEl(t), t.isVideo ? h('span', { class: 'badge' }, 'from video') : null,
         h('button', { class: 'hover-play', title: 'Play', html: ICONS.play, onclick: (e) => { e.stopPropagation(); playTrack(t.id); } })),
-      h('div', { class: 'name' }, t.title));
+      h('div', { class: 'name' }, t.title),
+      h('div', { class: 'artist' }, t.artist || 'Unknown artist'));
     grid.append(card);
   }
   markSelection();
@@ -412,7 +419,7 @@ function markSelection() {
   const sel = new Set(S.selected);
   for (const c of $$('#grid .card')) c.classList.toggle('selected', sel.has(c.dataset.id));
   const n = S.selected.length;
-  $('#sel-info').textContent = n > 1 ? `${n} selected` : `${visibleTracks().length} of ${S.tracks.length} songs`;
+  $('#btn-save-many span:last-child').textContent = n > 1 ? `Save ${n} songs` : 'Save album';
 }
 function markPlaying() { for (const c of $$('#grid .card')) c.classList.toggle('playing', c.dataset.id === S.currentId); }
 function selectClick(id, e) {
@@ -447,7 +454,32 @@ function updateDatalists() {
   for (const k of ['artist', 'date', 'label', 'genre']) {
     const vals = [...new Set(S.tracks.map((t) => (t[k] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     $(`#dl-${k}`).innerHTML = vals.map((v) => `<option value="${esc(v)}">`).join('');
+    // Clickable chips: the most common values first (at most 8). Click to filter, click again to clear.
+    const count = new Map();
+    for (const t of S.tracks) { const v = (t[k] || '').trim(); if (v) count.set(v, (count.get(v) || 0) + 1); }
+    const top = [...count.entries()].sort((a, b) => b[1] - a[1] || (k === 'date' ? b[0].localeCompare(a[0]) : a[0].localeCompare(b[0]))).slice(0, 8);
+    const box = $(`.chips[data-key="${k}"]`);
+    box.innerHTML = '';
+    const on = S.filters[k].trim().toLowerCase();
+    for (const [v, n] of top) {
+      box.append(h('button', { class: `fchip${on && v.toLowerCase() === on ? ' on' : ''}`, title: `${n} song${n === 1 ? '' : 's'}`, onclick: () => setFilter(k, on === v.toLowerCase() ? '' : v) }, v));
+    }
+    if (!top.length) box.append(h('span', { class: 'fnone' }, 'Nothing yet'));
   }
+  const nOn = ['artist', 'date', 'label', 'genre'].filter((k) => S.filters[k].trim()).length + (S.filters.q.trim() ? 1 : 0);
+  $('#f-note').textContent = nOn ? `${nOn} filter${nOn === 1 ? '' : 's'} on · ${visibleTracks().length} song${visibleTracks().length === 1 ? '' : 's'} match` : 'Click a name to show only those songs';
+}
+function setFilter(k, v) {
+  S.filters[k] = v;
+  $(`#f-${k}`).value = v;
+  renderGrid();
+}
+for (const b of $$('#lib-tabs button')) {
+  b.addEventListener('click', () => {
+    S.libTab = b.dataset.tab;
+    for (const x of $$('#lib-tabs button')) x.classList.toggle('on', x === b);
+    renderGrid();
+  });
 }
 function setZoom(v) {
   v = Math.max(80, Math.min(280, +v));
@@ -897,7 +929,7 @@ tf.onLog(({ level, msg, time }) => addLog(level, msg, time));
   $('#logo').innerHTML = ICONS.note;
   $('#ts-ic').innerHTML = ICONS.search;
   const icon = (sel, name) => { $(sel).innerHTML = ICONS[name]; };
-  icon('#btn-upload-file', 'cloudUp'); icon('#btn-upload-folder', 'folderUp'); icon('#btn-save', 'save'); icon('#btn-save-many', 'saveMany');
+  for (const el of $$('#lib-toolbar .ic')) el.innerHTML = ICONS[el.dataset.icon];
   icon('#zoom-in', 'zoomIn'); icon('#zoom-out', 'zoomOut');
   icon('#back30', 'back30'); icon('#back5', 'back5'); icon('#fwd5', 'fwd5'); icon('#fwd30', 'fwd30'); icon('#play', 'play');
   const st = await tf.state();
