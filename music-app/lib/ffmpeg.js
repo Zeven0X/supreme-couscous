@@ -118,14 +118,26 @@ function parseInfo(stderr) {
 }
 function pickTags(tags, filePath) {
   const get = (...keys) => { for (const k of keys) if (tags[k]) return tags[k]; return ''; };
-  return {
+  const out = {
     title: get('title') || path.basename(filePath, path.extname(filePath)),
     artist: get('artist', 'album_artist', 'albumartist', 'author'),
     album: get('album'),
     date: get('date', 'year', 'originaldate'),
-    label: get('label', 'publisher', 'organization', 'tpub', 'copyright'),
+    label: '',
     genre: get('genre'),
+    track: get('track', 'tracknumber', 'trck'),
   };
+  // Tonix's own information, written into files Tonix saved (see tagArgs)
+  const cm = String(get('comment', 'icmt')).match(/Tonix:\s*(.*)$/); // M4A / WAV: "Tonix: stars=7; shuffle=black; plays=12"
+  if (cm) for (const part of cm[1].split(';')) { const [k, v] = part.split('=').map((x) => x.trim()); if (k && v) tags[`tonix_${k}`] = v; }
+  out.label = get('label', 'publisher', 'organization', 'tpub', 'tonix_label', 'copyright');
+  const stars = parseInt(get('tonix_stars'), 10);
+  if (stars >= 1 && stars <= 10) out.stars = stars;
+  const mark = get('tonix_shuffle');
+  if (mark === 'black' || mark === 'fav') out.mark = mark;
+  const plays = parseInt(get('tonix_plays'), 10);
+  if (plays > 0) out.plays = plays;
+  return out;
 }
 
 // ---- running ffmpeg ----
@@ -217,10 +229,20 @@ async function peaks(src, buckets = 1600) {
   return res.map((v) => +(v / max).toFixed(3));
 }
 
-function tagArgs(tags = {}) {
+// Song information written into a saved file. The TONIX_ ones are Tonix's own (stars 1-10, blacklist /
+// favourite, plays); other music apps keep them but don't use them.
+// M4A and WAV can't hold unusual tags (M4A would lose its picture), so there the Tonix part goes into
+// the normal Comment field: "Tonix: stars=7; shuffle=black; plays=12".
+function tagArgs(tags = {}, format = 'mp3') {
   const map = { title: 'title', artist: 'artist', album: 'album', date: 'date', genre: 'genre', label: 'publisher', albumArtist: 'album_artist', track: 'track' };
+  const own = { stars: 'TONIX_STARS', mark: 'TONIX_SHUFFLE', plays: 'TONIX_PLAYS' };
   const args = [];
   for (const [k, key] of Object.entries(map)) if (tags[k]) args.push('-metadata', `${key}=${tags[k]}`);
+  if (FORMATS[format] && FORMATS[format].infoInComment) {
+    const parts = [[format === 'm4a' ? 'label' : '', tags.label], ['stars', tags.stars], ['shuffle', tags.mark], ['plays', tags.plays]] // M4A has no label field
+      .filter(([k, v]) => k && v).map(([k, v]) => `${k}=${String(v).replace(/[;=]/g, ' ')}`);
+    if (parts.length) args.push('-metadata', `comment=Tonix: ${parts.join('; ')}`);
+  } else for (const [k, key] of Object.entries(own)) if (tags[k]) args.push('-metadata', `${key}=${tags[k]}`);
   return args;
 }
 function coverOutArgs(streamIndex) {
@@ -230,9 +252,9 @@ function coverOutArgs(streamIndex) {
 // File types a song can be saved as. lossy = has a quality (kbps); cover = can hold a picture.
 const FORMATS = {
   mp3: { label: 'MP3', lossy: true, cover: true, chapters: true, codec: (b) => ['-c:a', 'libmp3lame', '-b:a', bitrateArg(b), '-id3v2_version', '3'] },
-  m4a: { label: 'M4A', lossy: true, cover: true, chapters: true, codec: (b) => ['-c:a', 'aac', '-b:a', bitrateArg(b), '-movflags', '+faststart'] },
+  m4a: { label: 'M4A', lossy: true, cover: true, chapters: true, codec: (b) => ['-c:a', 'aac', '-b:a', bitrateArg(b), '-movflags', '+faststart'], infoInComment: true },
   flac: { label: 'FLAC', lossy: false, cover: true, codec: () => ['-c:a', 'flac', '-sample_fmt', 's16'] },
-  wav: { label: 'WAV', lossy: false, cover: false, codec: () => ['-c:a', 'pcm_s16le'] },
+  wav: { label: 'WAV', lossy: false, cover: false, codec: () => ['-c:a', 'pcm_s16le'], infoInComment: true },
   ogg: { label: 'OGG', lossy: true, cover: false, codec: (b) => ['-c:a', 'libvorbis', '-b:a', bitrateArg(b)] },
 };
 const formatOf = (f) => (FORMATS[f] ? f : 'mp3');
@@ -246,7 +268,7 @@ function exportOne({ src, dest, fx, duration, tags, coverPath, format = 'mp3', b
   if (withCover) args.push('-i', coverPath);
   args.push('-map', '0:a:0', '-af', filter);
   if (withCover) args.push(...coverOutArgs(1));
-  args.push('-map_metadata', '-1', ...tagArgs(tags), ...FORMATS[format].codec(bitrate));
+  args.push('-map_metadata', '-1', ...tagArgs(tags, format), ...FORMATS[format].codec(bitrate));
   args.push(dest);
   return run(args, { duration: outDuration, onProgress });
 }
@@ -278,7 +300,7 @@ async function exportCombined({ items, dest, tags, coverPath, bitrate = 320, for
   const graph = chains.join(';') + ';' + items.map((_, i) => `[a${i}]`).join('') + `concat=n=${items.length}:v=0:a=1[out]`;
   args.push('-filter_complex', graph, '-map', '[out]');
   if (withCover) args.push(...coverOutArgs(metaIdx + 1));
-  args.push('-map_metadata', '-1', '-map_chapters', String(metaIdx), ...tagArgs(tags), ...FORMATS[format].codec(bitrate), dest);
+  args.push('-map_metadata', '-1', '-map_chapters', String(metaIdx), ...tagArgs(tags, format), ...FORMATS[format].codec(bitrate), dest);
   try {
     await run(args, { duration: t, onProgress });
   } finally {

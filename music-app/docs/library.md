@@ -90,6 +90,38 @@ The Library page holds all your songs: upload, search, tabs, filters, picture si
 ### History
 - 2026-11-23: Part 3 built (replaces the old "Save N songs together" window). Your words: "can save them all and in this save menu it can automatically save the album name" and "I choose each time".
 
-## Coming next (your order)
-4. **Star ratings 1–10** in every save window and on each song card, plus a star filter (6⭐ or more, 4⭐ or less).
-5. **Information inside saved files:** label, track number, stars, blacklist, favourite and more. Tonix reads it back when you upload the file again.
+## Star ratings 1–10 — current state ✅ part 4 of 5 (2026-11-23)
+- **On each song card:** a row of 10 small stars under the artist. Hover the card and click a star to rate. Click the same star again to remove the stars. Clicking stars never selects or plays the song. Songs without stars only show the row when you hover.
+- **In the save windows:**
+  - Save song: a **Stars** row (big stars) and a new **Track number** box.
+  - Save playlist / many songs: small stars on each song in the list.
+  - Stars changed there are kept on the song.
+- **Star filter:** Filters → **Stars** (bottom of the panel). Click a number of stars, then **or more** / **exactly** / **or less**. Example: 6 stars + "or more" = **6⭐+**. Songs without stars are hidden while the star filter is on. **Clear** at the top of Filters turns it off. Click the same star again to turn the filter off.
+
+### Checked
+- Automatic test: 6⭐ or more / 4⭐ or less / exactly 6⭐, unrated hidden.
+- In the real app (11/11, together with part 5): rate on cards; 6⭐ or more, 6⭐ or less, exactly 3⭐; Clear; the save window shows and changes stars.
+- **Not yet tried by you.**
+
+### History
+- 2026-11-23: Built. Your words: "in any save menu, the user can rate the song from 1-10 stars so in the library can select the songs to listen to with the amount of stars. For example 6⭐️+ or 4⭐️-".
+
+## Information inside saved files — current state ✅ part 5 of 5 (2026-11-23)
+- **Every saved file now carries:** title, artist, album, album artist, date, genre, **label**, **track number**, picture, and Tonix's own information: **stars**, **🚫 blacklist / ♥ favourite** (if still active), and **how many times you played it**.
+- **Where it sits inside the file:**
+  - **MP3, FLAC, OGG:** the Tonix part goes in its own fields (TONIX_STARS, TONIX_SHUFFLE, TONIX_PLAYS). Other music apps keep them but ignore them.
+  - **M4A, WAV:** these can't hold extra fields (M4A would lose its picture), so the Tonix part goes into the normal **Comment** field as "Tonix: stars=8; shuffle=black; plays=12". On M4A the **label** goes there too, because M4A has no label field. Before this, labels were lost when saving as M4A.
+- **Upload it again** (into your Tonix or a friend's): stars, blacklist / favourite, plays, track number and label come back. A blacklist / favourite starts fresh in the new library (it lasts songs × 4 plays from then).
+- **Not inside:** the sound settings (speed, pitch, fades…). They are already baked into the saved sound, so storing them would apply them twice on upload.
+- **Windows Explorer** won't show Tonix's 1–10 stars: Windows uses its own 5-star system, which the sound engine can't write.
+
+### Checked
+- Automatic test: save with stars 7, blacklist, 12 plays, track 3/12 and a label in **all 5 types**, read back: everything comes back in every type.
+- In the real app: saved as M4A, uploaded into a brand-new Tonix → 8 stars, blacklist, track 3/12 and label all back.
+- **Not yet tried by you.**
+
+### History
+- 2026-11-23: Built. Your words: "the music that is saved from Tonix should have all the properties like label, number, star rating, black listing. And etc", "The information should be saved with the video".
+
+## Ideas for later (playlists)
+- Show stars in playlist rows too; sort a playlist by stars.

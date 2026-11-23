@@ -183,7 +183,9 @@ async function doImport(paths) {
       try {
         if (await ff.extractCover(file, info.coverStream, path.join(lib.coverDir, `${id}.jpg`))) cover = `${id}.jpg`;
       } catch (e) { log('warn', `${name}: could not read its cover picture`); }
-      const t = lib.add({ id, ...tags, srcPath: file, mediaPath, converted, duration: info.duration, cover, isVideo: info.isVideo });
+      const { mark, ...rest } = tags; // a blacklist / favourite saved in the file starts fresh here
+      let t = lib.add({ id, ...rest, srcPath: file, mediaPath, converted, duration: info.duration, cover, isVideo: info.isVideo });
+      if (mark) t = lib.mark([id], mark)[0];
       added.push(trackForUi(t));
       ids.push(t.id);
       log('ok', `Added "${t.title}"${converted ? ' (converted to MP3)' : ''}`);
@@ -213,7 +215,11 @@ async function chooseDir(defaultName) {
   return r.canceled ? null : uniquePath(path.join(r.filePaths[0], safeName(defaultName)), true);
 }
 
-function tagsOf(t) { return { title: t.title, artist: t.artist, album: t.album, date: t.date, genre: t.genre, label: t.label }; }
+function activeMark(t) { return t.mark && (!Number.isFinite(t.markUntil) || lib.playClock < t.markUntil) ? t.mark : ''; }
+function tagsOf(t) {
+  return { title: t.title, artist: t.artist, album: t.album, date: t.date, genre: t.genre, label: t.label, track: t.track,
+    stars: t.stars || '', mark: activeMark(t), plays: t.plays || '' };
+}
 
 async function exportTrack(id, opts = {}) {
   const t = lib.byId(id);

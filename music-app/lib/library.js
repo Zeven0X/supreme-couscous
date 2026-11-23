@@ -84,8 +84,9 @@ class Library {
   update(id, patch) {
     const t = this.byId(id);
     if (!t) return null;
-    const allowed = ['title', 'artist', 'album', 'date', 'label', 'genre'];
+    const allowed = ['title', 'artist', 'album', 'date', 'label', 'genre', 'track'];
     for (const k of allowed) if (k in patch) t[k] = String(patch[k] ?? '').slice(0, 500);
+    if ('stars' in patch) { const n = Math.round(Number(patch.stars)); t.stars = n >= 1 && n <= 10 ? n : null; } // 1-10, null = no stars
     if (patch.fx) t.fx = normalizeFx({ ...t.fx, ...patch.fx });
     this.save();
     return t;

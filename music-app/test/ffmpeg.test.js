@@ -37,7 +37,7 @@ test('filter: pitch uses the studio tool, Natural voice keeps the voice shape', 
 
 test('ffmetadata parsing handles escapes and tag names', () => {
   const tags = ff.parseFfmetadata(';FFMETADATA1\ntitle=Hi\\=there\\;x\nARTIST=Bob\npublisher=Lbl\n');
-  assert.deepStrictEqual(ff.pickTags(tags, '/x/song.mp3'), { title: 'Hi=there;x', artist: 'Bob', album: '', date: '', label: 'Lbl', genre: '' });
+  assert.deepStrictEqual(ff.pickTags(tags, '/x/song.mp3'), { title: 'Hi=there;x', artist: 'Bob', album: '', date: '', label: 'Lbl', genre: '', track: '' });
   assert.strictEqual(ff.pickTags({}, '/x/My Song.flac').title, 'My Song');
 });
 
@@ -179,4 +179,23 @@ test('one big M4A file holds chapter marks too', async () => {
   assert.strictEqual(info.audioCodec, 'aac');
   const { stderr } = await ff.run(['-i', dest, '-f', 'null', '-']);
   assert.match(stderr, /title\s*:\s*Two/);
+});
+
+test('Tonix information travels inside saved files and comes back on upload', async () => {
+  const src = path.join(tmp, 'tone7.wav');
+  await makeTone(src, 440, 2);
+  const tags = { title: 'Kept', artist: 'Me', album: 'Night drive', label: 'Lbl', track: '3/12', stars: 7, mark: 'black', plays: 12 };
+  const got = {};
+  for (const fmt of ['mp3', 'm4a', 'flac', 'ogg', 'wav']) {
+    const dest = path.join(tmp, `info.${fmt}`);
+    await ff.exportOne({ src, dest, fx: {}, duration: 2, format: fmt, tags });
+    const { tags: back } = await ff.probe(dest);
+    got[fmt] = back;
+  }
+  for (const fmt of ['mp3', 'm4a', 'flac', 'ogg', 'wav']) {
+    const b = got[fmt];
+    if (fmt === 'wav') { assert.deepStrictEqual([b.title, b.stars, b.mark, b.plays], ['Kept', 7, 'black', 12], 'wav (in the comment)'); continue; }
+    assert.deepStrictEqual([b.title, b.album, b.label, b.stars, b.mark, b.plays], ['Kept', 'Night drive', 'Lbl', 7, 'black', 12], fmt);
+    assert.match(b.track, /^3(\/12)?$/, `${fmt} track ${b.track}`);
+  }
 });

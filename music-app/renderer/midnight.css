@@ -602,3 +602,22 @@ body[data-theme="pastel"] .clashmsg { color: #c03030; }
 .pl-art { width: 104px; height: 104px; }
 .pl-btns2 { gap: 2px; }
 .pl-btns2 .tb { padding: 4px 6px; font-size: 12px; }
+
+/* Stars 1-10 */
+.stars { display: inline-flex; align-items: center; gap: 1px; }
+.stars .star { width: 18px; height: 20px; padding: 0; font-size: 16px; line-height: 1; color: rgba(255, 255, 255, .18); background: none !important; border: 0; cursor: pointer; transition: color .08s, transform .08s; }
+.stars .star.on { color: #ffc94a; }
+.stars.hover .star.on { color: #ffe08a; }
+.stars .star:hover { transform: scale(1.2); }
+.stars.small .star { width: 11px; height: 14px; font-size: 11px; }
+.card .stars { margin-top: 3px; opacity: .85; }
+.card .stars:not(:has(.on)) { opacity: 0; }
+.card:hover .stars { opacity: 1; }
+.song-row .stars { margin-left: auto; margin-right: 6px; }
+.sv-stars { margin-top: 10px; }
+.sv-stars .stars .star { width: 22px; font-size: 19px; }
+#f-stars { display: flex; flex-direction: column; gap: 6px; }
+#f-stars .stars .star { width: 16px; font-size: 15px; }
+.fstar-seg { align-self: flex-start; }
+.fstar-seg button { padding: 4px 9px; font-size: 12px; }
+.fstar-seg button:disabled { opacity: .4; }

@@ -1,5 +1,5 @@
 'use strict';
-/* global ICONS, tf, TFStudio, TFSaveName, TFPlaylists, TFShuffle */
+/* global ICONS, tf, TFStudio, TFSaveName, TFPlaylists, TFShuffle, TFStars */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 function h(tag, attrs = {}, ...kids) {
@@ -28,7 +28,7 @@ const S = {
   tracks: [], byId: new Map(), settings: {}, limits: {}, defaults: {},
   view: 'library', selected: [], anchor: null,
   currentId: null, queue: [], tabs: [], activeTab: null,
-  filters: { q: '', artist: '', date: '', label: '', genre: '' },
+  filters: { q: '', artist: '', date: '', label: '', genre: '', stars: null },
   libTab: 'all', // All / Recently added / From videos
   muted: false, peaks: null, logs: [],
 };
@@ -598,7 +598,7 @@ function visibleTracks() {
   const list = S.tracks.filter((t) => {
     if (S.libTab === 'video' && !t.isVideo) return false;
     if (q && ![t.title, t.artist, t.album, t.label, t.genre, t.date].some((v) => String(v || '').toLowerCase().includes(q))) return false;
-    return has(t.artist, f.artist) && has(t.date, f.date) && has(t.label, f.label) && has(t.genre, f.genre);
+    return has(t.artist, f.artist) && has(t.date, f.date) && has(t.label, f.label) && has(t.genre, f.genre) && TFStars.matches(t, f.stars);
   });
   if (S.libTab === 'recent') list.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
   return list;
@@ -620,7 +620,8 @@ function renderGrid() {
       h('div', { class: 'art' }, coverEl(t), t.isVideo && S.settings.videoBadge !== false ? h('span', { class: 'badge' }, 'from video') : null,
         h('button', { class: 'hover-play', title: 'Play', html: ICONS.play, onclick: (e) => { e.stopPropagation(); playTrack(t.id); } })),
       h('div', { class: 'name' }, t.title),
-      h('div', { class: 'artist' }, t.artist || 'Unknown artist'));
+      h('div', { class: 'artist' }, t.artist || 'Unknown artist'),
+      TFStars.row(t.stars, (n) => setStars(t.id, n), { small: true }));
     grid.append(card);
   }
   markSelection();
@@ -673,6 +674,24 @@ $('#grid').addEventListener('contextmenu', (e) => {
   if (!S.selected.includes(card.dataset.id)) { S.selected = [card.dataset.id]; S.anchor = card.dataset.id; markSelection(); }
   showCardMenu(e.clientX, e.clientY, card.dataset.id);
 });
+// Stars 1-10 for a song (0 = no stars). Saved right away.
+async function setStars(id, n) {
+  const t = await guard(() => tf.updateTrack(id, { stars: n || null }));
+  if (!t) return;
+  upsertTrack(t);
+  if (S.filters.stars && S.filters.stars.n) renderGrid(); // it may now match the star filter, or not
+}
+// Filters → Stars: pick a number of stars, then "or more" / "exactly" / "or less". Click the star again to clear.
+function renderStarFilter() {
+  const box = $('#f-stars');
+  const f = S.filters.stars || { n: 0, mode: 'more' };
+  box.innerHTML = '';
+  box.append(TFStars.row(f.n, (n) => { S.filters.stars = n ? { n, mode: f.mode } : null; renderStarFilter(); renderGrid(); }, { title: 'Star filter' }),
+    h('div', { class: 'seg fstar-seg' }, ...[['more', 'or more'], ['exact', 'exactly'], ['less', 'or less']].map(([m, l]) => h('button', {
+      class: f.n && f.mode === m ? 'on' : '', disabled: !f.n, title: f.n ? `${f.n}⭐ ${l}` : 'Click a star first',
+      onclick: () => { S.filters.stars = { n: f.n, mode: m }; renderStarFilter(); renderGrid(); } }, l))),
+    h('div', { class: 'fnone' }, f.n ? `Showing ${TFStars.label(f)} (songs without stars are hidden)` : 'Click a star to filter, e.g. 6 then "or more"'));
+}
 function updateDatalists() {
   for (const k of ['artist', 'date', 'label', 'genre']) {
     const vals = [...new Set(S.tracks.map((t) => (t[k] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -689,7 +708,7 @@ function updateDatalists() {
     }
     if (!top.length) box.append(h('span', { class: 'fnone' }, 'Nothing yet'));
   }
-  const nOn = ['artist', 'date', 'label', 'genre'].filter((k) => S.filters[k].trim()).length + (S.filters.q.trim() ? 1 : 0);
+  const nOn = ['artist', 'date', 'label', 'genre'].filter((k) => S.filters[k].trim()).length + (S.filters.q.trim() ? 1 : 0) + (S.filters.stars && S.filters.stars.n ? 1 : 0);
   $('#f-note').textContent = nOn ? `${nOn} filter${nOn === 1 ? '' : 's'} on · ${visibleTracks().length} song${visibleTracks().length === 1 ? '' : 's'} match` : 'Click a name to filter';
 }
 function setFilter(k, v) {
@@ -725,8 +744,9 @@ for (const [id, key] of [['#search', 'q'], ['#f-artist', 'artist'], ['#f-date', 
   $(id).addEventListener('input', (e) => { S.filters[key] = e.target.value; renderGrid(); if (S.view !== 'library') showView('library'); });
 }
 $('#f-clear').addEventListener('click', () => {
-  S.filters = { q: '', artist: '', date: '', label: '', genre: '' };
+  S.filters = { q: '', artist: '', date: '', label: '', genre: '', stars: null };
   for (const id of ['#search', '#f-artist', '#f-date', '#f-label', '#f-genre']) $(id).value = '';
+  renderStarFilter();
   renderGrid();
 });
 
@@ -922,6 +942,7 @@ async function openSaveModal(id) {
   let kbps = [128, 192, 256, 320].includes(+S.settings.bitrate) ? +S.settings.bitrate : 320;
   let dir = S.settings.exportDir;
   let nameTouched = false;
+  let stars = t.stars || 0;
   await modal((box, close) => {
     box.classList.add('save-win');
     const fields = {};
@@ -984,6 +1005,7 @@ async function openSaveModal(id) {
     const doSave = async () => {
       const tags = Object.fromEntries(Object.entries(fields).map(([k, i]) => [k, i.value.trim()]));
       if (!tags.title) tags.title = t.title;
+      tags.stars = stars || null;
       close();
       const ask = S.settings.askWhereToSave; // Settings → Saving: Windows asks where to save
       const r = await guard(() => tf.exportTrack(t.id, { tags, coverImage, format: type.id, bitrate: kbps, name: nameIn.value.trim() || tags.title, dir: ask ? null : dir }), 'Save: ');
@@ -1001,7 +1023,8 @@ async function openSaveModal(id) {
             h('button', { class: 'btn primary sv-fill', onclick: fill, title: 'Read the artist and title from the original name' }, '✨ Fill from name')),
           fillMsg,
           h('div', { class: 'sv-pair' }, field('artist', 'Artist'), h('button', { class: 'sv-swap', title: 'Swap artist and title', onclick: swap, html: '&#8644;' }), field('title', 'Title')),
-          h('div', { class: 'sv-grid' }, field('album', 'Album'), field('date', 'Date'), field('genre', 'Genre'), field('label', 'Label')))),
+          h('div', { class: 'sv-grid' }, field('album', 'Album'), field('date', 'Date'), field('genre', 'Genre'), field('label', 'Label'), field('track', 'Track number')),
+          h('div', { class: 'field sv-stars' }, 'Stars', TFStars.row(stars, (n) => { stars = n; })))),
       h('div', { class: 'sv-opts' },
         ...row('Type', typeSeg, typeHint),
         ...row('Quality', qSeg, qHint),
@@ -1055,6 +1078,7 @@ async function openAlbumModal(idsIn, { playlist = null } = {}) {
         const mini = h('div', { class: `mini-art${chosen ? ' chosen' : ''}`, title: t.coverUrl ? 'Use this picture as the cover' : 'No picture' }, coverEl(t));
         if (t.coverUrl) mini.addEventListener('click', () => { coverTrackId = id; coverImage = null; plCover = false; renderCover(); renderList(); });
         list.append(h('div', { class: 'song-row' }, h('span', { class: 'n' }, i + 1), mini, h('span', { class: 't' }, t.title, t.artist ? h('span', { class: 'muted' }, ` — ${t.artist}`) : null),
+          TFStars.row(t.stars, (n) => setStars(id, n), { small: true }),
           h('button', { title: 'Move up', html: ICONS.up, disabled: i === 0, onclick: () => { [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]]; renderList(); } }),
           h('button', { title: 'Move down', html: ICONS.down, disabled: i === ids.length - 1, onclick: () => { [ids[i + 1], ids[i]] = [ids[i], ids[i + 1]]; renderList(); } }),
           h('button', { title: 'Leave out of this save', html: ICONS.close, disabled: ids.length <= 2, onclick: () => { ids = ids.filter((x) => x !== id); if (coverTrackId === id) coverTrackId = null; renderList(); renderCover(); } })));
@@ -1314,6 +1338,7 @@ tf.onLog(({ level, msg, time }) => addLog(level, msg, time));
   setTracks(st.tracks);
   TFPlaylists.setAll(st.playlists);
   S.playClock = st.playClock || 0;
+  renderStarFilter();
   S.settings = st.settings;
   setMaster(S.settings.rememberMaster === false ? 100 : (S.settings.master ?? 100), false);
   S.limits = st.limits;
