@@ -31,7 +31,7 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 4. ✅ Song settings on the map.
 5. ✅ Playing a map (follow paths by chance, quiet gaps, cut, real crossfades, dot, follow view, choose).
 6. ✅ Many maps.
-7. ⬜ Export / Import.
+7. ✅ Export / Import.
 8. ⬜ Tests + Windows build.
 
 ## Elements
@@ -167,6 +167,19 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
   - When a map reaches an END, it forgets the spot and starts from the Start song next time.
 - **History:** 2026-11-23 added.
 
+### Export and import (sharing a map)
+- **Now:** in **Your maps**, every card has **Export**. It saves the map as **one `.tonixmap` file** in the save folder (or asks where, if "ask where to save" is on).
+  - Inside the file: every song on the map (the music itself), each song's name, artist, album, date, label, genre and cover, all paths with their chances, locks, joins, colors, lines, names and drawn shapes, each song's map sound settings, the background (built-in or your own pictures), the song-name color and the map's cover.
+  - Songs that were removed from your library cannot travel; the message says how many were left out.
+- **Import a map** card in Your maps (or drag a `.tonixmap` file onto the Tonix window) opens a map someone shared.
+  - It becomes **your own copy**: you can change it freely.
+  - Its songs are added to your library. A song you already have (same title, same length, same file) is not added twice.
+  - If you already have a map with that name, the new one is called "… (imported)".
+  - A file that is not a Tonix map, or is damaged, is refused with a message. Nothing is changed.
+- **Safety:** a received file is never trusted. Every song is checked to really be sound, every picture is re-made as a fresh picture, names inside the file are never used as file paths, and the map is rebuilt field by field.
+- **Note:** a map file contains the actual music. Sharing your own or free music is fine; sharing other artists' songs can break copyright rules.
+- **History:** 2026-11-23 added.
+
 ## How it works (simple words)
 - The map is a list of stops. Each stop remembers which song it is, where it sits (x, y) and its own effects.
 - A path remembers: which song it starts from, which song it goes to, and its chance. The chance math lives in `renderer/chance.js` and is tested on its own (6 tests): whole numbers, always 100, locks respected, and luck really follows the chances (70/30 over 20,000 tries).
@@ -174,4 +187,5 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 - The built-in backgrounds are tiny pictures made in code (`renderer/backgrounds.js`), so they add almost nothing to the app's size. Anything near a tile's edge is also drawn on the opposite edge, so the repeated copies meet with no seams.
 - The Sound panel asks one question before every change: "what am I editing?" The answer is, in order: the selected map song, else the map song that is playing, else the playing library song. So it always edits what you see or hear.
 - The app has two music players inside. Normally only one plays. During a crossfade the old song keeps playing on its player and fades out, while the second player starts the next song and becomes the main one.
+- A `.tonixmap` file is like a box with a packing list on top. The list says what is inside and how big each thing is; then come the songs and pictures, one after another. Tonix reads the list, checks the sizes add up exactly, then takes each thing out (`lib/mapfile.js`, 3 tests).
 - The view is like a camera over a big table: moving changes where the camera is, zoom changes how close it is. Songs keep their real place on the table.

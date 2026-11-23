@@ -401,6 +401,7 @@
                 const got = await guard(() => tf.mapBgAdd(m.id, img), 'Picture: ');
                 if (got) { await change(m.id, (x) => { x.cover = got.file; }); draw(); }
               }),
+              act('Export', 'Save this map as one file (songs, covers and pictures inside) to share it', () => exportMap(m.id)),
               act(sure === m.id ? 'Sure? Delete' : 'Delete', 'Delete this map (a copy is kept in the trash folder)', async () => {
                 if (sure !== m.id) { sure = m.id; draw(); return; }
                 sure = null;
@@ -420,11 +421,35 @@
           const m = await guard(() => tf.mapCreate(name));
           if (m) { await openMap(m.id); editing = m.id; draw(); }
         } }, h('div', { class: 'map-th plus', html: ICONS.plus }), h('div', { class: 'map-n' }, 'New map'), h('div', { class: 'map-s' }, 'Start with an empty board')));
+        grid.append(h('div', { class: 'map-card new', title: 'Open a .tonixmap file someone shared with you', onclick: async () => {
+          const f = await guard(() => tf.pickMapFile());
+          if (f) { close(); await importMapFile(f); }
+        } }, h('div', { class: 'map-th plus', html: ICONS.cloudUp }), h('div', { class: 'map-n' }, 'Import a map'), h('div', { class: 'map-s' }, 'Open a .tonixmap file')));
       };
       draw();
     });
   }
   $('#map-name').addEventListener('click', openMaps);
+  async function exportMap(id) {
+    if (id === M.map.id) await saveNow();
+    const r = await guard(() => tf.mapExport(id), 'Export: ');
+    if (!r || r.canceled) return;
+    const miss = r.missing ? ` ${r.missing} song${r.missing === 1 ? ' was' : 's were'} left out because ${r.missing === 1 ? 'it is' : 'they are'} no longer in your library.` : '';
+    toast(`Map saved with ${r.songs} song${r.songs === 1 ? '' : 's'}: ${r.path}.${miss}`, { type: 'ok', action: () => tf.showItem(r.path), actionLabel: 'Show', ms: 9000 });
+  }
+  async function importMapFile(file) {
+    const r = await guard(() => tf.mapImport(file), 'Import: ');
+    if (!r) return;
+    for (const t of r.tracks) upsertTrack(t);
+    renderGrid();
+    if (S.view !== 'map') showView('map');
+    await show();
+    await openMap(r.map.id);
+    const bits = [`${r.tracks.length} new song${r.tracks.length === 1 ? '' : 's'} added to your library`];
+    if (r.reused) bits.push(`${r.reused} you already had`);
+    if (r.skipped) bits.push(`${r.skipped} could not be read`);
+    toast(`Map “${r.map.name}” imported: ${bits.join(', ')}.`, { type: r.skipped ? 'error' : 'ok', ms: 9000 });
+  }
   // remember where the music is, every few seconds, so "Continue" works even after closing the app
   setInterval(() => {
     if (!M.play || M.play.gap || audio.paused || !M.map.progress || M.map.progress.stopId !== M.play.stopId) return;
@@ -925,23 +950,30 @@
   });
 
   // ---------- open ----------
-  async function show() {
-    if (!M.loaded) {
-      M.loaded = true;
-      const list = await guard(() => tf.mapsList());
-      if (!list) { M.loaded = false; return; }
-      const last = list.find((m) => m.id === S.settings.lastMapId) || list[0]; // the map that was open last time
-      M.map = last ? await guard(() => tf.mapGet(last.id)) : await guard(() => tf.mapCreate('My first map'));
-      if (!M.map) { M.loaded = false; return; }
-      assetUrl = await tf.mapAssetUrl();
-      M.map.bg = M.map.bg || { kind: 'builtin', id: 'dots' };
-      if (!M.map.stops.length) M.map.view = { x: board.clientWidth / 2, y: board.clientHeight / 2, zoom: 1 };
+  // Loads the map the first time the page opens. Called twice at once? Both wait for the same loading.
+  function load() {
+    if (!M.loading) {
+      M.loading = (async () => {
+        const list = await guard(() => tf.mapsList());
+        const last = list && (list.find((m) => m.id === S.settings.lastMapId) || list[0]); // the map that was open last time
+        const m = !list ? null : last ? await guard(() => tf.mapGet(last.id)) : await guard(() => tf.mapCreate('My first map'));
+        if (!m) { M.loading = null; return false; }
+        assetUrl = await tf.mapAssetUrl();
+        M.map = m;
+        M.map.bg = M.map.bg || { kind: 'builtin', id: 'dots' };
+        if (!M.map.stops.length) M.map.view = { x: board.clientWidth / 2, y: board.clientHeight / 2, zoom: 1 };
+        return true;
+      })();
     }
+    return M.loading;
+  }
+  async function show() {
+    if (!(await load())) return;
     applyView();
     render();
   }
   for (const [sel, name] of [['#map-zoom-in', 'zoomIn'], ['#map-zoom-out', 'zoomOut']]) $(sel).innerHTML = ICONS[name];
   for (const n of $$('#map-toolbar .ic')) n.innerHTML = ICONS[n.dataset.icon];
 
-  window.TFMap = { show, onEnded, stopPlay, skipGap, get map() { return M.map; }, get playing() { return M.play; } };
+  window.TFMap = { show, onEnded, stopPlay, skipGap, importMapFile, get map() { return M.map; }, get playing() { return M.play; } };
 })();

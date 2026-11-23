@@ -266,6 +266,114 @@ async function exportMany(ids, opts) {
   }
 }
 
+
+// ---------- map export / import (.tonixmap) ----------
+const MF = require('./lib/mapfile');
+const Chance = require('./renderer/chance');
+const hex = (n) => crypto.randomBytes(n).toString('hex');
+
+async function exportMap(mapId) {
+  const m = maps.get(mapId);
+  const dest = await chooseDest(m.name, 'tonixmap');
+  if (!dest) return { canceled: true };
+  const files = [];
+  const add = (p) => { if (!p || !fs.existsSync(p)) return null; const id = `f${files.length}`; files.push({ id, path: p }); return id; };
+  const songs = [];
+  for (const trackId of [...new Set(m.stops.map((s) => s.trackId))]) {
+    const t = lib.byId(trackId);
+    if (!t || !fs.existsSync(t.mediaPath)) continue; // a song removed from the library cannot travel
+    songs.push({
+      key: trackId, title: t.title, artist: t.artist, album: t.album, date: t.date, label: t.label, genre: t.genre, duration: t.duration,
+      ext: path.extname(t.mediaPath).slice(1).toLowerCase(), media: add(t.mediaPath), cover: add(lib.coverPath(t)),
+    });
+  }
+  const bgs = (m.customBgs || []).map((b) => ({ file: b.file, f: add(path.join(maps.assetDir, b.file)) })).filter((b) => b.f);
+  const mapCover = m.cover ? add(path.join(maps.assetDir, m.cover)) : null;
+  const index = { app: 'Tonix', exportedAt: new Date().toISOString(), map: { ...m, progress: null }, songs, bgs, mapCover };
+  log('info', `Exporting map "${m.name}" with ${songs.length} song(s)...`);
+  await MF.writeMapFile(dest, index, files, (p) => send('export-progress', { p, label: m.name }));
+  send('export-progress', { p: 1, label: m.name });
+  const missing = new Set(m.stops.map((s) => s.trackId)).size - songs.length;
+  log('ok', `Saved ${dest}`);
+  return { path: dest, songs: songs.length, missing };
+}
+
+// Picture from a received file -> a fresh PNG made by ffmpeg (proves it is really a picture).
+async function importPicture(src, mapId) {
+  const name = `${mapId}-${hex(4)}.png`;
+  await ff.run(['-y', '-i', src, '-frames:v', '1', '-vf', "scale='min(1024,iw)':-2", path.join(maps.assetDir, name)]);
+  return name;
+}
+
+async function importMap(file) {
+  const { index, offsets } = MF.readIndex(file);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tonix-import-'));
+  const mapId = hex(6);
+  const added = [];
+  let reused = 0, skipped = 0;
+  try {
+    const songs = Array.isArray(index.songs) ? index.songs.slice(0, 2000) : [];
+    const trackFor = new Map(); // song key in the file -> track id in this library
+    for (let i = 0; i < songs.length; i++) {
+      const sg = songs[i] || {};
+      const title = String(sg.title || '').slice(0, 300) || 'Imported song';
+      send('import-progress', { done: i, total: songs.length, name: title });
+      try {
+        const ext = ff.AUDIO_EXT.includes(String(sg.ext)) ? sg.ext : 'mp3';
+        const tmpMedia = await MF.extract(file, offsets, String(sg.media), path.join(tmp, `${i}.${ext}`));
+        const { info } = await ff.probe(tmpMedia);
+        if (!info.hasAudio) throw new Error('no sound');
+        // Already in this library (same title, same length, same file size)? Use that one.
+        const size = fs.statSync(tmpMedia).size;
+        const same = lib.tracks.find((t) => t.title.toLowerCase() === title.toLowerCase() && Math.abs((t.duration || 0) - info.duration) < 0.6
+          && fs.existsSync(t.mediaPath) && fs.statSync(t.mediaPath).size === size);
+        if (same) { trackFor.set(sg.key, same.id); reused++; continue; }
+        const id = lib.newId();
+        let mediaPath = path.join(lib.mediaDir, `${id}.${ext}`);
+        if (info.directPlay) { fs.copyFileSync(tmpMedia, mediaPath); } else { mediaPath = path.join(lib.mediaDir, `${id}.mp3`); await ff.toMp3(tmpMedia, mediaPath, { bitrate: lib.settings.bitrate, duration: info.duration }); }
+        let cover = null;
+        if (sg.cover && offsets.has(String(sg.cover))) {
+          try {
+            const c = await MF.extract(file, offsets, String(sg.cover), path.join(tmp, `${i}-cover`));
+            await ff.imageToJpg(c, path.join(lib.coverDir, `${id}.jpg`));
+            cover = `${id}.jpg`;
+          } catch (_) { /* no cover, the song still comes in */ }
+        }
+        const str = (v) => String(v || '').slice(0, 500);
+        const t = lib.add({ id, title, artist: str(sg.artist), album: str(sg.album), date: str(sg.date), label: str(sg.label), genre: str(sg.genre),
+          srcPath: mediaPath, mediaPath, converted: true, duration: info.duration, cover, isVideo: false, imported: true });
+        added.push(trackForUi(t));
+        trackFor.set(sg.key, id);
+      } catch (e) {
+        skipped++;
+        log('warn', `Map import: skipped "${title}" (${e.message})`);
+      }
+    }
+    send('import-progress', { done: songs.length, total: songs.length, name: '' });
+    const bgFiles = new Map();
+    for (const b of Array.isArray(index.bgs) ? index.bgs.slice(0, 50) : []) {
+      try { bgFiles.set(b.file, await importPicture(await MF.extract(file, offsets, String(b.f), path.join(tmp, `bg-${bgFiles.size}`)), mapId)); } catch (_) { /* skip */ }
+    }
+    let cover = null;
+    if (index.mapCover && offsets.has(String(index.mapCover))) {
+      try { cover = await importPicture(await MF.extract(file, offsets, String(index.mapCover), path.join(tmp, 'map-cover')), mapId); } catch (_) { /* skip */ }
+    }
+    const stopTrack = new Map();
+    for (const s of Array.isArray(index.map.stops) ? index.map.stops : []) if (s && trackFor.has(s.trackId)) stopTrack.set(s.id, trackFor.get(s.trackId));
+    const clean = MF.cleanMap(index.map, { id: mapId, stopTrack, bgFiles, cover, normFx: ff.normalizeFx, newId: () => hex(6) });
+    // chances: the paths out of every song add up to 100 again (some paths may have been dropped)
+    for (const s of clean.stops) Chance.fillTo100(clean.paths.filter((p) => p.from === s.id));
+    const names = new Set(maps.list().map((x) => x.name));
+    if (names.has(clean.name)) { let k = 2; const base = `${clean.name} (imported)`; clean.name = base; while (names.has(clean.name)) clean.name = `${base} ${k++}`; }
+    maps.save(clean);
+    lib.flush();
+    log('ok', `Imported map "${clean.name}": ${added.length} new song(s), ${reused} already in your library, ${skipped} skipped.`);
+    return { map: { id: clean.id, name: clean.name }, tracks: added, reused, skipped };
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 // ---------- IPC ----------
 function handle(name, fn) {
   ipcMain.handle(name, async (_e, ...args) => {
@@ -351,6 +459,12 @@ function registerIpc() {
   handle('map-get', (id) => maps.get(id));
   handle('map-create', (name) => maps.create(name));
   handle('map-delete', (id) => maps.remove(id));
+  handle('map-export', (id) => exportMap(id));
+  handle('map-import', (file) => importMap(file));
+  handle('pick-mapfile', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Open a Tonix map', properties: ['openFile'], filters: [{ name: 'Tonix map', extensions: ['tonixmap'] }] });
+    return r.canceled ? null : r.filePaths[0];
+  });
   handle('map-save', (m) => ({ updatedAt: maps.save(m).updatedAt }));
   // A picture for a map background: shrunk to at most 1024 px and kept as PNG (so see-through parts stay see-through).
   handle('map-bg-add', async (mapId, imagePath) => {

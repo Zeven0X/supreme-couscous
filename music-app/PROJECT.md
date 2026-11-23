@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: New look (Midnight glass) finished on every screen. Map step 3 (path settings) done too. Map step 4 (song settings on the map) done too. Map step 5 part 1 (playing a map) done too. Step 5 part 2 (real crossfades) done too. Map step 6 (many maps) done too. Next: Map step 7, export / import. After the Map: the sound editor. Still open: rename leftovers (save folder is still called "Tune Forge Exports").
+- 2026-11-23: New look (Midnight glass) finished on every screen. Map step 3 (path settings) done too. Map step 4 (song settings on the map) done too. Map step 5 part 1 (playing a map) done too. Step 5 part 2 (real crossfades) done too. Map step 6 (many maps) done too. Map step 7 (export / import) done too. Next: Map step 8, final checks + Windows build. After the Map: the sound editor. Still open: rename leftovers (save folder is still called "Tune Forge Exports").
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -20,11 +20,12 @@
 | Button | Status |
 |---|---|
 | 🔍 Search (library) | ✅ Working |
-| 🗺 Map | 🧪 Being built (step 6 of 8 done) |
+| 🗺 Map | 🧪 Being built (step 7 of 8 done) |
 | 📏 Sound editor | 🎨 Designed, not built yet |
 | ⚙ Settings | 💤 Hidden, not planned yet |
 
 ## Recent changes
+- 2026-11-23: Map step 7: export a map as one .tonixmap file (songs, covers, pictures inside) and import it as your own copy.
 - 2026-11-23: Map step 6: many maps (new, rename, cover, delete to trash, switch) and Continue where the music stopped.
 - 2026-11-23: Map step 5 part 2: real crossfades (two songs overlap and blend). The app now has two players inside.
 - 2026-11-23: Map step 5 part 1: Play map follows the paths by chance, with quiet gaps, the glowing dot, Follow, and click-to-choose. Crossfade still plays like a cut.

@@ -632,7 +632,11 @@ window.addEventListener('drop', (e) => {
   e.preventDefault();
   dragDepth = 0;
   $('#drop-overlay').hidden = true;
-  const paths = [...e.dataTransfer.files].map((f) => tf.pathForFile(f)).filter(Boolean);
+  let paths = [...e.dataTransfer.files].map((f) => tf.pathForFile(f)).filter(Boolean);
+  const mapFiles = paths.filter((p) => /\.tonixmap$/i.test(p)); // a shared map: open it as a map
+  paths = paths.filter((p) => !/\.tonixmap$/i.test(p));
+  (async () => { for (const f of mapFiles) await window.TFMap.importMapFile(f); })();
+  if (!paths.length) return;
   if (e.target.closest?.('#convert-drop')) addConvertFiles(paths);
   else importPaths(paths);
 });
