@@ -461,7 +461,6 @@ function showCardMenu(x, y, id) {
   const many = S.selected.length > 1;
   const items = [
     ['Play', () => playTrack(id)],
-    ['Open details', () => { openTab(id, true); showView('editor'); }],
     ['Change picture…', () => changeCover(id)],
     null,
     ['Save as MP3…', () => openSaveModal(id)],
@@ -496,7 +495,7 @@ async function importPaths(paths) {
   renderGrid();
   const parts = [`${r.added.length} added`];
   if (r.skipped) parts.push(`${r.skipped} already in library`);
-  if (r.failed) parts.push(`${r.failed} failed (see Tools → Log)`);
+  if (r.failed) parts.push(`${r.failed} failed (the file may be damaged or have no sound)`);
   toast(parts.join(', '), { type: r.failed ? 'error' : 'ok' });
   if (r.added.length) { S.selected = r.added.map((t) => t.id); markSelection(); if (!S.currentId) loadTrack(r.added[0].id); }
 }
@@ -811,7 +810,10 @@ $('#set-bitrate').addEventListener('change', (e) => patchSettings({ bitrate: +e.
 $('#set-lib-open').addEventListener('click', () => tf.openPath($('#set-lib-dir').value));
 
 // ---------------------------------------------------------------- views
+// Hidden until each button is planned with the user. The code is kept.
+const HIDDEN_VIEWS = ['editor', 'tools', 'settings'];
 function showView(v) {
+  if (HIDDEN_VIEWS.includes(v)) return;
   S.view = v;
   for (const b of $$('.nav')) b.classList.toggle('active', b.dataset.view === v);
   for (const el of $$('.view')) el.classList.toggle('active', el.id === `view-${v}`);
@@ -819,7 +821,10 @@ function showView(v) {
   if (v === 'tools') { const term = $('#terminal'); term.scrollTop = term.scrollHeight; }
   requestAnimationFrame(drawWave);
 }
-for (const b of $$('.nav')) b.addEventListener('click', () => showView(b.dataset.view));
+for (const b of $$('.nav')) {
+  b.hidden = HIDDEN_VIEWS.includes(b.dataset.view);
+  b.addEventListener('click', () => showView(b.dataset.view));
+}
 
 function renderAll() {
   renderGrid();
