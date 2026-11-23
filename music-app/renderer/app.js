@@ -147,7 +147,10 @@ async function play() {
   try { await audio.play(); } catch (e) { if (e.name !== 'AbortError') toast(`Can't play this file: ${e.message}`, { type: 'error' }); }
 }
 function pause() { audio.pause(); }
-function togglePlay() { if (audio.paused) play(); else pause(); }
+function togglePlay() {
+  if (window.TFMap && window.TFMap.skipGap()) return; // in a quiet gap between two map songs: go on to the next song now
+  if (audio.paused) play(); else pause();
+}
 function seek(t) {
   if (!cur()) return;
   const d = audio.duration || cur().duration || 0;
@@ -161,6 +164,7 @@ function loadTrack(id, { autoplay = false, keepQueue = true, stop = null } = {})
   const t = S.byId.get(id);
   if (!t) return;
   S.currentId = id;
+  if (!stop && window.TFMap) window.TFMap.stopPlay(); // a normal song was started: the map stops leading
   S.playStop = stop; // set when a song is played from the map: { fx, title, save }
   S.playFx = stop ? stop.fx : null;
   if (!keepQueue || !S.queue.includes(id)) S.queue = visibleTracks().map((x) => x.id);
@@ -191,7 +195,8 @@ audio.addEventListener('loadedmetadata', () => { applyFx(); drawWave(); });
 audio.addEventListener('play', () => setPlayIcon(true));
 audio.addEventListener('pause', () => setPlayIcon(false));
 audio.addEventListener('ended', () => {
-  if (S.playFx) { setPlayIcon(false); return; } // a song played from the map stops at its end (map playing comes later)
+  if (window.TFMap && window.TFMap.onEnded()) return; // a map is playing: it picks the next song itself
+  if (S.playFx) { setPlayIcon(false); return; }
   const n = upNext()[0];
   if (n) loadTrack(n.id, { autoplay: true }); else { setPlayIcon(false); }
 });

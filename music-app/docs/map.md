@@ -29,7 +29,7 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 2b. ✅ Backgrounds: 20 built-in, your own pictures, song-name color.
 3. ✅ Path settings.
 4. ✅ Song settings on the map.
-5. ⬜ Playing a map.
+5. 🧪 Playing a map. Part 1 done (follow paths, quiet gaps, cut, dot, follow view, choose). Part 2 left: real crossfades.
 6. ⬜ Many maps.
 7. ⬜ Export / Import.
 8. ⬜ Tests + Windows build.
@@ -133,6 +133,20 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
   - Right-click → "Play with its map settings" or "Use the library settings again" (with Undo).
   - Click empty space and, if nothing from the map is playing, the panel goes back to the playing library song. Leaving the Map page does the same.
 - **History:** 2026-11-23 added. Before: map songs had a hidden copy of the settings that could not be changed.
+
+### Playing a map
+- **Now:** **Play map** (bottom left of the map) starts at the Start song 🚩. Double-click any song to play the map from there. The button turns into **Stop map**.
+  - The playing song has a pulsing ring. Its outgoing paths glow.
+  - When a song ends, Tonix picks one of its paths **by chance** (using the percents) and plays the song it leads to.
+  - **Choose instead of luck:** click a glowing path. It lights up white and will be taken next. Click it again to leave it to luck.
+  - **The glowing dot** travels along the path that was taken.
+  - **Join types:** Silence = the dot travels during the quiet gap, then the next song starts (pressing Play during the gap skips it). Cut = the next song starts right away. **Crossfade is not real yet: it plays like a Cut until part 2.**
+  - **Follow** (next to Stop map): the view glides to the playing song when it is near the edge or off screen. Click Follow to turn it off.
+  - A song with no paths out is an END: the music stops with a message.
+  - Paths to missing songs are skipped.
+  - Playing a normal library song stops the map.
+  - The map remembers which song it reached (used for "continue" in step 6).
+- **History:** 2026-11-23 part 1 added. 🔄 Before (step 4): double-clicking a map song played only that one song and stopped.
 
 ## How it works (simple words)
 - The map is a list of stops. Each stop remembers which song it is, where it sits (x, y) and its own effects.

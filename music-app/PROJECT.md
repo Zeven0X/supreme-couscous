@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: New look (Midnight glass) finished on every screen. Map step 3 (path settings) done too. Map step 4 (song settings on the map) done too. Next: Map step 5, playing a map. After the Map: the sound editor. Still open: rename leftovers (save folder is still called "Tune Forge Exports").
+- 2026-11-23: New look (Midnight glass) finished on every screen. Map step 3 (path settings) done too. Map step 4 (song settings on the map) done too. Map step 5 part 1 (playing a map) done too. Next: step 5 part 2, real crossfades. After the Map: the sound editor. Still open: rename leftovers (save folder is still called "Tune Forge Exports").
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -25,6 +25,7 @@
 | ⚙ Settings | 💤 Hidden, not planned yet |
 
 ## Recent changes
+- 2026-11-23: Map step 5 part 1: Play map follows the paths by chance, with quiet gaps, the glowing dot, Follow, and click-to-choose. Crossfade still plays like a cut.
 - 2026-11-23: Map step 4: each song on the map has its own sound settings, edited with the Sound panel; double-click plays it.
 - 2026-11-23: Map step 3: path settings panel (name, chance with lock and even split, join type, color, line style).
 - 2026-11-23: App look chosen: **Midnight glass** (dark blue frosted glass, silver highlights) with the improved layout. Not built yet.

@@ -132,7 +132,8 @@
       const c = geom(p, a, b);
       const w = 2.5 + (p.chance / 100) * 6; // thick line = likely path
       const sel = p.id === M.selPath;
-      const g = el('g', { class: `mpath${sel ? ' selected' : ''}`, 'data-id': p.id, style: `color:${p.color && p.color !== '#e3923a' ? p.color : 'var(--accent)'}` });
+      const live = M.play && p.from === M.play.stopId;
+      const g = el('g', { class: `mpath${sel ? ' selected' : ''}${live ? ' live' : ''}${M.play && (M.play.chosen === p.id || M.play.travelPath === p.id) ? ' chosen' : ''}`, 'data-id': p.id, style: `color:${p.color && p.color !== '#e3923a' ? p.color : 'var(--accent)'}` });
       const line = el('path', { d: c.d, class: 'line', 'stroke-width': w });
       if (p.style === 'dashed') line.setAttribute('stroke-dasharray', `${w * 2.4} ${w * 2}`);
       if (p.style === 'dotted') line.setAttribute('stroke-dasharray', `0.01 ${w * 2.1}`);
@@ -169,9 +170,9 @@
       const t = S.byId.get(s.trackId);
       const outs = pathsFrom(s.id).length;
       world.append(h('div', {
-        class: `mstop${s.id === M.selected ? ' selected' : ''}${s.id === M.map.startId ? ' start' : ''}${s.id === M.from ? ' from' : ''}${t ? '' : ' missing'}`,
+        class: `mstop${M.play && M.play.stopId === s.id ? ' playing' : ''}${s.id === M.selected ? ' selected' : ''}${s.id === M.map.startId ? ' start' : ''}${s.id === M.from ? ' from' : ''}${t ? '' : ' missing'}`,
         'data-id': s.id, style: { left: `${s.x - R}px`, top: `${s.y - R}px` },
-        title: t ? `${[t.title, t.artist].filter(Boolean).join(' — ')}\nDouble-click to play it with its map settings` : 'This song was removed from your library',
+        title: t ? `${[t.title, t.artist].filter(Boolean).join(' — ')}\nDouble-click to play the map from this song` : 'This song was removed from your library',
       },
       h('div', { class: 'mart' }, coverEl(t || { title: 'Missing song' })),
       h('div', { class: 'mname' }, t ? t.title : 'Missing song'),
@@ -193,8 +194,15 @@
     board.classList.toggle('path-mode', M.pathMode);
     const hint = $('#map-hint');
     const selP = !M.pathMode && M.map.paths.find((p) => p.id === M.selPath);
-    hint.hidden = !M.pathMode && !selP;
-    hint.textContent = selP ? 'Drag the dots to bend this path · double-click a dot to remove it'
+    const playHint = M.play && !M.pathMode && !selP && outsOf(M.play.stopId).length > 1;
+    hint.hidden = !M.pathMode && !selP && !playHint;
+    $('#map-play').classList.toggle('on', !!M.play);
+    $('#map-play span:last-child').textContent = M.play ? 'Stop map' : 'Play map';
+    $('#map-play .ic').innerHTML = M.play ? ICONS.stop : ICONS.play;
+    $('#map-follow').hidden = !M.play;
+    $('#map-follow').classList.toggle('on', !M.noFollow);
+    hint.textContent = playHint ? (M.play.chosen ? 'Next song chosen ✓ · click the path again to leave it to luck' : 'Click a glowing path to choose the next song, or leave it to luck')
+      : selP ? 'Drag the dots to bend this path · double-click a dot to remove it'
       : !M.from ? 'Path: click a song, or press on it and draw your path to another song'
         : M.draw ? 'Keep drawing to the song it goes to, then let go'
           : 'Now click the song it goes to (click the same song for a loop) · Esc to cancel';
@@ -322,6 +330,110 @@
     for (const x of q('style').children) x.classList.toggle('on', x.dataset.k === (p.style || 'solid'));
   }
 
+
+  // ---------- playing the map ----------
+  // M.play = { stopId, chosen (path id the listener clicked), gap (timer while waiting in a quiet gap), token }
+  const playable = (p) => { const s = stopById(p.to); return !!(s && S.byId.get(s.trackId)); };
+  const outsOf = (id) => pathsFrom(id).filter(playable);
+  function redraw() { if (S.view === 'map') render(); }
+  function startMap(stopId) {
+    const s = stopById(stopId || M.map.startId) || M.map.stops[0];
+    if (!s || !S.byId.get(s.trackId)) { toast('Add a song to the map first, then press Play map.'); return; }
+    clearTimeout(M.play && M.play.gap);
+    M.play = { stopId: s.id, chosen: null, gap: null, token: (M.play ? M.play.token : 0) + 1 };
+    M.map.progress = { stopId: s.id };
+    save();
+    playStop(s);
+    redraw();
+    follow(s);
+  }
+  function stopPlay() {
+    if (!M.play) return;
+    clearTimeout(M.play.gap);
+    M.play = null;
+    $('#map-dot').hidden = true;
+    redraw();
+  }
+  // The playing song reached its end: pick a path (the listener's choice, or luck) and travel it.
+  function onEnded() {
+    if (!M.play) return false;
+    const outs = outsOf(M.play.stopId);
+    if (!outs.length) {
+      toast('The map reached an END. The music stops here.');
+      stopPlay();
+      setPlayIcon(false);
+      return true;
+    }
+    const p = outs.find((x) => x.id === M.play.chosen) || TFChance.pick(outs);
+    const blend = p.blend || { type: 'crossfade', secs: 3 };
+    const token = M.play.token;
+    const go = () => { if (M.play && M.play.token === token) { M.play.gap = null; startMap(p.to); } };
+    if (blend.type === 'silence' && blend.secs > 0) {
+      // a quiet gap: the dot travels during it, then the next song starts
+      travel(p, blend.secs * 1000);
+      M.play.gap = setTimeout(go, blend.secs * 1000);
+      M.play.gapGo = go;
+      setPlayIcon(true);
+    } else {
+      travel(p, 700);
+      go();
+    }
+    return true;
+  }
+  function skipGap() {
+    if (!M.play || !M.play.gap) return false;
+    clearTimeout(M.play.gap);
+    M.play.gapGo();
+    return true;
+  }
+  // the glowing dot runs along a path
+  function travel(p, ms) {
+    const dot = $('#map-dot');
+    const t0 = performance.now();
+    const token = M.play.token;
+    M.play.travelPath = p.id;
+    const step = (now) => {
+      const f = Math.min(1, (now - t0) / ms);
+      const line = S.view === 'map' && world.querySelector(`.mpath[data-id="${p.id}"] .line`);
+      if (line) {
+        const q = line.getPointAtLength(line.getTotalLength() * f);
+        const v = M.map.view;
+        dot.hidden = false;
+        dot.style.transform = `translate(${q.x * v.zoom + v.x}px, ${q.y * v.zoom + v.y}px)`;
+        dot.style.color = getComputedStyle(line).stroke;
+      } else dot.hidden = true;
+      if (f < 1 && M.play) requestAnimationFrame(step);
+      else { dot.hidden = true; if (M.play && M.play.travelPath === p.id && M.play.token !== token) M.play.travelPath = null; }
+    };
+    requestAnimationFrame(step);
+    redraw();
+  }
+  // keep the playing song in view (glide there if it is near the edge or off screen)
+  function follow(s) {
+    if (M.noFollow || S.view !== 'map' || drag) return;
+    const v = M.map.view, W = board.clientWidth, H = board.clientHeight;
+    const sx = s.x * v.zoom + v.x, sy = s.y * v.zoom + v.y;
+    const pad = 150;
+    if (sx > pad && sx < W - pad && sy > pad && sy < H - pad - 40) return;
+    const fromX = v.x, fromY = v.y, toX = W / 2 - s.x * v.zoom, toY = H / 2 - s.y * v.zoom;
+    const t0 = performance.now();
+    const step = (now) => {
+      if (drag) return;
+      const f = Math.min(1, (now - t0) / 600), e = 1 - (1 - f) ** 3;
+      M.map.view.x = fromX + (toX - fromX) * e;
+      M.map.view.y = fromY + (toY - fromY) * e;
+      applyView();
+      if (f < 1) requestAnimationFrame(step); else save();
+    };
+    requestAnimationFrame(step);
+  }
+  function choose(pathId) {
+    M.play.chosen = M.play.chosen === pathId ? null : pathId;
+    render();
+  }
+  $('#map-play').addEventListener('click', () => { if (M.play) { stopPlay(); pause(); } else startMap(); });
+  $('#map-follow').addEventListener('click', () => { M.noFollow = !M.noFollow; render(); });
+
   // ---------- paths ----------
   function newId() { return Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, '0')).join(''); }
   function addPath(fromId, toId, pts) {
@@ -390,6 +502,10 @@
       } else { addPath(M.from, id); M.from = null; render(); }
       e.preventDefault();
       return;
+    }
+    if (pathEl && !M.pathMode && M.play && !e.target.closest('.handle')) {
+      const lp = M.map.paths.find((x) => x.id === pathEl.dataset.id);
+      if (lp && lp.from === M.play.stopId && playable(lp) && M.selPath !== lp.id) { choose(lp.id); e.preventDefault(); return; }
     }
     if (pathEl && !M.pathMode) { selectPath(pathEl.dataset.id); e.preventDefault(); return; }
     if (stopEl) {
@@ -481,7 +597,7 @@
       e.preventDefault();
       select(stopEl.dataset.id);
       menu(e.clientX, e.clientY, [
-        ['Play with its map settings', () => playStop(stopById(stopEl.dataset.id))],
+        ['Play the map from here', () => startMap(stopEl.dataset.id)],
         ['Use the library settings again', () => {
           const s = stopById(stopEl.dataset.id), t = s && S.byId.get(s.trackId);
           if (!t) return;
@@ -503,7 +619,7 @@
   });
   board.addEventListener('dblclick', (e) => {
     const stopEl = e.target.closest('.mstop');
-    if (stopEl && !M.pathMode) { playStop(stopById(stopEl.dataset.id)); return; }
+    if (stopEl && !M.pathMode) { startMap(stopEl.dataset.id); return; }
     const handle = e.target.closest('.handle:not(.ghost)');
     const p = handle && M.map.paths.find((x) => x.id === M.selPath);
     if (!p || !p.pts) return;
@@ -693,5 +809,5 @@
   for (const [sel, name] of [['#map-zoom-in', 'zoomIn'], ['#map-zoom-out', 'zoomOut']]) $(sel).innerHTML = ICONS[name];
   for (const n of $$('#map-toolbar .ic')) n.innerHTML = ICONS[n.dataset.icon];
 
-  window.TFMap = { show, get map() { return M.map; } };
+  window.TFMap = { show, onEnded, stopPlay, skipGap, get map() { return M.map; }, get playing() { return M.play; } };
 })();
