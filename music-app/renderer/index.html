@@ -3,11 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
-  <title>Tune Forge</title>
+  <title>Tonix</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="midnight.css">
 </head>
 <body>
   <header id="topbar">
+    <div class="brand"><div class="logo" id="logo"></div><span>Tonix</span></div>
     <nav id="views">
       <button class="nav" data-view="library" title="Library and search (Ctrl+1)"></button>
       <button class="nav" data-view="map" title="Map (Ctrl+2)"></button>
@@ -15,18 +17,25 @@
       <button class="nav" data-view="tools" title="Tools: convert to MP3 and log (Ctrl+3)"></button>
       <button class="nav" data-view="settings" title="Settings (Ctrl+4)"></button>
     </nav>
+    <div class="top-search"><span class="ts-ic" id="ts-ic"></span><input id="search" placeholder="Search songs, artists, albums…" spellcheck="false"><kbd>Ctrl F</kbd></div>
     <div id="job" hidden><span id="job-label"></span><div class="bar"><div id="job-fill"></div></div></div>
   </header>
 
   <main id="main">
     <aside id="left">
-      <div class="next-row">
-        <span class="next-label">Next</span>
-        <div id="next-thumbs"></div>
-      </div>
-      <div id="now-wrap"><div id="now-cover"></div></div>
-      <div id="now-title"></div>
-      <div id="fx-cards"></div>
+      <section class="panel now">
+        <div id="now-cover"></div>
+        <div class="np-meta">
+          <div class="eyebrow">Now playing</div>
+          <div id="now-title"></div>
+          <div class="eyebrow dim">Up next</div>
+          <div id="next-thumbs"></div>
+        </div>
+      </section>
+      <section class="panel fx-panel">
+        <div class="panel-h"><span>Sound</span><button class="chip" id="fx-reset-all" title="Put every slider back to normal">Reset all</button></div>
+        <div id="fx-cards"></div>
+      </section>
     </aside>
 
     <section id="center">
@@ -154,7 +163,6 @@
     </section>
 
     <aside id="right">
-      <input id="search" placeholder="Search" spellcheck="false">
       <div class="filters">
         <label>Artists<input id="f-artist" list="dl-artist" spellcheck="false"></label>
         <label>Date<input id="f-date" list="dl-date" spellcheck="false"></label>

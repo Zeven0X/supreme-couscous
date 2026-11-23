@@ -209,7 +209,7 @@ const FX = [
 ];
 const fmtVal = (v, dec) => (dec === 2 ? Number(v).toFixed(2) : String(+Number(v).toFixed(dec)));
 function stepLabel(f, s, sign) {
-  return f.unit === 's' ? `${sign}${s.toFixed(2)}` : `${sign}${s}%`;
+  return f.unit === 's' ? `${sign}${s.toFixed(2)}` : `${sign}${s}`;
 }
 function buildFxCards() {
   const wrap = $('#fx-cards');
@@ -219,14 +219,16 @@ function buildFxCards() {
     const input = h('input', { class: 'fx-val', 'data-key': f.key, spellcheck: 'false', title: `Type an exact value (${lo}–${hi} ${f.unit === 's' ? 'seconds' : '%'}) and press Enter` });
     const range = h('input', { type: 'range', min: lo, max: hi, step: f.unit === 's' ? 0.01 : 0.001, 'data-key': f.key, style: { '--c': f.color } });
     const btns = h('div', { class: 'fx-btns' },
-      ...f.steps.map((s) => h('button', { title: `${stepLabel(f, s, '−')}`, onclick: () => nudge(f, -s) }, stepLabel(f, s, '-'))),
-      h('button', { title: 'Back to default', onclick: () => setFx(f.key, S.defaults[f.key]) }, 'Reset'),
+      ...f.steps.map((s) => h('button', { title: `${stepLabel(f, s, '−')}`, onclick: () => nudge(f, -s) }, stepLabel(f, s, '−'))),
+      h('button', { class: 'rs', title: 'Back to normal', onclick: () => setFx(f.key, S.defaults[f.key]), html: ICONS.reset }),
       ...[...f.steps].reverse().map((s) => h('button', { title: stepLabel(f, s, '+'), onclick: () => nudge(f, s) }, stepLabel(f, s, '+'))),
     );
-    const card = h('div', { class: `fx${f.wide ? ' wide' : ''}`, style: { '--c': f.color }, 'data-key': f.key },
-      h('div', { class: 'fx-head' }, h('span', { class: 'fx-label' }, f.label), f.key === 'pitch' ? h('span', { class: 'fx-semis' }) : null, input, h('span', { class: 'fx-unit' }, f.unit === 's' ? 's' : '%')),
+    const card = h('div', { class: 'fx', style: { '--c': f.color }, 'data-key': f.key },
+      h('div', { class: 'fx-head' }, h('span', { class: 'fx-dot' }), h('span', { class: 'fx-label' }, f.label),
+        f.key === 'pitch' ? h('span', { class: 'fx-semis' }) : null,
+        f.mute ? h('button', { class: 'mini', id: 'mute', onclick: toggleMute, title: 'Mute / unmute' }, 'Mute') : null,
+        h('label', { class: 'fx-box', title: input.title }, input, h('span', { class: 'fx-unit' }, f.unit === 's' ? 's' : '%'))),
       range, btns,
-      f.mute ? h('div', { class: 'fx-extra' }, h('button', { class: 'mini', id: 'mute', onclick: toggleMute }, 'Mute')) : null,
     );
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { commitInput(input, f); input.blur(); }
@@ -238,6 +240,13 @@ function buildFxCards() {
     wrap.append(card);
   }
 }
+function resetAllFx() {
+  const t = cur();
+  if (!t) return;
+  for (const f of FX) setFx(f.key, S.defaults[f.key]);
+  toast('All sound settings are back to normal');
+}
+$('#fx-reset-all').addEventListener('click', resetAllFx);
 function commitInput(input, f) {
   const raw = input.value.replace(',', '.').replace(/[^\d.+-]/g, '');
   const v = parseFloat(raw);
@@ -290,19 +299,26 @@ function renderNow() {
   const c = $('#now-cover');
   c.innerHTML = '';
   c.append(coverEl(t));
-  $('#now-title').innerHTML = t ? `${esc(t.title)}${t.artist ? ` <span class="artist">— ${esc(t.artist)}</span>` : ''}` : '<span class="artist">Nothing playing</span>';
-  document.title = t ? `${t.title} — Tune Forge` : 'Tune Forge';
+  $('#now-title').innerHTML = t
+    ? `<div class="np-title">${esc(t.title)}</div><div class="np-artist">${esc([t.artist || 'Unknown artist', t.genre].filter(Boolean).join(' · '))}</div>`
+    : '<div class="np-title dim">Nothing playing</div><div class="np-artist">Double-click a song to play it</div>';
+  document.title = t ? `${t.title} — Tonix` : 'Tonix';
 }
 function renderNext() {
   const box = $('#next-thumbs');
   box.innerHTML = '';
-  for (const t of upNext().slice(0, 4)) {
+  const next = upNext();
+  for (const t of next.slice(0, 3)) {
     box.append(h('div', { class: 'thumb', title: `${t.title}${t.artist ? ` — ${t.artist}` : ''}`, onclick: () => loadTrack(t.id, { autoplay: true }) }, coverEl(t)));
   }
+  if (next.length > 3) box.append(h('div', { class: 'thumb more', title: next.slice(3).map((t) => t.title).join(', ') }, `+${next.length - 3}`));
+  if (!next.length) box.append(h('span', { class: 'none' }, 'Nothing after this song'));
 }
 
 // ---------------------------------------------------------------- waveform
 const wave = $('#wave');
+const css = (n, d) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || d;
+const WAVE_DONE = css('--accent', '#e3923a'), WAVE_TODO = 'rgba(255,255,255,.22)';
 function drawWave() {
   const box = $('#wave-box');
   const dpr = window.devicePixelRatio || 1;
@@ -336,7 +352,7 @@ function drawWave() {
       v = Math.max(0.04, v);
     }
     const hh = v * (H * 0.86);
-    g.fillStyle = x / W < pos ? '#e3923a' : '#7a7a7a';
+    g.fillStyle = x / W < pos ? WAVE_DONE : WAVE_TODO;
     g.fillRect(x, mid - hh / 2, bar, hh);
   }
   g.fillStyle = '#fff';
@@ -876,7 +892,10 @@ tf.onLog(({ level, msg, time }) => addLog(level, msg, time));
 
 // ---------------------------------------------------------------- start
 (async function init() {
-  for (const b of $$('.nav')) b.innerHTML = ICONS[{ library: 'search', map: 'map', editor: 'page', tools: 'caliper', settings: 'gear' }[b.dataset.view]];
+  const NAV = { library: ['search', 'Library'], map: ['map', 'Map'], editor: ['page', 'Details'], tools: ['caliper', 'Edit'], settings: ['gear', 'Settings'] };
+  for (const b of $$('.nav')) { const [ic, label] = NAV[b.dataset.view]; b.innerHTML = `<span class="nav-ic">${ICONS[ic]}</span><span class="nav-l">${label}</span>`; }
+  $('#logo').innerHTML = ICONS.note;
+  $('#ts-ic').innerHTML = ICONS.search;
   const icon = (sel, name) => { $(sel).innerHTML = ICONS[name]; };
   icon('#btn-upload-file', 'cloudUp'); icon('#btn-upload-folder', 'folderUp'); icon('#btn-save', 'save'); icon('#btn-save-many', 'saveMany');
   icon('#zoom-in', 'zoomIn'); icon('#zoom-out', 'zoomOut');

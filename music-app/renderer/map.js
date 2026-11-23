@@ -132,7 +132,7 @@
       const c = geom(p, a, b);
       const w = 2.5 + (p.chance / 100) * 6; // thick line = likely path
       const sel = p.id === M.selPath;
-      const g = el('g', { class: `mpath${sel ? ' selected' : ''}`, 'data-id': p.id, style: `color:${p.color || '#e3923a'}` });
+      const g = el('g', { class: `mpath${sel ? ' selected' : ''}`, 'data-id': p.id, style: `color:${p.color && p.color !== '#e3923a' ? p.color : 'var(--accent)'}` });
       const line = el('path', { d: c.d, class: 'line', 'stroke-width': w });
       g.append(el('path', { d: c.d, class: 'hit' }), line, el('polygon', { points: arrowHead(c.end, c.dir, 5 + w * 0.6), class: 'head' }));
       svg.append(g);
@@ -205,7 +205,7 @@
       if (pts && pts.length) { old.pts = pts; save(); toast('Path redrawn'); } else toast('These songs are already connected that way. Click the path to select it.');
       return;
     }
-    const p = { id: newId(), from: fromId, to: toId, chance: 0, locked: false, blend: { type: 'crossfade', secs: 3 }, color: '#e3923a', style: 'solid', name: '' };
+    const p = { id: newId(), from: fromId, to: toId, chance: 0, locked: false, blend: { type: 'crossfade', secs: 3 }, color: null, style: 'solid', name: '' };
     if (pts && pts.length) p.pts = pts;
     M.map.paths.push(p);
     TFChance.evenSplit(pathsFrom(fromId)); // every path out of this song gets the same share

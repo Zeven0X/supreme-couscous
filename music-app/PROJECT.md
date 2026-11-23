@@ -26,6 +26,7 @@
 
 ## Recent changes
 - 2026-11-23: App look chosen: **Midnight glass** (dark blue frosted glass, silver highlights) with the improved layout. Not built yet.
+- 2026-11-23: Midnight glass part 1 built: new colors and glass panels, top bar (logo, Library/Map buttons with words, search box), Now playing card, Sound panel (one tidy list, ↺ reset in the middle of each row, Reset all). Waveform and map paths now silver. Next: part 2, the Library page.
 - 2026-11-23: Sound editor designed (5 tabs, smart connect, 3 save modes).
 - 2026-11-23: Map backgrounds: 20 built-in, your own pictures (tiles), song-name color.
 - 2026-11-23: Paths can be drawn by hand and bent with handles.
