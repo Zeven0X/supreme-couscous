@@ -10,26 +10,16 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-test-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 // ---------- pure helpers ----------
-test('atempo chain keeps every step within 0.5..2 and multiplies to the target', () => {
-  for (const f of [0.25, 0.3, 0.5, 0.99, 1.01001, 2, 3.7, 4]) {
-    const steps = ff.atempoChain(f).map((s) => +s.split('=')[1]);
-    for (const s of steps) assert.ok(s >= 0.5 && s <= 2, `${s} out of range`);
-    const prod = steps.reduce((a, b) => a * b, 1);
-    assert.ok(Math.abs(prod - f) < 1e-6, `${f} -> ${prod}`);
-  }
-  assert.deepStrictEqual(ff.atempoChain(1), []);
-});
-
 test('limits are clamped (volume max 500%, fades 0..15 s)', () => {
   const fx = ff.normalizeFx({ volume: 900, fadeIn: 20, fadeOut: -1, speed: 1, pitch: 999 });
-  assert.deepStrictEqual(fx, { speed: 25, pitch: 200, volume: 500, fadeIn: 15, fadeOut: 0 });
+  assert.deepStrictEqual(fx, { speed: 25, pitch: 200, volume: 500, fadeIn: 15, fadeOut: 0, natural: true });
+  assert.strictEqual(ff.normalizeFx({ natural: false }).natural, false);
 });
 
 test('filter: speed only changes tempo, output length = length / speed', () => {
   const { filter, outDuration } = ff.buildFilter({ speed: 200 }, 10);
   assert.strictEqual(outDuration, 5);
-  assert.match(filter, /atempo=2\.0/);
-  assert.doesNotMatch(filter, /asetrate/);
+  assert.match(filter, /rubberband=tempo=2\.000000:pitch=1\.000000/);
 });
 
 test('filter: fade out starts at the end of the sped-up song', () => {
@@ -38,10 +28,11 @@ test('filter: fade out starts at the end of the sped-up song', () => {
   assert.match(filter, /afade=t=out:st=3\.500:d=1\.500/);
 });
 
-test('filter: 1.001% pitch step stays precise', () => {
+test('filter: pitch uses the studio tool, Natural voice keeps the voice shape', () => {
   const { filter } = ff.buildFilter({ pitch: 101.001 }, 10);
-  const rate = +filter.match(/asetrate=(\d+)/)[1];
-  assert.ok(Math.abs(rate / 192000 - 1.01001) < 0.000005);
+  assert.match(filter, /rubberband=tempo=1\.000000:pitch=1\.010010:formant=preserved/);
+  assert.match(ff.buildFilter({ pitch: 150, natural: false }, 10).filter, /formant=shifted/);
+  assert.doesNotMatch(ff.buildFilter({ volume: 80 }, 10).filter, /rubberband/); // nothing to stretch: untouched
 });
 
 test('ffmetadata parsing handles escapes and tag names', () => {
@@ -87,6 +78,21 @@ test('export: speed 50% keeps the pitch', async () => {
   const s = await decode(dest);
   assert.ok(Math.abs(s.length / 44100 - 6) < 0.08);
   assert.ok(Math.abs(freqOf(s) - 500) < 6, `frequency ${freqOf(s)}`);
+});
+
+test('listening copy: same length and timing, pitch moves, a part starts where asked', async () => {
+  const src = path.join(tmp, 'tone5.wav');
+  await makeTone(src, 400, 5);
+  const full = path.join(tmp, 'p-full.flac');
+  await ff.renderPitched({ src, dest: full, pitch: 1.5, natural: true, duration: 5 });
+  const s = await decode(full);
+  assert.ok(Math.abs(s.length / 44100 - 5) < 0.03, `length ${s.length / 44100}`);
+  assert.ok(Math.abs(freqOf(s) - 600) < 6, `frequency ${freqOf(s)}`);
+  const part = path.join(tmp, 'p-part.flac');
+  await ff.renderPitched({ src, dest: part, pitch: 0.75, natural: false, start: 1, len: 2, duration: 5 });
+  const p = await decode(part);
+  assert.ok(Math.abs(p.length / 44100 - 2) < 0.03, `part length ${p.length / 44100}`);
+  assert.ok(Math.abs(freqOf(p) - 300) < 5, `part frequency ${freqOf(p)}`);
 });
 
 test('export: volume 50% halves the level, fades start/end silent', async () => {

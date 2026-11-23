@@ -2,7 +2,7 @@
 
 ## Quick facts
 - Offline music app for Windows. Built with Electron (a way to make desktop apps with web code) + ffmpeg (the sound engine).
-- Folder: `music-app\`. Name: **Tonix** (renamed from "Tune Forge" 2026-11-23, version 1.1.0).
+- Folder: `music-app\`. Name: **Tonix** (renamed from "Tune Forge" 2026-11-23). Version 1.2.0 (studio pitch).
 - Updates: Claude installs them on the user's PC. Old installer goes to `Documents\Tonix\Old versions` (not built yet).
 
 ## How to run
@@ -10,12 +10,13 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: Map step 8 done: renamed to Tonix (version 1.1.0), final check on a brand-new Tonix passed 21/21, Windows build started on GitHub. Next: try it on the PC, then the sound editor.
+- 2026-11-23: You tried Tonix and found two problems: bad pitch sound, and no Edit menu (it is designed but not built yet). **Pitch fixed** with a studio pitch tool, for listening and saved files, plus a Natural voice switch. Next: you listen to it on your PC, then we build the sound editor.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
 2. [Settings and keyboard shortcuts](docs/settings.md): 9 sections, 7 looks, 46 shortcuts you can change, map undo/redo.
-3. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
+3. [Sound panel](docs/sound-panel.md): pitch (studio quality, Natural voice), speed, volume, fades.
+4. [Sound editor](docs/sound-editor.md): Trim, Split, Effects, Loop, Layers (designed, not built).
 
 ## Top bar buttons
 | Button | Status |
@@ -26,6 +27,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: **Pitch fixed.** A professional pitch tool (Rubber Band) now does pitch and speed for saved files, and makes a clean pitched copy for listening (first 20 s ready in under a second, whole song a few seconds later, kept for next time). New **Natural voice** switch on the Pitch card. Settings → Library shows the space the copies use, with Clear. Checks: 44 automatic tests, pitch check 18/18, final check 21/21.
 - 2026-11-23: Renamed everything to Tonix (1.1.0). Undo now keeps quick actions as separate steps. Final check script: `test/e2e/final-check.js`.
 - 2026-11-23: Settings page (9 sections, 7 looks), keyboard shortcuts for everything (changeable, cheat sheet with ? / F1), map undo/redo (Ctrl+Z / Ctrl+Y), number keys choose the next map path. Fixed a start-up timing bug.
 - 2026-11-23: Map step 7: export a map as one .tonixmap file (songs, covers, pictures inside) and import it as your own copy.

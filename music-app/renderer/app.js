@@ -1,5 +1,5 @@
 'use strict';
-/* global ICONS, tf */
+/* global ICONS, tf, TFStudio */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 function h(tag, attrs = {}, ...kids) {
@@ -111,14 +111,17 @@ function ensureEngine() {
     for (const d of decks) {
       const src = actx.createMediaElementSource(d.el);
       d.gain = actx.createGain();
+      d.orig = actx.createGain(); // the original song; silenced while a studio-pitched copy plays (studio.js)
       if (pitchOk) {
         d.shifter = new AudioWorkletNode(actx, 'pitch-shifter', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
-        src.connect(d.shifter).connect(d.gain);
-      } else src.connect(d.gain);
+        src.connect(d.shifter).connect(d.orig);
+      } else src.connect(d.orig);
+      d.orig.connect(d.gain);
       d.gain.connect(actx.destination);
     }
     shifter = deck.shifter || null;
     gainNode = deck.gain;
+    TFStudio.attach(actx, decks, { main: () => deck, onStatus: renderStudio, onFallback: () => applyFx(), log: addLog });
     applyFx();
   })();
   return engine;
@@ -161,8 +164,11 @@ function applyFx() {
   audio.defaultPlaybackRate = fx.speed / 100;
   audio.playbackRate = fx.speed / 100;
   audio.preservesPitch = true;
-  if (shifter) shifter.parameters.get('pitch').setValueAtTime(fx.pitch / 100, actx.currentTime);
+  TFStudio.update(deck, S.currentId, fx);
+  // the old live shifter is only a backup, used if the studio tool cannot run
+  if (shifter) shifter.parameters.get('pitch').setValueAtTime(TFStudio.fallback(deck) ? fx.pitch / 100 : 1, actx.currentTime);
   updateGain(true);
+  renderStudio();
 }
 function updateGain(now) {
   if (!gainNode) return;
@@ -180,6 +186,7 @@ async function play() {
   if (!cur()) { const first = visibleTracks()[0]; if (first) return playTrack(first.id); return; }
   await ensureEngine();
   if (actx.state === 'suspended') await actx.resume();
+  await TFStudio.ready(deck); // a changed pitch: wait (about a second) for the clean studio copy
   updateGain(true);
   try { await audio.play(); } catch (e) { if (e.name !== 'AbortError') toast(`Can't play this file: ${e.message}`, { type: 'error' }); }
 }
@@ -207,7 +214,10 @@ function loadTrack(id, { autoplay = false, keepQueue = true, stop = null } = {})
   if (!keepQueue || !S.queue.includes(id)) S.queue = makeQueue(id);
   audio.src = t.mediaUrl;
   audio.load();
+  TFStudio.update(deck, id, liveFx(), { fresh: true });
   applyFx();
+  const n = upNext()[0];
+  if (n && !stop) TFStudio.prefetch(n.id, n.fx);
   openTab(id, false);
   S.peaks = null;
   tf.peaks(id).then((p) => { if (S.currentId === id) { S.peaks = p; drawWave(); } }).catch((e) => addLog('warn', `Waveform: ${e.message}`));
@@ -311,6 +321,10 @@ function buildFxCards() {
         f.mute ? h('button', { class: 'mini', id: 'mute', onclick: toggleMute, title: 'Mute / unmute' }, 'Mute') : null,
         h('label', { class: 'fx-box', title: input.title }, input, h('span', { class: 'fx-unit' }, f.unit === 's' ? 's' : '%'))),
       range, btns,
+      f.key === 'pitch' ? h('div', { class: 'fx-opt' },
+        h('button', { class: 'fx-switch', id: 'fx-natural', role: 'switch', title: 'On: singers keep a human voice. Off: the classic chipmunk (higher) or deep (lower) voice.', onclick: () => setNatural(!(editFx() && editFx().natural !== false)) },
+          h('span', { class: 'knob' }), 'Natural voice'),
+        h('span', { class: 'fx-studio', id: 'fx-studio' })) : null,
     );
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { commitInput(input, f); input.blur(); }
@@ -338,6 +352,7 @@ $('#master').addEventListener('input', (e) => setMaster(e.target.value));
 function resetAllFx() {
   if (!editFx()) return;
   for (const f of FX) setFx(f.key, S.defaults[f.key]);
+  setNatural(true);
   toast('All sound settings are back to normal');
 }
 $('#fx-reset-all').addEventListener('click', resetAllFx);
@@ -368,6 +383,26 @@ function setFx(key, value, { fromSlider = false } = {}) {
   const id = t.id, fx = { ...t.fx };
   saveFxTimer = setTimeout(() => tf.updateTrack(id, { fx }).catch((e) => addLog('error', e.message)), 250);
 }
+function setNatural(on) {
+  const target = editFx();
+  if (!target) return;
+  target.natural = !!on;
+  applyFx();
+  renderFx();
+  if (editTarget()) { editTarget().save(); return; }
+  const t = cur();
+  clearTimeout(saveFxTimer);
+  const id = t.id, fx = { ...t.fx };
+  saveFxTimer = setTimeout(() => tf.updateTrack(id, { fx }).catch((e) => addLog('error', e.message)), 250);
+}
+// Pitch card: is the clean studio copy playing yet?
+function renderStudio() {
+  const el = $('#fx-studio');
+  if (!el) return;
+  const st = editFx() === liveFx() ? TFStudio.status(deck) : 'off';
+  el.dataset.s = st;
+  el.textContent = { preparing: 'Preparing clean pitch…', ready: 'Studio quality', fallback: 'Basic preview (studio tool failed)' }[st] || '';
+}
 function renderFx(skipSliderKey) {
   const fx = editFx() || S.defaults;
   $('#fx-cards').classList.toggle('disabled', !editFx());
@@ -387,6 +422,10 @@ function renderFx(skipSliderKey) {
     }
   }
   $('#mute').classList.toggle('on', S.muted);
+  const nat = $('#fx-natural');
+  nat.classList.toggle('on', fx.natural !== false);
+  nat.setAttribute('aria-checked', String(fx.natural !== false));
+  renderStudio();
 }
 function toggleMute() { S.muted = !S.muted; updateGain(true); renderFx(); }
 
@@ -738,7 +777,7 @@ function fxSummary(fx) {
   const d = S.defaults;
   const p = [];
   if (fx.speed !== d.speed) p.push(`speed ${fx.speed}%`);
-  if (fx.pitch !== d.pitch) p.push(`pitch ${fx.pitch}%`);
+  if (fx.pitch !== d.pitch) p.push(`pitch ${fx.pitch}%${fx.natural === false ? ' (classic voice)' : ''}`);
   if (fx.volume !== d.volume) p.push(`volume ${fx.volume}%`);
   if (fx.fadeIn) p.push(`fade in ${fx.fadeIn.toFixed(2)} s`);
   if (fx.fadeOut) p.push(`fade out ${fx.fadeOut.toFixed(2)} s`);

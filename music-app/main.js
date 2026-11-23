@@ -8,7 +8,9 @@ const crypto = require('crypto');
 const ff = require('./lib/ffmpeg');
 const { Library } = require('./lib/library');
 const { MapStore } = require('./lib/maps');
+const { Studio } = require('./lib/studio');
 let maps = null;
+let studio = null;
 
 app.setName('Tonix');
 const DATA_DIR = process.env.TONIX_DATA || process.env.TUNEFORGE_DATA; // for testing only
@@ -71,6 +73,7 @@ function startServer() {
       const t = lib.byId(parts[2]);
       if (parts[1] === 'media' && t) return serveFile(req, res, t.mediaPath);
       if (parts[1] === 'mapasset' && /^[a-f0-9]{12}-[a-f0-9]{8}\.png$/.test(parts[2] || '')) return serveFile(req, res, path.join(maps.assetDir, parts[2]));
+      if (parts[1] === 'studio' && studio) { const f = studio.fileFor(parts[2] || ''); if (f) return serveFile(req, res, f); }
       if (parts[1] === 'cover' && t && t.cover) return serveFile(req, res, lib.coverPath(t));
       res.writeHead(404); res.end();
     });
@@ -442,6 +445,21 @@ function registerIpc() {
     fs.writeFileSync(cache, JSON.stringify(p));
     return p;
   });
+  // Studio pitch: a pitched copy of a song (or a part of it) to listen to. null = replaced by a newer request.
+  handle('studio-render', async (id, opts = {}) => {
+    const t = lib.byId(id);
+    if (!t || !fs.existsSync(t.mediaPath)) throw new Error('Song file not found');
+    try {
+      const r = await studio.render({ file: t.mediaPath, duration: t.duration, pitch: opts.pitch, natural: opts.natural !== false, start: opts.start, len: opts.len, group: opts.group });
+      return { url: `${baseUrl}/studio/${r.name}`, start: r.start, end: r.len ? r.start + r.len : 0 };
+    } catch (e) {
+      if (e.cancelled) return null;
+      throw e;
+    }
+  });
+  handle('studio-cancel', (group) => { studio.cancel(group); return true; });
+  handle('studio-size', () => studio.size());
+  handle('studio-clear', () => { studio.clear(); return true; });
   handle('export-track', (id, opts) => exportTrack(id, opts));
   handle('export-many', (ids, opts) => exportMany(ids, opts));
   handle('convert-files', async (paths, outDir) => {
@@ -523,6 +541,7 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   lib = new Library(path.join(app.getPath('userData'), 'library'));
   maps = new MapStore(path.join(lib.dataDir, 'maps'));
+  studio = new Studio(path.join(lib.dataDir, 'studio-pitch'), ff, log);
   await startServer();
   registerIpc();
   await createWindow();

@@ -1,5 +1,5 @@
 'use strict';
-/* global S, h, $, $$, coverEl, ICONS, modal, guard, toast, tf, TFChance, TFBackgrounds */
+/* global S, h, $, $$, coverEl, ICONS, modal, guard, toast, tf, TFChance, TFBackgrounds, TFStudio */
 // The Map page: songs on a board, connected by paths. (Path settings and playing come in later steps.)
 (function () {
   const M = {
@@ -254,7 +254,7 @@
   }
   function select(id) { M.selected = id; M.selPath = null; render(); }
   // The Sound panel on the left edits the selected song's own map copy of the settings.
-  const sameFx = (a, b) => ['speed', 'pitch', 'volume', 'fadeIn', 'fadeOut'].every((k) => (a[k] || 0) === (b[k] || 0));
+  const sameFx = (a, b) => ['speed', 'pitch', 'volume', 'fadeIn', 'fadeOut'].every((k) => (a[k] || 0) === (b[k] || 0)) && (a.natural !== false) === (b.natural !== false);
   function syncEdit() {
     const s = !M.pathMode && stopById(M.selected);
     const t = s && S.byId.get(s.trackId);
@@ -566,6 +566,10 @@
     const outs = outsOf(M.play.stopId);
     if (!outs.length) return;
     if (!M.play.picked && left <= 15.5) M.play.picked = TFChance.pick(outs).id;
+    if (!M.play.pre && left <= 30) { // get the clean pitch of the songs that may come next ready in time
+      M.play.pre = true;
+      for (const o of outs) { const s = stopById(o.to); const t = s && S.byId.get(s.trackId); if (t) TFStudio.prefetch(t.id, s.fx || t.fx); }
+    }
     const p = outs.find((x) => x.id === M.play.chosen) || outs.find((x) => x.id === M.play.picked);
     const b = p && (p.blend || { type: 'crossfade', secs: 3 });
     if (!b || b.type !== 'crossfade' || !(b.secs > 0)) return;

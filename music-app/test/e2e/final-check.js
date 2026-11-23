@@ -1,5 +1,6 @@
 // Final check: a brand-new Tonix, used from start to finish.
-const {_electron}=require('playwright');const SP=process.env.SP; // folder with test media in SP/media (made by the developer)const fs=require('fs'),path=require('path');
+const {_electron}=require('playwright');const SP=process.env.SP; // folder with test media in SP/media (made by the developer)
+const fs=require('fs'),path=require('path');
 const DATA=SP+'/userdata-final';fs.rmSync(DATA,{recursive:true,force:true});const OUT=SP+'/final-exports';fs.rmSync(OUT,{recursive:true,force:true});fs.mkdirSync(OUT);
 const launch=(d=DATA)=>_electron.launch({executablePath:'node_modules/electron/dist/electron',args:['.','--no-sandbox','--autoplay-policy=no-user-gesture-required'],env:{...process.env,TONIX_DATA:d}});
 let pass=0,fail=0;const ok=(name,cond,extra='')=>{if(cond){pass++;}else{fail++;console.log('✗',name,extra)}};

@@ -18,7 +18,7 @@ const LIMITS = {
   fadeIn: [0, 15], // seconds
   fadeOut: [0, 15],
 };
-const DEFAULT_FX = { speed: 100, pitch: 100, volume: 100, fadeIn: 0, fadeOut: 0 };
+const DEFAULT_FX = { speed: 100, pitch: 100, volume: 100, fadeIn: 0, fadeOut: 0, natural: true };
 
 let ffmpegPath = null;
 function resolveFfmpeg() {
@@ -39,22 +39,18 @@ function isSupported(p) { const e = extOf(p); return AUDIO_EXT.includes(e) || VI
 function clamp(v, [lo, hi]) { v = Number(v); if (!Number.isFinite(v)) v = lo; return Math.min(hi, Math.max(lo, v)); }
 function normalizeFx(fx = {}) {
   const out = {};
-  for (const k of Object.keys(DEFAULT_FX)) out[k] = clamp(fx[k] ?? DEFAULT_FX[k], LIMITS[k]);
+  for (const k of Object.keys(LIMITS)) out[k] = clamp(fx[k] ?? DEFAULT_FX[k], LIMITS[k]);
+  out.natural = fx.natural !== false; // Natural voice: keep singers sounding human when the pitch changes
   return out;
 }
 
-// Split a tempo factor into atempo steps that each stay in [0.5, 2] (best quality).
-function atempoChain(factor) {
-  const steps = [];
-  let f = factor;
-  while (f > 2) { steps.push(2); f /= 2; }
-  while (f < 0.5) { steps.push(0.5); f /= 0.5; }
-  if (Math.abs(f - 1) > 1e-9) steps.push(f);
-  return steps.map((s) => `atempo=${s.toFixed(9)}`);
-}
-
 const OUT_RATE = 44100;
-const PITCH_RATE = 192000; // high internal rate so tiny pitch steps (0.001%) stay precise
+
+// The studio pitch and speed tool (Rubber Band, built into ffmpeg). Same settings are used for saved
+// files and for the pitched copy the player listens to, so what you hear is what you save.
+function rubberband({ tempo = 1, pitch = 1, natural = true }) {
+  return `rubberband=tempo=${tempo.toFixed(6)}:pitch=${pitch.toFixed(6)}:formant=${natural ? 'preserved' : 'shifted'}:pitchq=quality:channels=together`;
+}
 
 /**
  * Builds the ffmpeg audio filter for one song.
@@ -65,17 +61,8 @@ function buildFilter(fxIn, duration) {
   const fx = normalizeFx(fxIn);
   const speed = fx.speed / 100;
   const pitch = fx.pitch / 100;
-  const parts = [];
-  let tempo = speed;
-  if (Math.abs(pitch - 1) > 1e-9) {
-    const rate = Math.round(PITCH_RATE * pitch);
-    const realPitch = rate / PITCH_RATE;
-    parts.push(`aresample=${PITCH_RATE}`, `asetrate=${rate}`, `aresample=${OUT_RATE}`);
-    tempo = speed / realPitch; // asetrate also sped it up by realPitch; undo that
-  } else {
-    parts.push(`aresample=${OUT_RATE}`);
-  }
-  parts.push(...atempoChain(tempo));
+  const parts = [`aresample=${OUT_RATE}`];
+  if (Math.abs(speed - 1) > 1e-9 || Math.abs(pitch - 1) > 1e-9) parts.push(rubberband({ tempo: speed, pitch, natural: fx.natural }));
   if (Math.abs(fx.volume - 100) > 1e-9) parts.push(`volume=${(fx.volume / 100).toFixed(5)}`);
   const outDuration = duration > 0 ? duration / speed : 0;
   if (fx.fadeIn > 0) parts.push(`afade=t=in:st=0:d=${fx.fadeIn.toFixed(3)}`);
@@ -85,6 +72,18 @@ function buildFilter(fxIn, duration) {
   }
   parts.push(`aformat=sample_fmts=fltp:sample_rates=${OUT_RATE}:channel_layouts=stereo`);
   return { filter: parts.join(','), outDuration };
+}
+
+// A pitched copy of a song for listening (same length and timing as the original; speed stays live).
+// start/len (seconds) render only a part, so a pitch change can be heard within about a second.
+function renderPitched({ src, dest, pitch, natural, start = 0, len = 0, duration, onProgress, onSpawn }) {
+  const args = ['-y'];
+  if (start > 0) args.push('-ss', start.toFixed(3));
+  if (len > 0) args.push('-t', len.toFixed(3));
+  args.push('-i', src, '-map', '0:a:0', '-vn', '-af',
+    `aresample=${OUT_RATE},${rubberband({ pitch, natural })},aformat=sample_fmts=s16:channel_layouts=stereo`,
+    '-c:a', 'flac', '-compression_level', '0', dest);
+  return run(args, { duration: len || duration, onProgress, onSpawn });
 }
 
 // ---- parsing ffmpeg's text output ----
@@ -130,9 +129,10 @@ function pickTags(tags, filePath) {
 }
 
 // ---- running ffmpeg ----
-function run(args, { onProgress, duration, onLine } = {}) {
+function run(args, { onProgress, duration, onLine, onSpawn } = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn(resolveFfmpeg(), ['-hide_banner', ...args], { windowsHide: true });
+    if (onSpawn) onSpawn(proc);
     const out = [];
     let err = '';
     proc.stdout.on('data', (b) => out.push(b));
@@ -272,7 +272,7 @@ async function exportCombined({ items, dest, tags, coverPath, bitrate = 320, tmp
 
 module.exports = {
   AUDIO_EXT, VIDEO_EXT, LIMITS, DEFAULT_FX,
-  resolveFfmpeg, isSupported, extOf, normalizeFx, atempoChain, buildFilter,
+  resolveFfmpeg, isSupported, extOf, normalizeFx, buildFilter, renderPitched,
   parseFfmetadata, parseInfo, pickTags,
   run, probe, toMp3, extractCover, imageToJpg, peaks, exportOne, exportCombined,
 };

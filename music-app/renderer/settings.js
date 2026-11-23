@@ -177,10 +177,14 @@
           })));
       }
     }
+    const studioBox = h('span', { class: 'svalue' }, '…');
+    const showSize = () => tf.studioSize().then((n) => { studioBox.textContent = `${(n / 1024 ** 2).toFixed(n < 1024 ** 2 * 10 ? 1 : 0)} MB `; studioBox.append(btn('Clear', async () => { await guard(() => tf.studioClear()); showSize(); })); }).catch(() => { studioBox.textContent = ''; });
+    showSize();
     return card('library', 'Library',
       row('Library folder', 'Where Tonix keeps its copies of videos, covers and maps', pathBox(S.libraryDir), btn('Open', () => tf.openPath(S.libraryDir))),
       row('Find missing songs', 'Songs whose file was moved or deleted on your PC', btn('Check now', async () => { missing = await guard(() => tf.findMissing()); render(); })),
       list,
+      row('Clean pitch copies', 'Songs with a changed pitch are prepared once and kept, so they start at once next time (oldest removed after 2 GB)', studioBox),
       row('"From video" badge', 'The little badge on songs that came from videos', tog('videoBadge')));
   }
   function mapSec() {
