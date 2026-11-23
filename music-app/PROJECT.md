@@ -2,15 +2,15 @@
 
 ## Quick facts
 - Offline music app for Windows. Built with Electron (a way to make desktop apps with web code) + ffmpeg (the sound engine).
-- Folder: `music-app\`. Current name in code: "Tune Forge". New name decided: **Tonix** (rename not done yet).
+- Folder: `music-app\`. Name: **Tonix** (renamed from "Tune Forge" 2026-11-23, version 1.1.0).
 - Updates: Claude installs them on the user's PC. Old installer goes to `Documents\Tonix\Old versions` (not built yet).
 
 ## How to run
-- Get the Windows app: GitHub → Actions → "Tune Forge (Windows build)" → newest run → Artifacts.
+- Get the Windows app: GitHub → Actions → "Tonix (Windows build)" → newest run → Artifacts.
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: Settings + keyboard shortcuts done. Next: Map step 8 (final checks + Windows build), then the sound editor.
+- 2026-11-23: Map step 8 done: renamed to Tonix (version 1.1.0), final check on a brand-new Tonix passed 21/21, Windows build started on GitHub. Next: try it on the PC, then the sound editor.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -21,11 +21,12 @@
 | Button | Status |
 |---|---|
 | 🔍 Search (library) | ✅ Working |
-| 🗺 Map | 🧪 Being built (step 7 of 8 done) |
+| 🗺 Map | ✅ Working (all 8 steps done) |
 | 📏 Sound editor | 🎨 Designed, not built yet |
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-23: Renamed everything to Tonix (1.1.0). Undo now keeps quick actions as separate steps. Final check script: `test/e2e/final-check.js`.
 - 2026-11-23: Settings page (9 sections, 7 looks), keyboard shortcuts for everything (changeable, cheat sheet with ? / F1), map undo/redo (Ctrl+Z / Ctrl+Y), number keys choose the next map path. Fixed a start-up timing bug.
 - 2026-11-23: Map step 7: export a map as one .tonixmap file (songs, covers, pictures inside) and import it as your own copy.
 - 2026-11-23: Map step 6: many maps (new, rename, cover, delete to trash, switch) and Continue where the music stopped.

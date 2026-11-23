@@ -1,10 +1,10 @@
-name: Tune Forge (Windows build)
+name: Tonix (Windows build)
 
 on:
   push:
     paths:
       - 'music-app/**'
-      - '.github/workflows/tune-forge-windows.yml'
+      - '.github/workflows/tonix-windows.yml'
   workflow_dispatch:
 
 jobs:
@@ -27,6 +27,6 @@ jobs:
         run: npx electron-builder --win nsis portable --x64 --publish never
       - uses: actions/upload-artifact@v4
         with:
-          name: Tune-Forge-Windows
+          name: Tonix-Windows
           path: music-app/dist/*.exe
           retention-days: 30

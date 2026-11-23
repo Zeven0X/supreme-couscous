@@ -1,8 +1,8 @@
 {
-  "name": "tune-forge",
-  "productName": "Tune Forge",
-  "version": "1.0.0",
-  "description": "Offline music editor: turn videos into MP3, change speed, pitch, volume and fades, save with covers.",
+  "name": "tonix",
+  "productName": "Tonix",
+  "version": "1.1.0",
+  "description": "Tonix: offline music app with song maps, sound effects, covers and MP3 export.",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -19,8 +19,8 @@
     "electron-builder": "25.1.8"
   },
   "build": {
-    "appId": "com.zeven.tuneforge",
-    "productName": "Tune Forge",
+    "appId": "com.zeven.tonix",
+    "productName": "Tonix",
     "directories": { "output": "dist", "buildResources": "build" },
     "files": ["main.js", "preload.js", "lib/**", "renderer/**", "package.json", "!**/*.map"],
     "asarUnpack": ["node_modules/ffmpeg-static/**"],
@@ -33,9 +33,9 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Tune Forge",
-      "artifactName": "Tune-Forge-Setup-${version}.${ext}"
+      "shortcutName": "Tonix",
+      "artifactName": "Tonix-Setup-${version}.${ext}"
     },
-    "portable": { "artifactName": "Tune-Forge-Portable-${version}.${ext}" }
+    "portable": { "artifactName": "Tonix-Portable-${version}.${ext}" }
   }
 }

@@ -24,7 +24,7 @@ let ffmpegPath = null;
 function resolveFfmpeg() {
   if (ffmpegPath) return ffmpegPath;
   const candidates = [];
-  if (process.env.TUNEFORGE_FFMPEG) candidates.push(process.env.TUNEFORGE_FFMPEG);
+  for (const v of ['TONIX_FFMPEG', 'TUNEFORGE_FFMPEG']) if (process.env[v]) candidates.push(process.env[v]);
   try {
     // In a packaged app the binary is unpacked next to app.asar.
     candidates.push(require('ffmpeg-static').replace('app.asar', 'app.asar.unpacked'));

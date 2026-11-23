@@ -637,6 +637,7 @@
   // ---------- paths ----------
   function newId() { return Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, '0')).join(''); }
   function addPath(fromId, toId, pts) {
+    remember(); // each action is its own undo step
     const old = M.map.paths.find((p) => p.from === fromId && p.to === toId);
     if (old) {
       // drawing over an existing path gives it the new shape
@@ -833,11 +834,13 @@
   // ---------- actions ----------
   function setStart() {
     if (!M.selected) return;
+    remember();
     M.map.startId = M.selected;
     render();
     save();
   }
   function removeSelected() {
+    remember();
     if (M.selPath) {
       const p = M.map.paths.find((x) => x.id === M.selPath);
       if (!p) return;
@@ -866,6 +869,7 @@
   }
   function addTracks(ids) {
     if (!ids.length) return;
+    remember();
     const [cx, cy] = toWorld(board.getBoundingClientRect().left + board.clientWidth / 2, board.getBoundingClientRect().top + board.clientHeight / 2);
     const gap = 190, perRow = Math.min(5, ids.length);
     const added = ids.map((trackId, i) => {
@@ -1023,6 +1027,7 @@
     lock: () => {
       const p = M.map.paths.find((x) => x.id === M.selPath);
       if (!p) { toast('Click a path first, then press L to lock it.'); return; }
+      remember();
       p.locked = !p.locked;
       render();
       save();

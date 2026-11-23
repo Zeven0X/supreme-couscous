@@ -32,7 +32,7 @@ A music board. Songs are placed anywhere and connected by paths. When a song end
 5. ✅ Playing a map (follow paths by chance, quiet gaps, cut, real crossfades, dot, follow view, choose).
 6. ✅ Many maps.
 7. ✅ Export / Import.
-8. ⬜ Tests + Windows build.
+8. ✅ Tests + Windows build (2026-11-23).
 
 ## Elements
 

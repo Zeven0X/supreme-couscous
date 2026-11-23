@@ -10,8 +10,9 @@ const { Library } = require('./lib/library');
 const { MapStore } = require('./lib/maps');
 let maps = null;
 
-app.setName('Tune Forge');
-if (process.env.TUNEFORGE_DATA) app.setPath('userData', process.env.TUNEFORGE_DATA);
+app.setName('Tonix');
+const DATA_DIR = process.env.TONIX_DATA || process.env.TUNEFORGE_DATA; // for testing only
+if (DATA_DIR) app.setPath('userData', DATA_DIR);
 
 let win = null;
 let lib = null;
@@ -24,7 +25,7 @@ const RENDERER = path.join(__dirname, 'renderer');
 function log(level, msg) {
   const line = { level, msg: String(msg), time: Date.now() };
   if (win && !win.isDestroyed()) win.webContents.send('log', line);
-  if (process.env.TUNEFORGE_DEBUG) console.log(`[${level}] ${msg}`);
+  if (process.env.TONIX_DEBUG || process.env.TUNEFORGE_DEBUG) console.log(`[${level}] ${msg}`);
 }
 function send(channel, payload) { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); }
 
@@ -109,7 +110,7 @@ function collectFiles(paths) {
   return out;
 }
 function exportDir() {
-  const d = lib.settings.exportDir || path.join(app.getPath('music'), 'Tune Forge Exports');
+  const d = lib.settings.exportDir || path.join(app.getPath('music'), 'Tonix Exports');
   fs.mkdirSync(d, { recursive: true });
   return d;
 }
@@ -230,7 +231,7 @@ async function exportMany(ids, opts) {
   let coverPath = null;
   let tmpCover = null;
   if (opts.coverImage) {
-    tmpCover = path.join(os.tmpdir(), `tuneforge-cover-${Date.now()}.jpg`);
+    tmpCover = path.join(os.tmpdir(), `tonix-cover-${Date.now()}.jpg`);
     await ff.imageToJpg(opts.coverImage, tmpCover);
     coverPath = tmpCover;
   } else if (opts.coverTrackId) coverPath = lib.coverPath(lib.byId(opts.coverTrackId));
@@ -412,7 +413,7 @@ function registerIpc() {
     return r.canceled ? null : r.filePaths[0];
   });
   handle('image-preview', async (imagePath) => {
-    const tmp = path.join(os.tmpdir(), `tuneforge-preview-${Date.now()}.jpg`);
+    const tmp = path.join(os.tmpdir(), `tonix-preview-${Date.now()}.jpg`);
     try {
       await ff.run(['-y', '-i', imagePath, '-frames:v', '1', '-vf', "scale='min(400,iw)':-2", '-q:v', '4', tmp]);
       return `data:image/jpeg;base64,${fs.readFileSync(tmp).toString('base64')}`;
@@ -508,7 +509,7 @@ function registerIpc() {
 async function createWindow() {
   win = new BrowserWindow({
     width: 1320, height: 880, minWidth: 1080, minHeight: 700,
-    backgroundColor: '#000000', title: 'Tune Forge', show: false, autoHideMenuBar: true,
+    backgroundColor: '#000000', title: 'Tonix', show: false, autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   win.once('ready-to-show', () => win.show());
@@ -525,7 +526,7 @@ app.whenReady().then(async () => {
   await startServer();
   registerIpc();
   await createWindow();
-  log('info', `Tune Forge ready. ${lib.tracks.length} song(s) in library.`);
+  log('info', `Tonix ready. ${lib.tracks.length} song(s) in library.`);
 });
 
 app.on('window-all-closed', () => {
