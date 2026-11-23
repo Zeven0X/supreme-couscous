@@ -180,6 +180,8 @@
     nameStyle();
     $('#map-empty').hidden = M.map.stops.length > 0;
     $('#map-name').textContent = M.map.name;
+    const ns = M.map.stops.length, np = M.map.paths.length;
+    $('#map-name').dataset.sub = `${ns} song${ns === 1 ? '' : 's'} · ${np} path${np === 1 ? '' : 's'}`;
     $('#map-start').disabled = !M.selected || M.selected === M.map.startId;
     $('#map-remove').disabled = !M.selected && !M.selPath;
     $('#map-path').classList.toggle('on', M.pathMode);

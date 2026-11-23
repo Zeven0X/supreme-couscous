@@ -78,14 +78,20 @@
           <button class="mtool" id="map-straighten" title="Back to the automatic curve" hidden>Straighten</button>
         </div>
         <div id="map-toolbar">
-          <button class="mtool" id="map-add" title="Add songs from your library"><span class="ic" data-icon="plus"></span>Add songs</button>
-          <button class="mtool" id="map-path" title="Path: connect songs (P)"><span class="ic" data-icon="path"></span>Path</button>
-          <button class="mtool" id="map-start" title="Make the selected song the Start (S)" disabled><span class="ic" data-icon="flag"></span>Set start</button>
-          <button class="mtool" id="map-remove" title="Remove the selected song or path (Delete)" disabled><span class="ic" data-icon="trash"></span>Remove</button>
-          <button class="mtool" id="map-bg" title="Map background and song name color"><span class="ic" data-icon="image"></span>Background</button>
+          <div class="tgroup">
+            <button class="mtool pri" id="map-add" title="Add songs from your library"><span class="ic" data-icon="plus"></span>Add songs</button>
+            <button class="mtool" id="map-path" title="Path: connect songs (P)"><span class="ic" data-icon="path"></span>Path</button>
+          </div>
+          <div class="tgroup">
+            <button class="mtool" id="map-start" title="Make the selected song the Start (S)" disabled><span class="ic" data-icon="flag"></span>Start</button>
+            <button class="mtool" id="map-remove" title="Remove the selected song or path (Delete)" disabled><span class="ic" data-icon="trash"></span>Remove</button>
+          </div>
+          <div class="tgroup">
+            <button class="mtool" id="map-bg" title="Map background and song name color"><span class="ic" data-icon="image"></span>Background</button>
+          </div>
           <span class="grow"></span>
-          <button class="mtool icon-only" id="map-fit" title="Show all songs (F)"><span class="ic" data-icon="fit"></span></button>
-          <div class="zoom">
+          <div class="tgroup zoom">
+            <button class="mtool icon-only" id="map-fit" title="Show all songs (F)"><span class="ic" data-icon="fit"></span></button>
             <span class="zoom-icon" id="map-zoom-out" title="Zoom out"></span>
             <input type="range" id="map-zoom" min="30" max="250" step="1" value="100" title="Zoom">
             <span class="zoom-icon" id="map-zoom-in" title="Zoom in"></span>
