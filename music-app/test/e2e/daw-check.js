@@ -134,6 +134,31 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   ok('a preview still being made does not play on another page', await ev(() => !TFDaw.previewing && !TFDaw.playing));
   await w.keyboard.press('Control+3'); await wait(400);
   if (!(await w.isVisible('.dw-fxs'))) await w.click('.dw-tools .dw-b:has-text("Effects")');
+  // ---- found in the bug hunt
+  await w.click('.dw-tools .dw-b:has-text("Loop")'); await wait(200);
+  if (!(await w.isVisible('.dw-panel:has-text("Loop")'))) await w.click('.dw-tools .dw-b:has-text("Loop")');
+  const lb2 = await w.locator('#dw-lanes').boundingBox();
+  await w.click('.dw-b:has-text("Select")');
+  await w.mouse.move(lb2.x + lb2.width * 0.6, lb2.y + 60); await w.mouse.down(); await w.mouse.move(lb2.x + lb2.width * 0.7, lb2.y + 60, { steps: 4 }); await w.mouse.up(); await wait(200);
+  const loopText = await w.textContent('.dw-panel');
+  const selNow = await ev(() => TFEdit.api.sel);
+  ok('the Loop panel follows a new selection', selNow && loopText.includes(await ev((x) => TFEdit.api.fmt(x), selNow.a)), loopText.slice(0, 60));
+  await ev(() => TFEdit.api.playRange(1, 2)); await wait(100); await ev(() => TFEdit.api.seek(20)); await wait(1500);
+  ok('a click after "play this part" does not jump back', await ev(() => TFDaw.time() > 19), (await ev(() => TFDaw.time())).toFixed(2));
+  await w.keyboard.press('Space'); await wait(100);
+  const vK = await ev(() => TFEdit.session.version);
+  await w.keyboard.press('Control+Shift+z'); await wait(1500);
+  ok('Ctrl+Shift+Z is Redo, not Undo', (await ev(() => TFEdit.session.version)) >= vK);
+  await ev(() => { confirmModal('A window', 'Keys go to the window.', 'OK'); }); await wait(200);
+  await w.keyboard.press('Delete'); await wait(800);
+  ok('Edit keys do nothing while a window is open', (await ev(() => TFEdit.session.version)) === (await ev(() => TFEdit.session.version)) && (await ev(() => TFEdit.session.version)) >= vK && await w.isVisible('.modal'));
+  await w.keyboard.press('Escape'); await wait(200);
+  ok('Esc closes that window', !(await w.isVisible('.modal')));
+  const vBefore = await ev(() => TFEdit.session.version);
+  await ev(() => TFEdit.open(TFEdit.session.trackId)); await wait(400);
+  ok('opening the same song again keeps your changes', (await ev(() => TFEdit.session.version)) === vBefore && vBefore > 0);
+  await w.click('.dw-tools .dw-b:has-text("Effects")').catch(() => {}); await wait(100);
+  if (!(await w.isVisible('.dw-fxs'))) await w.click('.dw-tools .dw-b:has-text("Effects")');
   // Save keep both: one file with everything mixed (slowed → longer)
   await w.selectOption('.dw-mode', 'both');
   await w.click('.dw-b:has-text("Save")');

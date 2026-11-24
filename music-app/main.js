@@ -559,9 +559,14 @@ function registerIpc() {
   handle('track-played', (id) => { const t = lib.played(id); return t ? { track: trackForUi(t), clock: lib.playClock } : null; });
   handle('track-mark', (ids, mark, n) => lib.mark(ids, mark, Number.isFinite(+n) && +n > 0 ? +n : lib.tracks.length).map(trackForUi));
   // ---- sound editor (Edit page)
+  const editPeaks = new Map(); // working copy file -> its waveform (each copy never changes)
   const editView = async (st) => {
     const buckets = Math.round(Math.min(30000, Math.max(1600, st.duration * 60)));
-    return { ...st, url: `${baseUrl}/edit/${st.id}/${path.basename(st.file)}`, peaks: await ff.peaks(st.file, buckets), file: undefined };
+    if (!editPeaks.has(st.file)) {
+      editPeaks.set(st.file, await ff.peaks(st.file, buckets));
+      if (editPeaks.size > 40) editPeaks.delete(editPeaks.keys().next().value);
+    }
+    return { ...st, url: `${baseUrl}/edit/${st.id}/${path.basename(st.file)}`, peaks: editPeaks.get(st.file), file: undefined };
   };
   handle('edit-open', async (id) => {
     const t = lib.byId(id);
@@ -765,7 +770,7 @@ function registerIpc() {
       added = fresh(t.title.replace(/ Old$/, ''));
     } else { // replace: the song now plays the new file; Tonix's own old copy goes (never the new file)
       const oldCopy = t.mediaPath;
-      lib.setTrackFile(t.id, { srcPath: r.dest, mediaPath: r.dest, converted: false, duration: info.duration });
+      lib.setTrackFile(t.id, { srcPath: r.dest, mediaPath: r.dest, converted: false, duration: info.duration, isVideo: false });
       if (isInternal(oldCopy) && path.resolve(oldCopy) !== path.resolve(r.dest)) fs.rmSync(oldCopy, { force: true });
       changed = [t];
     }
@@ -781,19 +786,23 @@ function registerIpc() {
     if (level === null && !fxGraph) throw new Error('Choose at least one change: Trim or an effect.');
     const done = [], skipped = [], changed = [], added = [];
     const list = ids.map((id) => lib.byId(id)).filter(Boolean);
+    if (list.length < ids.length) skipped.push({ title: `${ids.length - list.length} song(s)`, why: 'not in the library any more' });
     for (let i = 0; i < list.length; i++) {
       const t = list[i];
       send('export-progress', { p: i / list.length, label: `Editing "${t.title}" (${i + 1} of ${list.length})` });
       let st = null;
       try {
         if (!fs.existsSync(t.mediaPath)) throw new Error('the file is not on your PC any more');
+        if (mode !== 'both' && !fs.existsSync(t.srcPath)) throw new Error('the original file is not on your PC any more');
         st = await editor.open(t.id, t.mediaPath);
+        let allQuiet = false;
         if (level !== null) {
           const tp = T.trimPoints(await T.silences(ff, st.file, level, 0.08), st.duration);
+          allQuiet = !!tp.empty;
           if (!tp.empty && (tp.head > 0.02 || tp.tail < st.duration - 0.02)) st = await editor.apply(st.id, { type: 'keep', a: tp.head, b: tp.tail, label: 'Trimmed' });
         }
         if (fxGraph) st = await editor.apply(st.id, { type: 'graph', graph: fxGraph, label: 'Effects' });
-        if (st.version === 0) { skipped.push({ title: t.title, why: 'nothing to change (no silent start or end)' }); continue; }
+        if (st.version === 0) { skipped.push({ title: t.title, why: allQuiet ? 'the whole song is quieter than this level (nothing trimmed)' : 'nothing to change (no silent start or end)' }); continue; }
         const r = await saveSession(st.id, mode);
         changed.push(...r.changed); if (r.added) added.push(r.added);
         done.push({ title: t.title, dest: r.dest });

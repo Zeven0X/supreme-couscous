@@ -40,11 +40,12 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   const vols = await ev(() => [...document.querySelectorAll('.ed-part')].map((r) => +r.querySelectorAll('.ed-num')[2].value));
   ok('Same loudness: the quiet part gets louder', vols[0] < 130 && vols[1] > 150, JSON.stringify(vols));
   await w.locator('.ed-part').nth(0).locator('.ed-num').nth(1).fill('110'); await w.keyboard.press('Enter');
+  await w.locator('.ed-part').nth(0).locator('.ed-pname').fill('My First'); await w.locator('.ed-part').nth(0).locator('.ed-pname').press('Tab'); // typed after the panel was drawn (found in the bug hunt)
   await w.screenshot({ path: SP + '/concepts/tab-split.png' });
   await w.click('.dw-panel .tb:has-text("Save all")');
   await w.waitForFunction(() => [...document.querySelectorAll('.toast')].some((t) => /Saved 2 songs/.test(t.textContent)), null, { timeout: 60000 });
   const files = fs.readdirSync(M);
-  ok('2 part files saved + in the library', files.includes('Two songs - Part 1.mp3') && files.includes('Two songs - Part 2.mp3') && await ev(() => S.tracks.filter((t) => / - Part \d$/.test(t.title)).length === 2), files.join(', '));
+  ok('2 part files saved + in the library (with the typed name)', files.includes('My First.mp3') && files.includes('Two songs - Part 2.mp3') && await ev(() => S.tracks.filter((t) => / - Part \d$|^My First$/.test(t.title)).length === 2), files.join(', '));
   // ---- Effects (live): switch on, then "Apply to the song" makes one change
   await tab('Effects');
   await w.click('.dw-fx:has-text("Echo") .fx-switch'); await w.click('.dw-fx:has-text("1D") .fx-switch');

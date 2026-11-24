@@ -187,7 +187,7 @@ class Library {
   setTrackFile(id, fields) {
     const t = this.byId(id);
     if (!t) return null;
-    for (const k of ['srcPath', 'mediaPath', 'converted', 'duration', 'title']) if (k in fields) t[k] = fields[k];
+    for (const k of ['srcPath', 'mediaPath', 'converted', 'duration', 'title', 'isVideo']) if (k in fields) t[k] = fields[k];
     fs.rmSync(path.join(this.peakDir, `${t.id}.json`), { force: true }); // the waveform is made again
     this.save();
     return t;

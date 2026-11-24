@@ -23,6 +23,7 @@ window.TFEdit = (() => {
   const layers = () => E.tracks.slice(1);
   const selT = () => E.tracks.find((t) => t.id === E.selTrack) || song();
   const dur = () => (E.s ? E.s.duration : 0);
+  const songTime = () => (E.preview ? E.preview.back : TFDaw.time()); // where you are in the song (a preview has its own clock)
   let nextLayer = 1;
 
   // ---------- opening a song ----------
@@ -31,6 +32,7 @@ window.TFEdit = (() => {
     const t = S.byId.get(trackId);
     if (!t) return;
     if (E.busy) { toast('Wait a moment: Tonix is still working on the song.'); return; }
+    if (E.s && E.s.trackId === trackId) { window.showView('edit'); return; } // already open: keep your changes
     if (E.s && E.s.trackId !== trackId && unsaved()) {
       const ok = await confirmModal('Leave the song you are editing?', `"${(track() || {}).title}" has changes that are not saved. They will be lost.`, 'Leave without saving');
       if (!ok) return;
@@ -51,7 +53,7 @@ window.TFEdit = (() => {
   }
   function show(st) {
     const keep = E.s ? E.s.trackId : st.trackId;
-    const at = TFDaw.time();
+    const at = E.s && E.s.id === st.id ? TFDaw.time() : 0; // another song starts at the beginning
     stopAll();
     E.preview = null;
     E.s = { ...st, trackId: st.trackId || keep };
@@ -115,14 +117,14 @@ window.TFEdit = (() => {
   const fxOf = (t) => Object.fromEntries(Object.entries(t.fx || {}).filter(([, v]) => v !== undefined && v !== null));
   function mixPending() {
     const s = song();
-    return !!s && (Object.keys(fxOf(s)).length > 0 || s.volume !== 100 || +s.pan !== 0 || s.mute || layers().length > 0);
+    return !!s && (Object.keys(fxOf(s)).length > 0 || s.volume !== 100 || +s.pan !== 0 || s.mute || layers().some((L) => !L.mute));
   }
   function mixOp() {
     const s = song();
     return {
       type: 'mix',
       song: { fx: fxOf(s), volume: s.volume, pan: s.pan, mute: s.mute, solo: s.solo && !s.mute },
-      layers: layers().map((L) => ({ src: L.src, offset: L.offset, from: L.from, to: L.to, volume: L.volume, pan: L.pan, mute: L.mute, solo: L.solo && !L.mute, repeat: L.repeat, matchBeat: L.matchBeat, duck: L.duck, fx: fxOf(L) })),
+      layers: layers().filter((L) => !L.mute).map((L) => ({ src: L.src, offset: L.offset, from: L.from, to: L.to, volume: L.volume, pan: L.pan, mute: L.mute, solo: L.solo && !L.mute, repeat: L.repeat, matchBeat: L.matchBeat, duck: L.duck, fx: fxOf(L) })),
     };
   }
   async function bake() { // "Apply to the song": the tracks become one working copy (Undo takes it back)
@@ -151,7 +153,7 @@ window.TFEdit = (() => {
     renderGrid();
     TFPlaylists.render();
     toast(`Saved: ${r.dest}`, { type: 'ok', action: () => tf.showItem(r.dest), actionLabel: 'Show', ms: 8000 });
-    const next = E.mode === 'both' && r.added ? r.added.id : E.s.trackId; // go on from the saved song
+    const next = r.added ? r.added.id : E.s.trackId; // go on with the saved song
     tf.editClose(E.s.id).catch(() => {});
     E.s = null;
     open(next);
@@ -164,7 +166,7 @@ window.TFEdit = (() => {
     if (!info || !E.s || E.s.id !== sid) return; // another song was opened meanwhile
     const L = {
       id: `L${nextLayer}`, kind: 'layer', src, name: extra.name || info.name, color: COLORS[(nextLayer - 1) % COLORS.length], url: info.url, peaks: info.peaks, duration: info.duration,
-      offset: +TFDaw.time().toFixed(2), from: 0, to: +info.duration.toFixed(3), volume: 70, pan: 0, mute: false, solo: false, repeat: 1, matchBeat: false, duck: false, fx: {}, ...extra,
+      offset: +songTime().toFixed(2), from: 0, to: +info.duration.toFixed(3), volume: 70, pan: 0, mute: false, solo: false, repeat: 1, matchBeat: false, duck: false, fx: {}, ...extra,
     };
     nextLayer++;
     E.tracks.push(L);
@@ -244,7 +246,7 @@ window.TFEdit = (() => {
   }
   function stopButton() { TFDaw.pause(); TFDaw.seek(E.playFrom || 0); E.stopAt = null; drawAll(); drawBar(); }
   function playRange(a, b) { if (!E.s || E.busy) return; if (E.preview) stopPreview(); pause(); E.stopAt = b; TFDaw.play(a).catch((e) => toast(e.message, { type: 'error' })); drawBar(); }
-  const seek = (t) => { TFDaw.seek(Math.max(0, Math.min(dur(), t))); drawAll(); drawBar(); };
+  const seek = (t) => { E.stopAt = null; TFDaw.seek(Math.max(0, Math.min(dur(), t))); drawAll(); drawBar(); };
   TFDaw.onEnd(() => { if (E.preview && !TFDaw.previewing) { TFDaw.forget(E.preview.url); E.preview = null; render(); } drawBar(); });
   (function tick() {
     if (E.s && E.preview && !TFDaw.previewing && !E.busy) { E.preview = null; render(); } // the preview was stopped elsewhere
@@ -334,7 +336,7 @@ window.TFEdit = (() => {
     g.fillStyle = 'rgba(201,214,255,.45)';
     for (let x = 0; x < W; x++) { const v = p[Math.floor((x / W) * n)] || 0; g.fillRect(x, H / 2 - (v * H) / 2.4, 1, Math.max(1, (v * H) / 1.2)); }
     if (E.zoom > 1) { const a = (E.scroll / dur()) * W, b = ((E.scroll + view().span) / dur()) * W; g.fillStyle = 'rgba(201,214,255,.12)'; g.fillRect(a, 0, b - a, H); g.strokeStyle = css().accent; g.lineWidth = 2 * dpr; g.strokeRect(a + dpr, dpr, b - a - 2 * dpr, H - 2 * dpr); }
-    const px = (TFDaw.time() / dur()) * W; g.fillStyle = '#ff6b6b'; g.fillRect(px, 0, 1.5 * dpr, H);
+    const px = (songTime() / dur()) * W; g.fillStyle = '#ff6b6b'; g.fillRect(px, 0, 1.5 * dpr, H);
   }
   function drawRuler() {
     const c = el('dw-ruler'); if (!c || !E.s) return;
@@ -361,7 +363,7 @@ window.TFEdit = (() => {
     const mk = (t, txt, col) => { const x = xAt(t) * dpr; g.fillStyle = col; g.beginPath(); g.arc(x, 54 * dpr, 7.5 * dpr, 0, 7); g.fill(); g.fillStyle = '#141924'; g.font = `bold ${9.5 * dpr}px system-ui`; g.fillText(txt, x - 3.2 * dpr, 57.5 * dpr); g.font = `${11 * dpr}px system-ui, sans-serif`; };
     if (E.sel) { g.fillStyle = E.loopOn ? 'rgba(92,242,168,.45)' : 'rgba(120,160,255,.35)'; g.fillRect(xAt(E.sel.a) * dpr, 52 * dpr, (xAt(E.sel.b) - xAt(E.sel.a)) * dpr, 4 * dpr); mk(E.sel.a, 'A', E.loopOn ? '#5cf2a8' : '#9db4ff'); mk(E.sel.b, 'B', E.loopOn ? '#5cf2a8' : '#9db4ff'); }
     TFEditTabs.markers({ mk, tab: E.panel });
-    const px = xAt(TFDaw.time()) * dpr; g.fillStyle = '#ff6b6b'; g.fillRect(px, 0, 1.5 * dpr, H);
+    const px = xAt(songTime()) * dpr; g.fillStyle = '#ff6b6b'; g.fillRect(px, 0, 1.5 * dpr, H);
   }
   function laneTops() { let y = 0; return E.tracks.map((t) => { const top = y; y += t.kind === 'song' ? SONG_H : LAYER_H; return top; }); }
   function drawLanes() {
@@ -388,7 +390,7 @@ window.TFEdit = (() => {
         // the wave
         const p = t.peaks || [], n = p.length, mid = top + 18 * dpr + (h - 22 * dpr) / 2, amp = (h - 26 * dpr) / 2;
         g.fillStyle = quiet ? 'rgba(255,255,255,.22)' : col;
-        const played = TFDaw.time();
+        const played = songTime();
         for (let x = Math.max(0, Math.floor(x1 + 2 * dpr)); x < Math.min(W, x2 - 2 * dpr); x++) {
           const tt = v.t0 + (x / dpr) / v.pps;
           const tt2 = v.t0 + ((x + 1) / dpr) / v.pps;
@@ -404,12 +406,12 @@ window.TFEdit = (() => {
       if (t.kind === 'song' && !E.preview) TFEditTabs.overlay(g, { dpr, Wd: W, Hd: top + h, ruler: top, xAt, view: v, duration: dur(), tab: E.panel });
     });
     if (E.sel) { g.fillStyle = accent; for (const tt of [E.sel.a, E.sel.b]) g.fillRect(xAt(tt) * dpr - dpr, 0, 2 * dpr, H); }
-    const px = xAt(TFDaw.time()) * dpr; g.fillStyle = '#ff6b6b'; g.fillRect(px - dpr / 2, 0, 1.5 * dpr, H);
+    const px = xAt(songTime()) * dpr; g.fillStyle = '#ff6b6b'; g.fillRect(px - dpr / 2, 0, 1.5 * dpr, H);
   }
   function roundRect(g, x, y, w, h, r) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, Math.max(0, w), Math.max(0, h), r); else g.rect(x, y, Math.max(0, w), Math.max(0, h)); }
   function drawBar() {
     if (!E.s) return;
-    const now = E.preview ? TFDaw.time() : TFDaw.time();
+    const now = TFDaw.time(); // a preview shows its own time
     const set = (id, v) => { const x = el(id); if (x && x.textContent !== v) x.textContent = v; };
     set('dw-time', fmt(now));
     set('dw-bars', E.preview ? '–' : barBeat(now));
@@ -655,10 +657,15 @@ window.TFEdit = (() => {
 
   // ---------- keys on the Edit page ----------
   document.addEventListener('keydown', (e) => {
-    if (S.view !== 'edit' || !E.s || e.target.closest('input, textarea, select, .modal')) return;
-    const k = `${e.ctrlKey ? 'Ctrl+' : ''}${e.code}`;
+    if (S.view !== 'edit' || !E.s || document.querySelector('.modal-back')) return; // a window is open: the keys are for it
+    const slider = e.target.matches && e.target.matches('input[type=range], button');
+    if (e.target.closest('input, textarea, select') && !(slider && e.code === 'Space')) return; // typing; Space on a slider still plays
+    const k = `${e.ctrlKey ? 'Ctrl+' : ''}${e.shiftKey ? 'Shift+' : ''}${e.code}`;
+    const nothing = () => {}; // the Library player's keys do nothing here
     const run = {
-      Space: playPause, Delete: cut, 'Ctrl+KeyZ': undo, 'Ctrl+KeyY': redo, Home: () => seek(0), KeyL: () => { if (E.sel) { E.loopOn = !E.loopOn; drawAll(); drawBar(); } },
+      Space: playPause, Delete: cut, 'Ctrl+KeyZ': undo, 'Ctrl+KeyY': redo, 'Ctrl+Shift+KeyZ': redo, Home: () => seek(0), End: () => seek(dur()),
+      ArrowLeft: () => seek(TFDaw.time() - 5), ArrowRight: () => seek(TFDaw.time() + 5), 'Ctrl+ArrowLeft': nothing, 'Ctrl+ArrowRight': nothing, ArrowUp: nothing, ArrowDown: nothing,
+      KeyL: () => { if (E.sel) { E.loopOn = !E.loopOn; drawAll(); drawBar(); } },
       Escape: () => { if (E.preview) stopPreview(); else { E.sel = null; E.loopOn = false; drawAll(); drawBar(); } },
     }[k];
     if (run) { e.preventDefault(); e.stopImmediatePropagation(); run(); }
@@ -668,7 +675,7 @@ window.TFEdit = (() => {
   const stop = () => { stopRec(); E.tok++; TFDaw.pause(); if (E.preview) { TFDaw.forget(E.preview.url); E.preview = null; TFDaw.stopPreview(true); } drawBar(); };
   // a small stand-in for the old <audio> player, used by the panels (edittabs.js)
   const player = {
-    get currentTime() { return TFDaw.time(); }, set currentTime(t) { seek(t); },
+    get currentTime() { return songTime(); }, set currentTime(t) { seek(t); },
     get paused() { return !TFDaw.playing; }, play: () => playPause(), pause: () => { if (E.preview) stopPreview(); else TFDaw.pause(); drawBar(); },
   };
   const api = {

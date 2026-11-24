@@ -29,10 +29,10 @@ window.TFEditTabs = (() => {
 
   // ================= Trim =================
   async function trimFind() {
-    const P = T.trim, ver = A().session.version, id = sid();
+    const P = T.trim, ver = A().session.version, id = sid(), level = P.level;
     P.loading = true; P.res = null; P.failed = false;
     const r = await guard(() => tf.editTrimFind(id, P.level), 'Trim: ');
-    if (T.trim !== P || !A().session || A().session.id !== id || A().session.version !== ver) return; // the song changed meanwhile
+    if (T.trim !== P || !A().session || A().session.id !== id || A().session.version !== ver || P.level !== level) return; // the song or the level changed meanwhile
     P.loading = false; P.res = r || null; P.failed = !r; // a failure is shown once, with a Try again button
     A().render();
   }
@@ -58,7 +58,7 @@ window.TFEditTabs = (() => {
   function parts() {
     const b = bounds(), t = A().track();
     return b.slice(0, -1).map((a, i) => {
-      const s = T.split.set[i] || {};
+      const s = T.split.set[a.toFixed(3)] || {}; // settings belong to the part that starts here
       return { a, b: b[i + 1], name: s.name ?? `${t ? t.title : 'Song'} - Part ${i + 1}`, fx: { speed: s.speed ?? 100, pitch: s.pitch ?? 100, volume: s.volume ?? 100 } };
     });
   }
@@ -71,7 +71,7 @@ window.TFEditTabs = (() => {
   }
   function splitPanel() {
     const P = T.split, list = parts();
-    const set = (i, k, v) => { P.set[i] = { ...(P.set[i] || {}), [k]: v }; };
+    const set = (i, k, v) => { const key = list[i].a.toFixed(3); P.set[key] = { ...(P.set[key] || {}), [k]: v }; };
     const rows = list.map((p, i) => h('div', { class: 'ed-part' },
       h('span', { class: 'n' }, i + 1),
       (() => { const inp = h('input', { class: 'ed-pname', value: p.name, spellcheck: 'false' }); inp.addEventListener('change', () => set(i, 'name', inp.value.trim())); return inp; })(),
@@ -80,23 +80,25 @@ window.TFEditTabs = (() => {
       h('label', { class: 'ed-mini', title: 'Pitch %' }, 'Pitch', num(p.fx.pitch, (v) => set(i, 'pitch', v), { min: 50, max: 200, w: 52 })),
       h('label', { class: 'ed-mini', title: 'Volume %' }, 'Volume', num(p.fx.volume, (v) => set(i, 'volume', v), { min: 0, max: 500, step: 0.1, w: 58 })),
       btn('▶', () => A().playRange(p.a, p.b), { title: 'Play this part' }),
-      i < list.length - 1 ? btn('✕', () => { P.cuts = P.cuts.filter((c) => Math.abs(c - p.b) > 1e-6); P.set = {}; A().render(); }, { title: 'Remove the cut after this part (join it with the next)' }) : h('span')));
+      i < list.length - 1 ? btn('✕', () => { P.cuts = P.cuts.filter((c) => Math.abs(c - p.b) > 1e-6); delete P.set[p.b.toFixed(3)]; A().render(); }, { title: 'Remove the cut after this part (join it with the next)' }) : h('span')));
     return h('div', {},
       row(h('b', {}, 'Split'), note('Cuts one long file into separate songs. Each part can have its own speed, pitch and volume, and is saved as its own song.')),
       row(btn('🔍 Find the songs', splitFind, { cls: 'tb pri' }),
         seg([[0.6, 'Short gaps'], [1.2, 'Normal'], [2.5, 'Long gaps']], P.gap, (v) => { P.gap = v; A().render(); }),
-        btn('+ Add a cut at the playhead', () => { if (A().previewing) A().stopPreview(); const t = A().player.currentTime; if (t < 0.3 || t > dur() - 0.3 || P.cuts.some((c) => Math.abs(c - t) < 0.3)) return toast('Move the playhead to where the cut should be (not right next to another cut).'); P.cuts.push(+t.toFixed(3)); P.set = {}; A().render(); }),
+        btn('+ Add a cut at the playhead', () => { if (A().previewing) A().stopPreview(); const t = A().player.currentTime; if (t < 0.3 || t > dur() - 0.3 || P.cuts.some((c) => Math.abs(c - t) < 0.3)) return toast('Move the playhead to where the cut should be (not right next to another cut).'); P.cuts.push(+t.toFixed(3)); A().render(); }),
         note('Drag the orange lines on the song track to move a cut.')),
       h('div', { class: 'ed-parts' }, ...rows),
       row(btn('🔊 Same loudness', async () => {
-        const vols = await guard(() => tf.editLoudness(sid(), list.map((p) => [p.a, p.b])), 'Same loudness: ');
+        const now = parts();
+        const vols = await guard(() => tf.editLoudness(sid(), now.map((p) => [p.a, p.b])), 'Same loudness: ');
         if (!vols) return;
-        vols.forEach((v, i) => set(i, 'volume', v));
+        vols.forEach((v, i) => { const key = now[i].a.toFixed(3); P.set[key] = { ...(P.set[key] || {}), volume: v }; });
         toast('Volumes set so every part sounds equally loud.', { type: 'ok' });
         A().render();
       }, { title: 'Measure how loud each part is and set the volumes so they all sound the same', disabled: list.length < 2 }),
       h('span', { class: 'grow' }),
       btn(`💾 Save all ${list.length} parts as songs`, async () => {
+        const list = parts(); // what is typed now (names, speed, pitch, volume)
         if (list.length < 2) return toast('Add at least one cut first (Find the songs, or Add a cut).');
         A().busy('Saving the parts…');
         const r = await guard(() => tf.editSplitSave(sid(), list), 'Split: ');
@@ -120,6 +122,7 @@ window.TFEditTabs = (() => {
     return h('div', {},
       row(h('b', {}, 'Loop'), note(`A = ${timeText(sel.a)} · B = ${timeText(sel.b)} · the part is ${len(sel).toFixed(2)} s`)),
       row(btn('✨ Smart loop', async () => {
+        const sel = A().sel; if (!sel) return;
         const r = await guard(() => tf.editSmartLoop(sid(), sel.a, sel.b), 'Smart loop: ');
         if (!r) return;
         const da = r.a - sel.a, db = r.b - sel.b;
@@ -134,8 +137,8 @@ window.TFEditTabs = (() => {
         btn('+', () => { P.times = Math.min(100, P.times + 1); A().render(); }),
         h('span', { class: 'ed-l' }, 'times'),
         note(`New length: ${fmtTime(newLen)} (now ${fmtTime(dur())})`, 'ok')),
-      row(btn('▶ Listen to the join', () => A().preview({ type: 'loop', a: sel.a, b: sel.b, times: 2 }, { from: Math.max(0, sel.b - 2.5), label: 'Loop join' }), { title: 'Plays the moment where B jumps back to A' }),
-        btn('✓ Apply loop', () => A().change(() => tf.editDo(sid(), { type: 'loop', a: sel.a, b: sel.b, times: P.times }), 'Making the loop…'), { cls: 'tb pri' })));
+      row(btn('▶ Listen to the join', () => { const s = A().sel; if (s) A().preview({ type: 'loop', a: s.a, b: s.b, times: 2 }, { from: Math.max(0, s.b - 2.5), label: 'Loop join' }); }, { title: 'Plays the moment where B jumps back to A' }),
+        btn('✓ Apply loop', () => { const s = A().sel; if (s) A().change(() => tf.editDo(sid(), { type: 'loop', a: s.a, b: s.b, times: P.times }), 'Making the loop…'); }, { cls: 'tb pri' })));
   }
 
   // ================= pickers (used by the track buttons on the Edit page) =================
@@ -176,7 +179,7 @@ window.TFEditTabs = (() => {
     return h('div', {},
       row(h('b', {}, 'Smart connect'), note('Join a piece of a song to another place. Tonix lands the cuts on the beat and blends the joins.')),
       row(h('span', { class: 'ed-l' }, '1. The piece'),
-        btn('Use the selection', () => { if (!sel) return toast('Select a part first: drag across the song track.'); const t = A().track(); C.piece = { src: { kind: 'track', id: A().session.trackId }, a: sel.a, b: sel.b, name: t ? t.title : 'This song' }; A().render(); }),
+        btn('Use the selection', () => { const sel = A().sel; if (!sel) return toast('Select a part first: drag across the song track.'); const t = A().track(); C.piece = { src: { kind: 'track', id: A().session.trackId }, a: sel.a, b: sel.b, name: t ? t.title : 'This song' }; A().render(); }),
         btn('From another song…', () => pickSong('Take a piece from…', (t) => modal((box, close) => {
           box.style.width = 'min(420px, 94vw)';
           const a = num(0, () => {}, { max: t.duration, step: 0.01, w: 80 }), b = num(Math.min(30, t.duration).toFixed(2), () => {}, { max: t.duration, step: 0.01, w: 80 });
@@ -249,7 +252,10 @@ window.TFEditTabs = (() => {
   }
   // the selection changed: the Loop panel shows A and B
   function refresh(tab) { if (tab === 'loop') A().render(); }
-  function onVersion() { T.trim.res = null; T.trim.loading = false; T.trim.failed = false; T.split.cuts = []; T.split.set = {}; T.connect.at = null; }
+  function onVersion() {
+    const C = T.connect, s = A().session;
+    if (C.piece && s && C.piece.src.kind === 'track' && C.piece.src.id === s.trackId) C.piece = null; // this song changed: choose the piece again
+    T.trim.res = null; T.trim.loading = false; T.trim.failed = false; T.split.cuts = []; T.split.set = {}; T.connect.at = null; }
   function reset() { T = fresh(); }
   return { panel, overlay, mouseDown, markers, refresh, pickSong, pickSound, onVersion, reset, get state() { return T; } };
 })();

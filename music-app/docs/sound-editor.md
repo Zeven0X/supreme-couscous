@@ -63,9 +63,21 @@ You showed a screenshot of a music studio program (Ardour) and asked for the edi
 - "Use the playhead" during a preview used the preview's time. Now it stops the preview first.
 - Double-click on Rec started two recordings; a muted solo track counted as solo in the saved file only; 8D's room order differed.
 
+### Fixed after the Edit-page bug hunt (20 findings, 2026-11-24)
+- **Split** ignored names / speed / pitch / volume typed after the panel opened. Now it saves what you typed; a part keeps its settings when you add or remove another cut.
+- **Loop** and **Smart connect** used an old selection. Now they use the one you see.
+- Edit keys (Delete, Ctrl+Z…) worked behind an open window (like "Replace the original?"), and Esc couldn't close it. Now the window gets the keys.
+- After **New takes the name**, the editor reopened the old original. Now it goes on with the new song.
+- A click after "play this part" jumped back. Ctrl+Shift+Z now redoes (it undid). Opening the same song again no longer throws your changes away. Another song starts at 0:00.
+- The arrow keys moved the Library player on the Edit page; now ← / → move 5 s here (End = the end). Space on a slider plays the Edit page.
+- Undo / Redo are faster on long songs (each copy's waveform is made once).
+- **Replace** on a song from a video no longer shows it as a video. Muted tracks are not mixed in.
+- **Edit many songs:** a fully quiet song now says why it is skipped; songs no longer in the library are counted; a missing original is noticed before the work starts.
+- Already fixed before this report: tracks making the saved song longer, Trim stuck on "Looking…".
+
 ### Checked
 - **Unit tests:** 74 pass (new: a track longer than the song stops with it; a short auto-quiet track doesn't cut the song).
-- **In the real app (automatic):** new studio check 34 / 34 (the review's scenarios too; open, select, play, meters, Space, live Echo + Slowed, knob drag,
+- **In the real app (automatic):** new studio check 40 / 40 (the review's and the bug hunt's scenarios too; open, select, play, meters, Space, live Echo + Slowed, knob drag,
   rain / song / voice tracks, Move, Mute, all panels, cut / undo / redo keep the tracks, Save = slowed file with everything mixed);
   Edit check 14 / 14 (3 save modes); panels check 18 / 18 (Trim, Split + Same loudness, live effects + Apply, Loop + Smart loop,
   tracks + Match beat + Apply, Smart connect).
