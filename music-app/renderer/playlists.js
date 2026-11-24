@@ -1,5 +1,5 @@
 'use strict';
-/* global S, h, $, tf, guard, toast, coverEl, placeholder, fmtTime, modal, confirmModal, loadTrack, upsertTrack, renderGrid, ICONS, TFShuffle, startShuffle, setMark, openAlbumModal, TFSmart */
+/* global S, h, $, tf, guard, toast, coverEl, placeholder, fmtTime, modal, confirmModal, loadTrack, upsertTrack, renderGrid, ICONS, TFShuffle, startShuffle, setMark, openAlbumModal, TFSmart, sameLoudness, setSongVolumes */
 // Playlists: a tab in the Library. Each playlist keeps its songs in your order. Songs get in by
 // right-click → Add to playlist, by dragging song cards onto a playlist, or with "Add files".
 window.TFPlaylists = (() => {
@@ -152,6 +152,7 @@ window.TFPlaylists = (() => {
         h('div', { class: 'pl-btns pl-btns2' },
           h('button', { class: 'tb', title: 'Add music or video files from your PC to this playlist', onclick: () => addFiles(p) }, '📂 Add files'),
           h('button', { class: 'tb', title: 'Save the whole playlist: one file per song, or one big file', onclick: () => openAlbumModal(songs(p).map((t) => t.id), { playlist: p }) }, '💾 Save'),
+          h('button', { class: 'tb', title: 'Same loudness: make every song in this playlist sound equally loud', onclick: () => sameLoudness(songs(p).map((t) => t.id), `in "${p.name}"`, setSongVolumes, 'This changes the songs\' own Volume, so they also play like this in the library and other playlists. ') }, '🔊 Loudness'),
           h('button', { class: 'tb danger', title: 'Delete this playlist (the songs stay in your library)', onclick: () => remove(p) }, '🗑 Delete'))));
     dropTarget(head, p);
     const rows = h('div', { class: 'pl-rows' });
@@ -201,7 +202,8 @@ window.TFPlaylists = (() => {
           h('button', { class: 'tb pri', onclick: () => play(p), html: `${ICONS.play}<span>Play</span>` }),
           h('button', { class: `tb pl-shuffle${p.shuffle ? ' on' : ''}`, title: 'Smart shuffle: random order, songs played a lot come less often, ♥ more, 🚫 much less', onclick: () => save(p, { shuffle: !p.shuffle }) }, `🔀 Shuffle ${p.shuffle ? 'on' : 'off'}`)),
         h('div', { class: 'pl-btns pl-btns2' },
-          h('button', { class: 'tb', title: 'Save the whole playlist: one file per song, or one big file', onclick: () => openAlbumModal(list.map((t) => t.id), { playlist: p }) }, '💾 Save'))));
+          h('button', { class: 'tb', title: 'Save the whole playlist: one file per song, or one big file', onclick: () => openAlbumModal(list.map((t) => t.id), { playlist: p }) }, '💾 Save'),
+          h('button', { class: 'tb', title: 'Same loudness: make every song in this playlist sound equally loud', onclick: () => sameLoudness(songs(p).map((t) => t.id), `in "${p.name}"`, setSongVolumes, 'This changes the songs\' own Volume, so they also play like this in the library and other playlists. ') }, '🔊 Loudness'))));
     const rows = h('div', { class: 'pl-rows' });
     list.forEach((t, i) => {
       const row = h('div', { class: `pl-row smart${t.id === S.currentId && S.playlistId === p.id ? ' playing' : ''}`, 'data-id': t.id, title: 'Double-click to play' },

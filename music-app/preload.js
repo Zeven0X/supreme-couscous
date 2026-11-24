@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('tf', {
   studioClear: () => call('studio-clear'),
   exportTrack: (id, opts) => call('export-track', id, opts),
   trackPlayed: (id) => call('track-played', id),
+  loudnessEven: (ids) => call('loudness-even', ids),
+  tracksSetVolumes: (volumes) => call('tracks-set-volumes', volumes),
   trackMark: (ids, mark, n) => call('track-mark', ids, mark, n),
   editOpen: (id) => call('edit-open', id),
   editApply: (sid, op) => call('edit-apply', sid, op),

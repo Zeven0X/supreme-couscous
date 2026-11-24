@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-23: **Sound editor finished** (all 8 parts: Trim, Split, Effects, Loop, Layers, Smart connect…). Next: you try it on your PC and tell me what feels wrong.
+- 2026-11-24: **Same loudness** buttons built (library, playlist, map). Next (your C1): save many songs separately (to your save folder, normal names), then the same edit on many songs at once.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -29,6 +29,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-24: **Same loudness** buttons in the Library toolbar, in every playlist (🔊 Loudness) and in the Map toolbar: songs get a Volume that makes them equally loud; files untouched; Undo.
 - 2026-11-23: **Sound editor parts 2–8**: Trim, Split (+ Same loudness, save parts), Effects (Echo, Slowed + reverb, Nightcore, Bass boost, 8D, 1D), Loop (+ smart loop), Layers (songs, 6 built-in sounds, voice recording, match beat, auto-quiet, repeat), Smart connect. Preview before every change.
 - 2026-11-23: **Sound editor part 1**: 📏 Edit page (Ctrl+3, or right-click → Edit…), big zoomable waveform, select, cut out, keep only, undo / redo, save as Keep both / New takes the name / Replace the original (to the Recycle Bin, asks first).
 - 2026-11-23: **Smart playlists made by Tonix**: one for each genre + exact stars, e.g. "6⭐ Rock". They update by themselves when you rate a song or change its genre.
@@ -63,6 +64,7 @@
 - 2026-11-23: Page, caliper and gear buttons hidden (code kept) until planned with the user.
 
 ## Ideas for later
+- Planned next (asked 2026-11-24): save many songs separately (save folder, normal names, no numbers) and the same edit (Trim, Effects…) on many songs at once, each saved separately.
 - Compare speed/pitch tools by ear (Rubber Band vs Signalsmith Stretch) with one good-quality song, for the last 10% of quality.
 - Lyrics, equalizer, visualizer.
 - Drag songs straight from the Search page onto the Map.

@@ -21,7 +21,7 @@ const launch = () => _electron.launch({ executablePath: 'node_modules/electron/d
   ok('Tonix made them by itself', (await names()) === '2⭐ Pop, 9⭐ Rock, 6⭐ Rock', await names());
   await w.click('.pl-item.smart:has-text("6⭐ Rock")'); await wait(200);
   ok('6⭐ Rock = the two Rock songs with exactly 6 stars', (await w.locator('.pl-row').count()) === 2);
-  ok('no rename / delete / add files on a smart playlist', (await w.locator('.pl-btns2 .tb').count()) === 1 && (await w.locator('.pl-x').count()) === 0);
+  ok('no rename / delete / add files on a smart playlist (only Save + Loudness)', (await w.locator('.pl-btns2 .tb').allTextContents()).join() === '💾 Save,🔊 Loudness' && (await w.locator('.pl-x').count()) === 0);
   await w.screenshot({ path: SP + '/concepts/smart-playlists.png' });
   // rate Iron Heart 9: it moves to 9⭐ Rock by itself
   await w.click('#lib-tabs button[data-tab=all]'); await wait(200); await rate('Iron Heart', 9);

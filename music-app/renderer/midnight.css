@@ -559,7 +559,7 @@ body[data-theme="pastel"] .clashmsg { color: #c03030; }
 #lib-toolbar { overflow: hidden; }
 #lib-toolbar .tgroup { flex: none; }
 #view-library.pl-mode #lib-toolbar .zoom, #view-library.pl-mode #btn-save-many { display: none; }
-@media (max-width: 1440px) { #btn-upload-folder span:last-child, #btn-save-many span:last-child { display: none; } }
+@media (max-width: 1440px) { #btn-upload-folder span:last-child, #btn-save-many span:last-child, #btn-loud span:last-child { display: none; } }
 
 /* smart shuffle marks */
 .pl-row { grid-template-columns: 18px 26px 40px minmax(0, 1fr) auto auto 30px; }
@@ -712,3 +712,6 @@ body[data-theme="pastel"] .clashmsg { color: #c03030; }
 .ed-preview b { color: var(--text); }
 .ed-preview .grow { flex: 1; }
 .ed-wave { min-height: 120px; }
+/* playlist: 4 small buttons on one line */
+.pl-btns2 { gap: 0; }
+.pl-btns2 .tb { padding: 4px 5px; font-size: 11.5px; }

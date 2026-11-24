@@ -140,5 +140,25 @@ The Library page holds all your songs: upload, search, tabs, filters, picture si
 ### History
 - 2026-11-23: Built. Your words: "A playlist of the stars amount for that genre. 6⭐️ rock. 2⭐️ pop", exact stars (B1), Tonix makes them (B2), no maximum (B4).
 
+## Same loudness — current state ✅ (2026-11-24)
+- **Where (3 buttons):**
+  - Library toolbar: **🔊 Same loudness**: every song in your library.
+  - A playlist (yours or made by Tonix): **🔊 Loudness**: the songs in that playlist.
+  - Map toolbar: **Same loudness**: the songs on that map.
+- **What it does:** Tonix listens to each song once, measures how loud it is on average (the way radio stations measure it), and sets each song's **Volume** so they all sound as loud as each other. The target is the group's average, so the whole group doesn't get much louder or quieter.
+- **Your music files are not changed** (your choice A2). The new Volume is used when you play and when you save.
+  - Library and playlists change the songs' own Volume, so they also play like this everywhere else.
+  - The map changes only its own copies (map songs have their own sound settings). The same songs in the library keep their Volume.
+- **Safety:** it asks first. When it's done, the message has an **Undo** button (15 seconds) that puts every volume back.
+- **Speed:** the first time, Tonix listens to every song (you see "Listening to … (3 of 120)" at the top). The result is remembered, so next time it takes about a second, until a file changes.
+- Completely silent songs are left alone. The volume stays between 1% and 500%.
+
+### Checked
+- In the real app (9/9) with copies of one song at 100%, 60% and 30% loudness: library → the 30% song gets 3.3× and the 60% one 1.7× the volume of the loud one (exactly right); your files are not changed; Undo puts all volumes back to 100%; the playlist button changes only its 2 songs; the map button changes only the map's copies, the library stays at 100%; the second time took 0.65 s.
+- **Not yet tried by you.**
+
+### History
+- 2026-11-24: Built. Your words: "create a button in the library that makes all the sound level the same", "The entire library or playlist or map", and A2 (change the Volume setting, not the files).
+
 ## Ideas for later (playlists)
 - Show stars in playlist rows too; sort a playlist by stars.

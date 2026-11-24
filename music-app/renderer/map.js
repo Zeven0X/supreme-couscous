@@ -1,5 +1,5 @@
 'use strict';
-/* global S, h, $, $$, coverEl, ICONS, modal, guard, toast, tf, TFChance, TFBackgrounds, TFStudio */
+/* global S, h, $, $$, coverEl, ICONS, modal, guard, toast, tf, TFChance, TFBackgrounds, TFStudio, sameLoudness, applyFx, renderFx */
 // The Map page: songs on a board, connected by paths. (Path settings and playing come in later steps.)
 (function () {
   const M = {
@@ -1014,6 +1014,22 @@
   }
   for (const [sel, name] of [['#map-zoom-in', 'zoomIn'], ['#map-zoom-out', 'zoomOut']]) $(sel).innerHTML = ICONS[name];
   for (const n of $$('#map-toolbar .ic')) n.innerHTML = ICONS[n.dataset.icon];
+
+  // Same loudness for this map: each map song has its own copy of the sound settings, so only the map changes.
+  $('#map-loud').addEventListener('click', () => {
+    const stops = M.map.stops.filter((s) => S.byId.get(s.trackId));
+    sameLoudness(stops.map((s) => s.trackId), 'on this map', async (volumes) => {
+      const before = {};
+      for (const s of stops) {
+        if (!(s.trackId in volumes)) continue;
+        if (!s.fx) s.fx = { ...S.byId.get(s.trackId).fx };
+        before[s.id] = s.fx.volume;
+        s.fx.volume = volumes[s.trackId];
+      }
+      save(); render(); applyFx(); renderFx();
+      return () => { for (const s of M.map.stops) if (s.id in before) s.fx.volume = before[s.id]; save(); render(); applyFx(); renderFx(); toast('Volumes are back as they were.', { ms: 2500 }); };
+    }, 'Only the songs on this map change; the same songs in your library keep their own Volume. ');
+  });
 
   // Actions the keyboard shortcuts can run (Settings → Keyboard).
   const actions = {

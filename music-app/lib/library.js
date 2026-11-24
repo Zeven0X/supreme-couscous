@@ -106,6 +106,19 @@ class Library {
     this.save();
   }
 
+  // Same loudness: set many songs' Volume at once (one save). volumes = { id: percent }
+  setVolumes(volumes) {
+    const out = [];
+    for (const [id, v] of Object.entries(volumes || {})) {
+      const t = this.byId(id);
+      if (!t || !Number.isFinite(+v)) continue;
+      t.fx = normalizeFx({ ...t.fx, volume: +v });
+      out.push(t);
+    }
+    this.save();
+    return out;
+  }
+
   // ---- smart shuffle: the play clock counts every song heard; each song remembers when it played.
   get playClock() { return this.data.playClock; }
   played(id) {

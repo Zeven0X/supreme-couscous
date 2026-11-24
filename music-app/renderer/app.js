@@ -836,6 +836,36 @@ async function removeSelected() {
   if (!ok) return;
   await forgetTracks(ids);
 }
+// Same loudness: Tonix listens to every song in the group (library, playlist or map) and sets each one's
+// Volume so they all sound equally loud. Files are not changed. apply(volumes) returns an undo function.
+async function sameLoudness(ids, where, apply, note = '') {
+  ids = [...new Set(ids)].filter((id) => S.byId.has(id));
+  if (ids.length < 2) { toast(`Add at least 2 songs ${where} first.`); return; }
+  const ok = await confirmModal(`Make the ${ids.length} songs ${where} equally loud?`,
+    `Tonix listens to each song once and sets its Volume so they all sound as loud as each other. Your music files are not changed, and you can undo it. ${note}The first time takes a moment for many songs (you see the progress at the top).`,
+    'Make them equally loud');
+  if (!ok) return;
+  const r = await guard(() => tf.loudnessEven(ids), 'Same loudness: ');
+  if (!r) return;
+  const undo = await apply(r.volumes);
+  const n = Object.keys(r.volumes).length;
+  toast(`${n} songs now sound equally loud${r.silent.length ? ` (${r.silent.length} silent song${r.silent.length === 1 ? '' : 's'} left alone)` : ''}.`, { type: 'ok', action: () => undo && undo(), actionLabel: 'Undo', ms: 15000 });
+}
+// for the Library and playlists: the songs' own Volume
+async function setSongVolumes(volumes) {
+  const before = {};
+  for (const id of Object.keys(volumes)) before[id] = S.byId.get(id).fx.volume;
+  const apply = async (v) => {
+    const list = await guard(() => tf.tracksSetVolumes(v));
+    if (!list) return;
+    for (const t of list) upsertTrack(t);
+    applyFx(); renderFx(); drawWave();
+  };
+  await apply(volumes);
+  return () => apply(before).then(() => toast('Volumes are back as they were.', { ms: 2500 }));
+}
+$('#btn-loud').addEventListener('click', () => sameLoudness(S.tracks.map((t) => t.id), 'in your library', setSongVolumes));
+
 // Clear all music: every song leaves Tonix. Original files stay on the PC; maps are kept (their songs show as missing).
 async function clearAll() {
   const n = S.tracks.length;

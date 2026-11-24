@@ -496,6 +496,26 @@ function registerIpc() {
   handle('studio-cancel', (group) => { studio.cancel(group); return true; });
   handle('studio-size', () => studio.size());
   handle('studio-clear', () => { studio.clear(); return true; });
+  // Same loudness (Library / playlist / map): how loud each song is on average (measured once, remembered
+  // until the file changes), then the Volume that brings every song to the group's average.
+  handle('loudness-even', async (ids) => {
+    const list = [...new Set(ids)].map((id) => lib.byId(id)).filter((t) => t && fs.existsSync(t.mediaPath));
+    const louds = [];
+    for (let i = 0; i < list.length; i++) {
+      const t = list[i], st = fs.statSync(t.mediaPath), key = `${st.size}|${st.mtimeMs}`;
+      send('export-progress', { p: i / list.length, label: `Listening to "${t.title}" (${i + 1} of ${list.length})` });
+      if (t.lufsKey !== key || !Number.isFinite(t.lufs)) { t.lufs = await T.loudness(ff, t.mediaPath, 0, (t.duration || 3600) + 1); t.lufsKey = key; }
+      louds.push(t.lufs);
+    }
+    send('export-progress', { p: 1, label: 'Same loudness' });
+    lib.save();
+    const vols = T.sameLoudness(louds);
+    const volumes = {}, silent = [];
+    list.forEach((t, i) => { if (louds[i] > -60) volumes[t.id] = vols[i]; else silent.push(t.title); });
+    log('ok', `Same loudness: ${Object.keys(volumes).length} songs${silent.length ? `, ${silent.length} silent song(s) left alone` : ''}`);
+    return { volumes, silent, missing: ids.length - list.length };
+  });
+  handle('tracks-set-volumes', (volumes) => lib.setVolumes(volumes).map(trackForUi));
   handle('track-played', (id) => { const t = lib.played(id); return t ? { track: trackForUi(t), clock: lib.playClock } : null; });
   handle('track-mark', (ids, mark, n) => lib.mark(ids, mark, n).map(trackForUi));
   // ---- sound editor (Edit page)
