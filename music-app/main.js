@@ -272,8 +272,29 @@ async function exportMany(ids, opts) {
   const bitrate = [128, 192, 256, 320].includes(+opts.bitrate) ? +opts.bitrate : lib.settings.bitrate;
   const baseName = safeName(opts.name || (opts.artist ? `${opts.artist} - ${title}` : title));
   if (opts.dir) fs.mkdirSync(opts.dir, { recursive: true });
-  const remember = () => lib.setSettings({ albumFormat: format, bitrate, albumMode: opts.mode === 'single' ? 'single' : 'album', ...(opts.dir ? { exportDir: opts.dir } : {}) });
+  const remember = () => lib.setSettings({ albumFormat: format, bitrate, albumMode: ['single', 'separate'].includes(opts.mode) ? opts.mode : 'album', ...(opts.dir ? { exportDir: opts.dir } : {}) });
   try {
+    if (opts.mode === 'separate') {
+      let dir = opts.dir;
+      if (!dir) {
+        if (!lib.settings.askWhereToSave) dir = exportDir();
+        else { const r = await dialog.showOpenDialog(win, { title: 'Choose where to save the songs', defaultPath: exportDir(), properties: ['openDirectory', 'createDirectory'] }); if (r.canceled) return { canceled: true }; dir = r.filePaths[0]; }
+      }
+      fs.mkdirSync(dir, { recursive: true });
+      log('info', `Saving ${tracks.length} songs separately to ${dir}...`);
+      for (let i = 0; i < tracks.length; i++) {
+        const t = tracks[i];
+        const dest = uniquePath(path.join(dir, `${safeName(fileName(t))}.${format}`));
+        await ff.exportOne({
+          src: t.mediaPath, dest, fx: t.fx, duration: t.duration, bitrate, format, tags: tagsOf(t), coverPath: lib.coverPath(t),
+          onProgress: (p) => send('export-progress', { p: (i + p) / tracks.length, label: `${t.title} (${i + 1} of ${tracks.length})` }),
+        });
+      }
+      send('export-progress', { p: 1, label: 'Saved separately' });
+      remember();
+      log('ok', `Saved ${tracks.length} songs to ${dir}`);
+      return { path: dir };
+    }
     if (opts.mode === 'single') {
       const dest = opts.dir ? uniquePath(path.join(opts.dir, `${baseName}.${format}`)) : await chooseDest(baseName, format);
       if (!dest) return { canceled: true };
@@ -674,7 +695,8 @@ function registerIpc() {
     log('ok', `Split "${t.title}" into ${out.length} songs in ${dir}`);
     return { dir, added: out };
   });
-  handle('edit-save', async (sid, mode) => {
+  handle('edit-save', (sid, mode) => saveSession(sid, mode));
+  async function saveSession(sid, mode) {
     const s = editor.get(sid);
     const t = lib.byId(s.trackId);
     if (!t) throw new Error('This song is not in the library any more.');
@@ -702,6 +724,40 @@ function registerIpc() {
     }
     log('ok', `Edit saved: ${r.dest}${r.old && r.old !== t.srcPath ? ` (original now: ${path.basename(r.old)})` : ''}${mode === 'replace' ? ' (original moved to the Recycle Bin)' : ''}`);
     return { dest: r.dest, changed: changed.map(trackForUi), added: added ? trackForUi(added) : null };
+  }
+  // The same edit on many songs: each song is opened, trimmed and / or given effects, saved in one of the
+  // 3 ways, and closed. A song that can't be done is skipped with the reason; the others go on.
+  handle('batch-edit', async (ids, opts = {}) => {
+    const mode = ['both', 'newname', 'replace'].includes(opts.mode) ? opts.mode : 'both';
+    const fxGraph = opts.fx && Object.keys(opts.fx).length ? T.effectChain(opts.fx) : null;
+    const level = opts.trim && Object.hasOwn(T.TRIM_LEVELS, opts.trim) ? T.TRIM_LEVELS[opts.trim] : null;
+    if (level === null && !fxGraph) throw new Error('Choose at least one change: Trim or an effect.');
+    const done = [], skipped = [], changed = [], added = [];
+    const list = ids.map((id) => lib.byId(id)).filter(Boolean);
+    for (let i = 0; i < list.length; i++) {
+      const t = list[i];
+      send('export-progress', { p: i / list.length, label: `Editing "${t.title}" (${i + 1} of ${list.length})` });
+      let st = null;
+      try {
+        if (!fs.existsSync(t.mediaPath)) throw new Error('the file is not on your PC any more');
+        st = await editor.open(t.id, t.mediaPath);
+        if (level !== null) {
+          const tp = T.trimPoints(await T.silences(ff, st.file, level, 0.08), st.duration);
+          if (!tp.empty && (tp.head > 0.02 || tp.tail < st.duration - 0.02)) st = await editor.apply(st.id, { type: 'keep', a: tp.head, b: tp.tail, label: 'Trimmed' });
+        }
+        if (fxGraph) st = await editor.apply(st.id, { type: 'graph', graph: fxGraph, label: 'Effects' });
+        if (st.version === 0) { skipped.push({ title: t.title, why: 'nothing to change (no silent start or end)' }); continue; }
+        const r = await saveSession(st.id, mode);
+        changed.push(...r.changed); if (r.added) added.push(r.added);
+        done.push({ title: t.title, dest: r.dest });
+      } catch (e) {
+        skipped.push({ title: t.title, why: e.message });
+        log('warn', `Edit many: "${t.title}" skipped: ${e.message}`);
+      } finally { if (st) editor.close(st.id); }
+    }
+    send('export-progress', { p: 1, label: 'Edit many songs' });
+    log('ok', `Edit many: ${done.length} saved, ${skipped.length} skipped`);
+    return { done, skipped, changed, added };
   });
   handle('playlist-create', (name, trackIds) => playlistForUi(lib.createPlaylist(name, trackIds)));
   handle('playlist-update', (id, patch) => { const p = lib.updatePlaylist(id, patch); if (!p) throw new Error('Playlist not found'); return playlistForUi(p); });

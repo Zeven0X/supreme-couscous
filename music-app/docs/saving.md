@@ -52,3 +52,11 @@ See [Library → Save a playlist](library.md). Same style as the Save song windo
 - "Ask where to save every time" (Settings → Saving) works again in the save windows: "Save in" then says "Windows will ask where".
 - Choices are only remembered after a save worked.
 - Folder names like "Vol. 2" stay right when the name is taken ("Vol. 2 (2)").
+
+## Save many songs separately — current state ✅ (2026-11-24)
+- **Where:** select songs in the Library (Ctrl+click, Shift+click, or Ctrl+A for all) → **Save album / Save N songs** → **Separate songs** (the first of 3 choices). It also works from a playlist's 💾 Save.
+- **What it does:** every song becomes its own file **in your save folder** (your choice A4), with **its own name** (as set in Settings → Saving, e.g. "Artist - Title"), its own picture and information, and its own speed / pitch / volume / fades. No new folder, no "01 -" numbers, no shared album name.
+- In this mode the album boxes, the picture and the Name row are hidden (each song keeps its own). The list says "each saved with its own name, no numbers". You can still leave songs out with ✕.
+- Type and quality work as before. A name that already exists gets "(2)"; nothing is replaced. Tonix remembers you chose "Separate songs" for next time.
+- **Checked** in the real app: 3 songs → "Ambi - Rainfall.mp3", "Lina Park - Golden Hour.mp3", "The Forge - Iron Heart.mp3" in the save folder, each with its own title, no album name forced on them.
+- History: 2026-11-24: Added. Your question: "Can I add multiple songs all at once and save all of them separately?"

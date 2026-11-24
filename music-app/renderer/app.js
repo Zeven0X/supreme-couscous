@@ -1,5 +1,5 @@
 'use strict';
-/* global ICONS, tf, TFStudio, TFSaveName, TFPlaylists, TFShuffle, TFStars, TFSmart, TFEdit */
+/* global ICONS, tf, TFStudio, TFSaveName, TFPlaylists, TFShuffle, TFStars, TFSmart, TFEdit, TFBatch */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 function h(tag, attrs = {}, ...kids) {
@@ -759,7 +759,8 @@ function showCardMenu(x, y, id) {
   const items = [
     ['Play', () => playTrack(id)],
     ['Change picture…', () => changeCover(id)],
-    ['📏 Edit…', () => TFEdit.open(id)],
+    [many ? '📏 Edit this song…' : '📏 Edit…', () => TFEdit.open(id)],
+    many ? [`📏 Edit ${S.selected.length} songs together…`, () => TFBatch.open([...S.selected])] : null,
     null,
     [many ? `Add ${S.selected.length} songs to playlist…` : 'Add to playlist…', () => TFPlaylists.pickFor(many ? [...S.selected] : [id])],
     null,
@@ -1080,7 +1081,7 @@ async function openAlbumModal(idsIn, { playlist = null } = {}) {
   let coverTrackId = (ids.map((id) => S.byId.get(id)).find((t) => t.coverUrl) || {}).id || null;
   const usePlCover = !!(playlist && playlist.coverUrl);
   let plCover = usePlCover;
-  let mode = S.settings.albumMode === 'single' ? 'single' : 'album';
+  let mode = ['single', 'separate'].includes(S.settings.albumMode) ? S.settings.albumMode : 'album';
   let type = SAVE_TYPES.find((x) => x.id === (S.settings.albumFormat || S.settings.format)) || SAVE_TYPES[0];
   let kbps = [128, 192, 256, 320].includes(+S.settings.bitrate) ? +S.settings.bitrate : 320;
   let dir = S.settings.exportDir;
@@ -1133,13 +1134,16 @@ async function openAlbumModal(idsIn, { playlist = null } = {}) {
     const dirEl = h('div', { class: 'sv-dir' });
     const saveBtn = h('button', { class: 'btn primary' });
     nameIn.addEventListener('input', () => { nameTouched = !!nameIn.value.trim(); update(); });
+    const listLabel = h('div', { class: 'sv-l' });
     const okTypes = () => (mode === 'single' ? SAVE_TYPES.filter((x) => x.id === 'mp3' || x.id === 'm4a') : SAVE_TYPES);
     function update() {
       const title = f.title.value.trim() || 'My Album', artist = f.artist.value.trim();
       if (!nameTouched) nameIn.value = artist ? `${artist} - ${title}` : title;
       if (!okTypes().includes(type)) type = SAVE_TYPES[0];
       modeBox.innerHTML = '';
-      for (const [m, label, text] of [['album', 'One file per song', 'A new folder, songs numbered 01, 02… all with the album name and picture'], ['single', 'One big file', 'All songs joined into one file, with a chapter mark at each song']]) {
+      box.classList.toggle('sep-mode', mode === 'separate'); // separate songs: no album, name or picture to set
+      listLabel.textContent = mode === 'separate' ? `The ${ids.length} songs (each saved with its own name, no numbers)` : `Order (${ids.length} songs, numbered when saved)`;
+      for (const [m, label, text] of [['separate', 'Separate songs', 'Each song as its own file in the folder, with its own name, picture and information. No new folder, no numbers.'], ['album', 'One file per song, as an album', 'A new folder, songs numbered 01, 02… all with the album name and picture'], ['single', 'One big file', 'All songs joined into one file, with a chapter mark at each song']]) {
         modeBox.append(h('button', { class: `sv-mode${mode === m ? ' on' : ''}`, onclick: () => { mode = m; update(); } }, h('b', {}, label), h('span', {}, text)));
       }
       typeSeg.innerHTML = '';
@@ -1177,12 +1181,12 @@ async function openAlbumModal(idsIn, { playlist = null } = {}) {
         h('div', { class: 'sv-left' }, art, warn),
         h('div', { class: 'sv-right' },
           h('div', { class: 'sv-grid sv-grid-top' }, field('title', 'Album'), field('artist', 'Album artist'), field('date', 'Date'), field('genre', 'Genre'), field('label', 'Label')))),
-      h('div', { class: 'sv-songs' }, h('div', { class: 'sv-l' }, `Order (${ids.length} songs, numbered when saved)`), list),
+      h('div', { class: 'sv-songs' }, listLabel, list),
       h('div', { class: 'sv-opts' },
         ...row('Save as', modeBox),
         ...row('Type', typeSeg, typeHint),
         ...row('Quality', qSeg, qHint),
-        ...row('Name', h('div', { class: 'sv-namebox' }, nameIn, extEl)),
+        h('span', { class: 'sv-l sv-namerow' }, 'Name'), h('div', { class: 'sv-r sv-namerow' }, h('div', { class: 'sv-namebox' }, nameIn, extEl)),
         ...row('Save in', dirEl, h('button', { class: 'btn', onclick: async () => { const d = await guard(() => tf.pickDir(dir)); if (d) { dir = d; update(); } } }, 'Change…'))),
       h('div', { class: 'foot' }, h('span', { class: 'muted' }), h('button', { class: 'btn', onclick: () => close() }, 'Cancel'), saveBtn),
     );

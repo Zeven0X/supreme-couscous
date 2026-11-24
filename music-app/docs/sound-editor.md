@@ -61,6 +61,18 @@ Status: **all 8 parts built** (2026-11-23). Click a tab to open its panel under 
   3. **How:** Hard cut / Smooth (0.5 s blend) / Long blend (3 s), and "Then the song goes on" or "The song ends there", and **Land on the beat** (moves the cuts to the nearest beat, at most 0.25 s).
   - **▶ Preview** (starts 3 s before the join), then **✓ Connect**.
 
+## Edit many songs together ✅ (2026-11-24)
+- **Where:**
+  - Library: select songs, right-click → **📏 Edit N songs together…**. With several songs selected, the menu also has **📏 Edit this song…** for just the one you clicked.
+  - Edit page (no song open): **Edit many songs at once…** → tick the songs (or **Pick all**).
+- **The changes** (the same on every song, chosen for you because they need no hand-picking):
+  - **Trim the silent start and end** (Very quiet / Quiet / A bit quiet).
+  - **Effects:** Echo, Slowed + reverb, Nightcore, Bass boost, 8D, 1D, each with its strength.
+  - Loop, Split and Layers stay one song at a time, because you point at places in each song.
+- **Save each song** in one of the 3 ways: **Keep both** ("Name New" next to each original, the default) / **New takes the name** (originals become "Name Old") / **Replace the originals** (to the Recycle Bin; Tonix asks first).
+- Tonix works through the songs one by one (progress at the top) and you can keep using it. At the end a window says "Done: 8 saved, 2 skipped" and lists **why** a song was skipped (for example "nothing to change (no silent start or end)", or "the file is not on your PC any more"). **Show the files** opens the folder.
+- **Checked** in the real app: 4 songs, Trim + Echo, Keep both → 4 "… New" files next to the originals, 3 s of silence gone from the trimmed ones, originals untouched; a song with nothing to trim is skipped with the reason; the Edit page's tick-the-songs picker works.
+
 ## How it works (simple words)
 - **Silence and gaps:** Tonix listens for parts quieter than the chosen level (in decibels).
 - **Loudness:** measured like radio stations do (LUFS), then each part's volume is set to reach the average.
@@ -88,7 +100,19 @@ Status: **all 8 parts built** (2026-11-23). Click a tab to open its panel under 
   - **Replace the original:** asks first, then the new file takes the name and the original file goes to the **Recycle Bin** (you can still get it back there). The song in your library now plays the new file.
 - **Keys on the Edit page:** Space = play / pause, Delete = cut out, Ctrl+Z / Ctrl+Y = undo / redo, Esc = select nothing.
 
-### How it works (simple words)
+### Edit many songs together ✅ (2026-11-24)
+- **Where:**
+  - Library: select songs, right-click → **📏 Edit N songs together…**. With several songs selected, the menu also has **📏 Edit this song…** for just the one you clicked.
+  - Edit page (no song open): **Edit many songs at once…** → tick the songs (or **Pick all**).
+- **The changes** (the same on every song, chosen for you because they need no hand-picking):
+  - **Trim the silent start and end** (Very quiet / Quiet / A bit quiet).
+  - **Effects:** Echo, Slowed + reverb, Nightcore, Bass boost, 8D, 1D, each with its strength.
+  - Loop, Split and Layers stay one song at a time, because you point at places in each song.
+- **Save each song** in one of the 3 ways: **Keep both** ("Name New" next to each original, the default) / **New takes the name** (originals become "Name Old") / **Replace the originals** (to the Recycle Bin; Tonix asks first).
+- Tonix works through the songs one by one (progress at the top) and you can keep using it. At the end a window says "Done: 8 saved, 2 skipped" and lists **why** a song was skipped (for example "nothing to change (no silent start or end)", or "the file is not on your PC any more"). **Show the files** opens the folder.
+- **Checked** in the real app: 4 songs, Trim + Echo, Keep both → 4 "… New" files next to the originals, 3 s of silence gone from the trimmed ones, originals untouched; a song with nothing to trim is skipped with the reason; the Edit page's tick-the-songs picker works.
+
+## How it works (simple words)
 1. Opening a song makes a clean working copy. Your file is **never touched while you edit**.
 2. Each change (cut, keep…) makes a **new copy**. Undo and Redo just step between the copies, like pages in a flip book.
 3. Every cut gets a tiny 6-millisecond fade, so it never clicks.
@@ -115,6 +139,7 @@ Status: **all 8 parts built** (2026-11-23). Click a tab to open its panel under 
 | 9 | "Replace the original" also deletes the **real file on the PC**, always after an "are you sure?" question. (Decided 2026-11-23.) |
 
 ## History
+- 2026-11-24: **Edit many songs together** added (Trim and / or Effects on many songs, each saved in one of the 3 ways). Your choice: "Same edit on many songs, save each".
 - 2026-11-23: Parts 2–8 built in one go (your choice): Trim, Split + Same loudness, Effects, Loop + smart loop, Layers with built-in sounds and voice recording, Smart connect, auto-quiet, match beat, repeat. Previews for every change.
 - 2026-11-23: Part 1 built (the Edit page). The 📏 Edit button is back in the top bar.
 - 2026-11-23: designed. Before: the caliper button was hidden with no plan.

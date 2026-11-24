@@ -276,7 +276,8 @@ window.TFEdit = (() => {
         h('div', { class: 'ed-empty-ic', html: ICONS.caliper }),
         h('b', {}, 'Edit a song'),
         h('p', {}, 'Right-click a song in the Library → Edit…, or open one here. You can cut parts out, keep only a part, and save in 3 ways. Trim, Split, Effects, Loop and Layers come next.'),
-        h('button', { class: 'tb pri', onclick: pick }, 'Open a song…'),
+        h('div', { class: 'ed-empty-btns' }, h('button', { class: 'tb pri', onclick: pick }, 'Open a song…'),
+          h('button', { class: 'tb', onclick: () => window.TFBatch.pickMany(), title: 'The same Trim and / or Effects on many songs, each saved separately' }, 'Edit many songs at once…')),
         h('div', { id: 'ed-busy', class: 'ed-busy', hidden: true })));
       return;
     }

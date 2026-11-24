@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('tf', {
   exportTrack: (id, opts) => call('export-track', id, opts),
   trackPlayed: (id) => call('track-played', id),
   loudnessEven: (ids) => call('loudness-even', ids),
+  batchEdit: (ids, opts) => call('batch-edit', ids, opts),
   tracksSetVolumes: (volumes) => call('tracks-set-volumes', volumes),
   trackMark: (ids, mark, n) => call('track-mark', ids, mark, n),
   editOpen: (id) => call('edit-open', id),
