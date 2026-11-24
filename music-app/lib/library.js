@@ -201,8 +201,20 @@ class Library {
   flush() {
     clearTimeout(this._timer);
     const tmp = `${this.file}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(this.data, null, 1));
-    fs.renameSync(tmp, this.file);
+    for (let attempt = 1; attempt <= 5; attempt++) { // antivirus / indexer can lock the file for a moment on Windows
+      try {
+        fs.writeFileSync(tmp, JSON.stringify(this.data, null, 1));
+        fs.renameSync(tmp, this.file);
+        this.saveError = null;
+        return true;
+      } catch (e) {
+        this.saveError = e;
+        const until = Date.now() + 60 * attempt; while (Date.now() < until) { /* short wait before trying again */ }
+      }
+    }
+    console.error(`Tonix: could not save the library (${this.saveError.message}); trying again with the next change.`);
+    this._timer = setTimeout(() => this.flush(), 2000);
+    return false;
   }
 }
 

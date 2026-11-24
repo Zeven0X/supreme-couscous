@@ -199,3 +199,13 @@ test('Tonix information travels inside saved files and comes back on upload', as
     assert.match(b.track, /^3(\/12)?$/, `${fmt} track ${b.track}`);
   }
 });
+
+test('pictures: a name with % works, and GIF / WebP / PNG still work (found in the bug hunt)', async () => {
+  for (const name of ['50%d off.png', 'plain.png', 'anim.gif', 'pic.webp']) {
+    const src = path.join(tmp, name);
+    await ff.run(['-y', '-f', 'lavfi', '-i', 'color=c=red:s=64x64', '-frames:v', '1', '-update', '1', src]);
+    const out = path.join(tmp, `out-${name}.jpg`);
+    await ff.imageToJpg(src, out);
+    assert.ok(fs.existsSync(out), name);
+  }
+});

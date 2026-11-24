@@ -254,7 +254,7 @@ function startShuffle(poolIds, firstId) {
 function topUpShuffle() {
   if (!S.shufflePool) return;
   const pool = S.shufflePool.map((id) => S.byId.get(id)).filter(Boolean);
-  if (!pool.length) return;
+  if (pool.length < 2) return; // one song: it plays once (no "Alpha Alpha Alpha")
   const i = Math.max(0, qPos());
   while (S.queue.length - 1 - i < 3) {
     const t = TFShuffle.pick(pool, S.queue, S.playClock || 0);
@@ -513,6 +513,7 @@ function renderNow() {
 function renderNext() {
   const box = $('#next-thumbs');
   box.innerHTML = '';
+  if (S.playStop) { box.append(h('span', { class: 'none' }, 'The map picks the next song')); return; }
   const next = upNext();
   for (const t of next.slice(0, 3)) {
     box.append(h('div', { class: 'thumb', title: `${t.title}${t.artist ? ` — ${t.artist}` : ''}`, onclick: () => loadTrack(t.id, { autoplay: true }) }, coverEl(t)));
@@ -542,8 +543,9 @@ function drawWave() {
   const t = cur();
   const dur = audio.duration || (t && t.duration) || 0;
   const pos = dur ? audio.currentTime / dur : 0;
-  $('#t-cur').textContent = fmtTime(audio.currentTime);
-  $('#t-dur').textContent = fmtTime(dur);
+  const spd = (liveFx().speed || 100) / 100; // shown in listening time, like playlists and save windows
+  $('#t-cur').textContent = fmtTime(audio.currentTime / spd);
+  $('#t-dur').textContent = fmtTime(dur / spd);
   if (!t) return;
   // fade areas (fades are in output seconds -> source seconds = s * speed)
   const lf = liveFx();
@@ -743,7 +745,12 @@ $('#zoom-out').addEventListener('click', () => setZoom(+$('#zoom').value - 20));
 $('#grid-wrap').addEventListener('wheel', (e) => { if (e.ctrlKey) { e.preventDefault(); setZoom(+$('#zoom').value - Math.sign(e.deltaY) * 12); } }, { passive: false });
 
 for (const [id, key] of [['#search', 'q'], ['#f-artist', 'artist'], ['#f-date', 'date'], ['#f-label', 'label'], ['#f-genre', 'genre']]) {
-  $(id).addEventListener('input', (e) => { S.filters[key] = e.target.value; renderGrid(); if (S.view !== 'library') showView('library'); });
+  $(id).addEventListener('input', (e) => {
+    S.filters[key] = e.target.value;
+    if (S.libTab === 'playlists') $('#lib-tabs button[data-tab=all]').click(); // the results are songs: show them
+    renderGrid();
+    if (S.view !== 'library') showView('library');
+  });
 }
 $('#f-clear').addEventListener('click', () => {
   S.filters = { q: '', artist: '', date: '', label: '', genre: '', stars: null };
@@ -848,9 +855,12 @@ async function sameLoudness(ids, where, apply, note = '') {
   if (!ok) return;
   const r = await guard(() => tf.loudnessEven(ids), 'Same loudness: ');
   if (!r) return;
+  const limit = +S.settings.volumeLimit || 500; // the volume safety limit
+  let capped = 0;
+  for (const id of Object.keys(r.volumes)) if (r.volumes[id] > limit) { r.volumes[id] = limit; capped++; }
   const undo = await apply(r.volumes);
   const n = Object.keys(r.volumes).length;
-  toast(`${n} songs now sound equally loud${r.silent.length ? ` (${r.silent.length} silent song${r.silent.length === 1 ? '' : 's'} left alone)` : ''}.`, { type: 'ok', action: () => undo && undo(), actionLabel: 'Undo', ms: 15000 });
+  toast(`${n} songs now sound equally loud${r.silent.length ? ` (${r.silent.length} silent song${r.silent.length === 1 ? '' : 's'} left alone)` : ''}.${capped ? ` ${capped} very quiet song${capped === 1 ? '' : 's'} stopped at your volume limit (${limit}%).` : ''}`, { type: 'ok', action: () => undo && undo(), actionLabel: 'Undo', ms: 15000 });
 }
 // for the Library and playlists: the songs' own Volume
 async function setSongVolumes(volumes) {
@@ -882,6 +892,7 @@ async function clearAll() {
 }
 async function forgetTracks(ids) {
   if (await guard(() => tf.removeTracks(ids)) === undefined) return;
+  if (ids.includes(S.currentId)) { if (window.TFMap) window.TFMap.stopPlay(); S.playStop = null; S.playFx = null; setEdit(null); }
   TFPlaylists.onTracksRemoved(ids);
   for (const id of ids) {
     S.byId.delete(id);
@@ -913,10 +924,11 @@ function modal(build) {
     const box = h('div', { class: 'modal' });
     back.append(box);
     const close = (v) => { back.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); };
-    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(undefined); } };
+    const onKey = (e) => { if (e.key === 'Escape' && back === $('#modal-root').lastElementChild) { e.stopPropagation(); close(undefined); } }; // only the top window
     document.addEventListener('keydown', onKey, true);
     back.addEventListener('mousedown', (e) => { if (e.target === back) close(undefined); });
     build(box, close);
+    hideMenu();
     $('#modal-root').append(back);
     const first = box.querySelector('[autofocus]') || box.querySelector('input, button.primary');
     if (first) first.focus();
@@ -1042,7 +1054,7 @@ async function openSaveModal(id) {
       tags.stars = stars || null;
       close();
       const ask = S.settings.askWhereToSave; // Settings → Saving: Windows asks where to save
-      const r = await guard(() => tf.exportTrack(t.id, { tags, coverImage, format: type.id, bitrate: kbps, name: nameIn.value.trim() || tags.title, dir: ask ? null : dir }), 'Save: ');
+      const r = await guard(() => tf.exportTrack(t.id, { tags, coverImage, format: type.id, bitrate: kbps, name: nameIn.value.trim() || tags.title, dir: ask ? null : dir, askName: ask ? (nameIn.value.trim() || tags.title) : null }), 'Save: ');
       if (r && r.path) Object.assign(S.settings, { format: type.id, bitrate: kbps, ...(ask ? {} : { exportDir: dir }) }); // remembered for next time
       await afterSave(r);
     };
@@ -1316,6 +1328,7 @@ function showView(v) {
   if (v !== 'map' && S.edit) setEdit(null); // away from the map, the Sound panel edits the playing song again
   if (v === 'map' && window.TFMap) window.TFMap.show();
   if (v === 'settings' && window.TFSettings) window.TFSettings.render();
+  if (v !== 'settings' && window.TFSettings && window.TFSettings.stopRecording) window.TFSettings.stopRecording();
   if (v === 'edit') TFEdit.render(); else TFEdit.stop();
   if ((v === 'library' || v === 'map') && S.settings && S.settings.lastView !== v) { S.settings.lastView = v; tf.settings({ lastView: v }).catch(() => {}); }
   requestAnimationFrame(drawWave);

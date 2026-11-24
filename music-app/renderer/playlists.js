@@ -104,6 +104,12 @@ window.TFPlaylists = (() => {
     const v = view();
     if (!v || S.libTab !== 'playlists') return;
     if (P.rowDrag) { P.redraw = true; return; } // never redraw under a row that is being dragged
+    const keep = { rows: (v.querySelector('.pl-rows') || {}).scrollTop || 0, side: (v.querySelector('.pl-side') || {}).scrollTop || 0, id: P.openId };
+    requestAnimationFrame(() => { // put the scroll positions back (same playlist only)
+      const r = v.querySelector('.pl-rows'), sd = v.querySelector('.pl-side');
+      if (r && keep.id === P.openId) r.scrollTop = keep.rows;
+      if (sd) sd.scrollTop = keep.side;
+    });
     v.innerHTML = '';
     buildSmart();
     const side = h('div', { class: 'pl-side' },

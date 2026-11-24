@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron')
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { pipeline } = require('stream');
 const os = require('os');
 const crypto = require('crypto');
 const ff = require('./lib/ffmpeg');
@@ -49,15 +50,15 @@ function serveFile(req, res, file) {
     const headers = { 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
     const range = req.headers.range && req.headers.range.match(/bytes=(\d*)-(\d*)/);
     if (range && (range[1] || range[2])) {
-      let start = range[1] ? parseInt(range[1], 10) : st.size - parseInt(range[2], 10);
+      let start = range[1] ? parseInt(range[1], 10) : Math.max(0, st.size - parseInt(range[2], 10));
       let end = range[1] && range[2] ? parseInt(range[2], 10) : st.size - 1;
       if (start >= st.size || start > end) { res.writeHead(416, { 'Content-Range': `bytes */${st.size}` }); res.end(); return; }
       end = Math.min(end, st.size - 1);
       res.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${st.size}`, 'Content-Length': end - start + 1 });
-      fs.createReadStream(file, { start, end }).pipe(res);
+      pipeline(fs.createReadStream(file, { start, end }), res, () => {}); // closes the file on aborts and errors
     } else {
       res.writeHead(200, { ...headers, 'Content-Length': st.size });
-      fs.createReadStream(file).pipe(res);
+      pipeline(fs.createReadStream(file), res, () => {});
     }
   });
 }
@@ -66,7 +67,8 @@ function startServer() {
   return new Promise((resolve) => {
     server = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://x');
-      const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+      let parts;
+      try { parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent); } catch (_) { res.writeHead(400); res.end(); return; }
       if (parts[0] !== TOKEN) { res.writeHead(403); res.end(); return; }
       if (parts[1] === 'app') {
         const file = path.normalize(path.join(RENDERER, ...parts.slice(2)));
@@ -93,14 +95,17 @@ function startServer() {
 function safeName(name, fallback = 'Untitled') {
   let n = String(name || '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/, '').trim();
   if (!n) n = fallback;
-  if (/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(n)) n = `_${n}`;
-  return n.slice(0, 150).replace(/[. ]+$/, '') || fallback; // Windows names can't end in a dot or space
+  if (/^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(n)) n = `_${n}`;
+  return Array.from(n).slice(0, 150).join('').replace(/[. ]+$/, '') || fallback; // whole characters; no dot / space at the end
 }
 // A free name: "Song.mp3" -> "Song (2).mp3". Folders have no extension ("Vol. 2" stays "Vol. 2 (2)").
+const reservedNames = new Set(); // names just handed out (the file may not be written yet)
 function uniquePath(p, isDir = false) {
-  if (!fs.existsSync(p)) return p;
+  const free = (c) => !fs.existsSync(c) && !reservedNames.has(c.toLowerCase());
+  const take = (c) => { reservedNames.add(c.toLowerCase()); setTimeout(() => reservedNames.delete(c.toLowerCase()), 10 * 60 * 1000); return c; };
+  if (free(p)) return take(p);
   const { dir, name, ext } = isDir ? { dir: path.dirname(p), name: path.basename(p), ext: '' } : path.parse(p);
-  for (let i = 2; ; i++) { const c = path.join(dir, `${name} (${i})${ext}`); if (!fs.existsSync(c)) return c; }
+  for (let i = 2; ; i++) { const c = path.join(dir, `${name} (${i})${ext}`); if (free(c)) return take(c); }
 }
 function collectFiles(paths) {
   const out = [];
@@ -119,10 +124,16 @@ function collectFiles(paths) {
   return out;
 }
 function exportDir() {
-  const d = lib.settings.exportDir || path.join(app.getPath('music'), 'Tonix Exports');
-  fs.mkdirSync(d, { recursive: true });
-  return d;
+  const fallback = path.join(app.getPath('music'), 'Tonix Exports');
+  const d = lib.settings.exportDir || fallback;
+  try { fs.mkdirSync(d, { recursive: true }); return d; } catch (e) {
+    log('warn', `The save folder ${d} can't be used (${e.code || e.message}), so Tonix saves to ${fallback}.`);
+    fs.mkdirSync(fallback, { recursive: true });
+    return fallback;
+  }
 }
+// Is this file inside Tonix's own library folder (converted / imported copies), not one of the user's files?
+function isInternal(p) { return !!p && path.resolve(p).toLowerCase().startsWith(path.resolve(lib.mediaDir).toLowerCase() + path.sep); }
 function trackForUi(t) {
   const origName = t.imported ? t.title : path.basename(t.srcPath || '', path.extname(t.srcPath || ''));
   return { ...t, origName, coverUrl: t.cover ? `${baseUrl}/cover/${t.id}?v=${t.coverVersion || 0}` : null, mediaUrl: `${baseUrl}/media/${t.id}` };
@@ -177,10 +188,12 @@ async function doImport(paths) {
       if (!info.directPlay) {
         mediaPath = path.join(lib.mediaDir, `${id}.mp3`);
         log('info', `Converting ${name} to MP3...`);
-        await ff.toMp3(file, mediaPath, {
-          bitrate: lib.settings.bitrate, duration: info.duration,
-          onProgress: (p) => send('import-progress', { done: i + p, total: files.length, name }),
-        });
+        try {
+          await ff.toMp3(file, mediaPath, {
+            bitrate: lib.settings.bitrate, duration: info.duration,
+            onProgress: (p) => send('import-progress', { done: i + p, total: files.length, name }),
+          });
+        } catch (e) { fs.rmSync(mediaPath, { force: true }); throw e; } // no half-made copy left behind
         converted = true;
       }
       let cover = null;
@@ -236,7 +249,7 @@ async function exportTrack(id, opts = {}) {
   if (opts.dir) { // the save window chose the folder and the file name
     fs.mkdirSync(opts.dir, { recursive: true });
     dest = uniquePath(path.join(opts.dir, `${safeName(opts.name || fileName(t))}.${format}`));
-  } else dest = await chooseDest(fileName(t), format);
+  } else dest = await chooseDest(opts.askName || fileName(t), format); // Windows asks; the typed name is suggested
   if (!dest) return { canceled: true };
   log('info', `Saving "${t.title}" (speed ${t.fx.speed}%, pitch ${t.fx.pitch}%, volume ${t.fx.volume}%, fade in ${t.fx.fadeIn}s, fade out ${t.fx.fadeOut}s)...`);
   const started = Date.now();
@@ -369,7 +382,7 @@ async function exportMap(mapId) {
 // Picture from a received file -> a fresh PNG made by ffmpeg (proves it is really a picture).
 async function importPicture(src, mapId) {
   const name = `${mapId}-${hex(4)}.png`;
-  await ff.run(['-y', '-i', src, '-frames:v', '1', '-vf', "scale='min(1024,iw)':-2", path.join(maps.assetDir, name)]);
+  await ff.run(['-y', ...ff.imageInput(src), '-frames:v', '1', '-update', '1', '-vf', "scale='min(1024,iw)':-2", path.join(maps.assetDir, name)]);
   return name;
 }
 
@@ -447,6 +460,7 @@ function handle(name, fn) {
   ipcMain.handle(name, async (_e, ...args) => {
     try { return { ok: true, value: await fn(...args) }; } catch (e) {
       log('error', e.message);
+      send('export-progress', { p: 1, label: '' }); // a job that failed must not leave the progress bar stuck
       return { ok: false, error: e.message };
     }
   });
@@ -475,7 +489,7 @@ function registerIpc() {
   handle('image-preview', async (imagePath) => {
     const tmp = path.join(os.tmpdir(), `tonix-preview-${Date.now()}.jpg`);
     try {
-      await ff.run(['-y', '-i', imagePath, '-frames:v', '1', '-vf', "scale='min(400,iw)':-2", '-q:v', '4', tmp]);
+      await ff.run(['-y', ...ff.imageInput(imagePath), '-frames:v', '1', '-update', '1', '-vf', "scale='min(400,iw)':-2", '-q:v', '4', tmp]);
       return `data:image/jpeg;base64,${fs.readFileSync(tmp).toString('base64')}`;
     } finally { fs.rmSync(tmp, { force: true }); }
   });
@@ -497,9 +511,10 @@ function registerIpc() {
     const t = lib.byId(id);
     if (!t) throw new Error('Song not found');
     const cache = path.join(lib.peakDir, `${id}.json`);
-    if (fs.existsSync(cache)) return JSON.parse(fs.readFileSync(cache, 'utf8'));
+    if (fs.existsSync(cache)) { try { return JSON.parse(fs.readFileSync(cache, 'utf8')); } catch (_) { fs.rmSync(cache, { force: true }); } }
     const p = await ff.peaks(t.mediaPath);
-    fs.writeFileSync(cache, JSON.stringify(p));
+    fs.writeFileSync(`${cache}.tmp`, JSON.stringify(p));
+    fs.renameSync(`${cache}.tmp`, cache);
     return p;
   });
   // Studio pitch: a pitched copy of a song (or a part of it) to listen to. null = replaced by a newer request.
@@ -538,7 +553,7 @@ function registerIpc() {
   });
   handle('tracks-set-volumes', (volumes) => lib.setVolumes(volumes).map(trackForUi));
   handle('track-played', (id) => { const t = lib.played(id); return t ? { track: trackForUi(t), clock: lib.playClock } : null; });
-  handle('track-mark', (ids, mark, n) => lib.mark(ids, mark, n).map(trackForUi));
+  handle('track-mark', (ids, mark, n) => lib.mark(ids, mark, Number.isFinite(+n) && +n > 0 ? +n : lib.tracks.length).map(trackForUi));
   // ---- sound editor (Edit page)
   const editView = async (st) => {
     const buckets = Math.round(Math.min(30000, Math.max(1600, st.duration * 60)));
@@ -550,7 +565,7 @@ function registerIpc() {
     log('info', `Edit: opening "${t.title}"`);
     return editView(await editor.open(id, t.mediaPath));
   });
-  handle('edit-apply', async (sid, op) => editView(await editor.apply(sid, op)));
+  handle('edit-apply', async (sid, op) => editView(await editor.apply(sid, await resolveOp(sid, op))));
   handle('edit-undo', async (sid) => editView(await editor.undo(sid)));
   handle('edit-redo', async (sid) => editView(await editor.redo(sid)));
   handle('edit-close', (sid) => { editor.close(sid); return true; });
@@ -651,6 +666,7 @@ function registerIpc() {
   });
   handle('edit-smartloop', async (sid, a, b) => {
     const cur = editor.current(editor.get(sid));
+    if (!(Number.isFinite(+a) && Number.isFinite(+b) && b - a >= 0.05)) throw new Error('Select a longer part to loop.');
     const from = Math.max(0, a - 0.5);
     const x = await T.decodeMono(ff, cur, 22050, from, b - from + 1);
     const r = T.smartLoop(x, 22050, a - from, b - from);
@@ -673,23 +689,24 @@ function registerIpc() {
     const s = editor.get(sid), cur = editor.current(s);
     const t = lib.byId(s.trackId);
     if (!t) throw new Error('This song is not in the library any more.');
-    const dir = fs.existsSync(path.dirname(t.srcPath)) ? path.dirname(t.srcPath) : exportDir();
+    const dir = !isInternal(t.srcPath) && fs.existsSync(path.dirname(t.srcPath)) ? path.dirname(t.srcPath) : exportDir(); // never into Tonix's own folder
     const ext = path.extname(t.srcPath).slice(1).toLowerCase();
     const format = ff.FORMATS[ext] ? ext : 'mp3';
     const out = [];
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i];
-      const name = safeName(p.name || `${t.title} - Part ${i + 1}`);
+      const title = String(p.name || `${t.title} - Part ${i + 1}`).trim().slice(0, 300) || `${t.title} - Part ${i + 1}`;
+      const name = safeName(title); // the file name; the title keeps every character
       const dest = uniquePath(path.join(dir, `${name}.${format}`));
       const { filter } = ff.buildFilter(p.fx || {}, p.b - p.a);
-      const tags = { ...tagsOf(t), title: name, track: `${i + 1}/${parts.length}` };
+      const tags = { ...tagsOf(t), title, track: `${i + 1}/${parts.length}` };
       await ff.run(['-y', '-ss', p.a.toFixed(4), '-to', p.b.toFixed(4), '-i', cur, '-map', '0:a:0', '-af', filter, '-map_metadata', '-1', ...ff.tagArgs(tags, format), ...ff.FORMATS[format].codec(lib.settings.bitrate), dest],
         { duration: p.b - p.a, onProgress: (x) => send('export-progress', { p: (i + x) / parts.length, label: name }) });
       const info = (await ff.probe(dest)).info;
       const id = lib.newId();
       let cover = null;
       if (t.cover) { try { fs.copyFileSync(lib.coverPath(t), path.join(lib.coverDir, `${id}.jpg`)); cover = `${id}.jpg`; } catch (_) { /* no picture */ } }
-      out.push(trackForUi(lib.add({ ...tagsOf(t), id, title: name, track: `${i + 1}/${parts.length}`, srcPath: dest, mediaPath: dest, converted: false, duration: info.duration, cover, isVideo: false })));
+      out.push(trackForUi(lib.add({ ...tagsOf(t), id, title, track: `${i + 1}/${parts.length}`, srcPath: dest, mediaPath: dest, converted: false, duration: info.duration, cover, isVideo: false })));
     }
     send('export-progress', { p: 1, label: 'Split' });
     log('ok', `Split "${t.title}" into ${out.length} songs in ${dir}`);
@@ -704,7 +721,9 @@ function registerIpc() {
     const format = ff.FORMATS[ext] ? ext : 'mp3'; // videos and other types are saved as MP3
     const cover = ff.FORMATS[format].cover && lib.coverPath(t) && fs.existsSync(lib.coverPath(t)) ? lib.coverPath(t) : null;
     const encodeArgs = [...(cover ? ff.coverOutArgs(1) : []), '-map_metadata', '-1', ...ff.tagArgs(tagsOf(t), format), ...ff.FORMATS[format].codec(lib.settings.bitrate)];
-    const r = await editor.save(sid, { orig: t.srcPath, mode, format, encodeArgs, extraInputs: cover ? [cover] : [], trash: (f) => shell.trashItem(f) });
+    // a song whose file is Tonix's own copy (imported map, …): never rename / bin it; save into the save folder
+    const internal = isInternal(t.srcPath);
+    const r = await editor.save(sid, { orig: t.srcPath, mode, format, encodeArgs, extraInputs: cover ? [cover] : [], trash: (f) => shell.trashItem(f), internal, saveDir: internal ? exportDir() : null, title: safeName(t.title) });
     const { info } = await ff.probe(r.dest);
     const copyCover = (to) => { if (!t.cover) return null; const name = `${to}.jpg`; try { fs.copyFileSync(lib.coverPath(t), path.join(lib.coverDir, name)); return name; } catch (_) { return null; } };
     const fresh = (title) => {
@@ -714,12 +733,14 @@ function registerIpc() {
     let changed = [], added = null;
     if (mode === 'both') added = fresh(`${t.title} New`);
     else if (mode === 'newname') {
-      lib.setTrackFile(t.id, { srcPath: r.old, ...(t.converted ? {} : { mediaPath: r.old }), title: `${t.title} Old` });
+      // the old song keeps playing its original sound (its file was renamed, or it is Tonix's own copy)
+      lib.setTrackFile(t.id, { ...(internal ? {} : { srcPath: r.old }), ...(t.converted || internal ? {} : { mediaPath: r.old }), title: `${t.title} Old` });
       changed = [t];
       added = fresh(t.title.replace(/ Old$/, ''));
-    } else { // replace: the song now plays the new file
-      if (t.converted && t.mediaPath.startsWith(lib.mediaDir)) fs.rmSync(t.mediaPath, { force: true });
+    } else { // replace: the song now plays the new file; Tonix's own old copy goes (never the new file)
+      const oldCopy = t.mediaPath;
       lib.setTrackFile(t.id, { srcPath: r.dest, mediaPath: r.dest, converted: false, duration: info.duration });
+      if (isInternal(oldCopy) && path.resolve(oldCopy) !== path.resolve(r.dest)) fs.rmSync(oldCopy, { force: true });
       changed = [t];
     }
     log('ok', `Edit saved: ${r.dest}${r.old && r.old !== t.srcPath ? ` (original now: ${path.basename(r.old)})` : ''}${mode === 'replace' ? ' (original moved to the Recycle Bin)' : ''}`);
@@ -830,7 +851,10 @@ function registerIpc() {
   handle('map-asset-url', () => `${baseUrl}/mapasset/`);
   handle('settings', (patch) => ({ ...lib.setSettings(patch), exportDir: exportDir() }));
   handle('show-item', (p) => { if (fs.existsSync(p) && fs.statSync(p).isDirectory()) shell.openPath(p); else shell.showItemInFolder(p); return true; });
-  handle('open-path', (p) => shell.openPath(p));
+  handle('open-path', (p) => { // folders only (the library folder, the save folder, …): never runs a program
+    if (!p || !fs.existsSync(p) || !fs.statSync(p).isDirectory()) throw new Error('That folder is not there any more.');
+    return shell.openPath(p);
+  });
   handle('ffmpeg-info', async () => {
     const { stdout } = await ff.run(['-version']);
     return { path: ff.resolveFfmpeg(), version: stdout.toString().split(/\r?\n/)[0] };
@@ -839,6 +863,8 @@ function registerIpc() {
 
 // ---------- window ----------
 async function createWindow() {
+  // Windows log-off / shut-down: save at once
+  try { require('electron').powerMonitor.on('shutdown', shutdown); } catch (_) { /* not on every system */ }
   win = new BrowserWindow({
     width: 1320, height: 880, minWidth: 1080, minHeight: 700,
     backgroundColor: '#000000', title: 'Tonix', show: false, autoHideMenuBar: true,
@@ -865,22 +891,37 @@ async function createWindow() {
   await win.loadURL(`${baseUrl}/app/index.html`);
 }
 
+if (!app.requestSingleInstanceLock()) app.quit(); // Tonix is already open: show that one instead (below)
+app.on('second-instance', () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.focus(); } });
+
 app.whenReady().then(async () => {
-  Menu.setApplicationMenu(null);
-  lib = new Library(path.join(app.getPath('userData'), 'library'));
-  maps = new MapStore(path.join(lib.dataDir, 'maps'));
-  studio = new Studio(path.join(lib.dataDir, 'studio-pitch'), ff, log);
-  editor = new Editor(path.join(lib.dataDir, 'editing'), ff);
-  await startServer();
-  registerIpc();
-  await createWindow();
-  log('info', `Tonix ready. ${lib.tracks.length} song(s) in library.`);
+  try {
+    Menu.setApplicationMenu(null);
+    lib = new Library(path.join(app.getPath('userData'), 'library'));
+    maps = new MapStore(path.join(lib.dataDir, 'maps'));
+    studio = new Studio(path.join(lib.dataDir, 'studio-pitch'), ff, log);
+    editor = new Editor(path.join(lib.dataDir, 'editing'), ff);
+    await startServer();
+    registerIpc();
+    await createWindow();
+    try { require('electron').powerMonitor.on('shutdown', shutdown); } catch (_) { /* Windows log-off: save at once */ }
+    log('info', `Tonix ready. ${lib.tracks.length} song(s) in library.`);
+  } catch (e) { // never a running Tonix without a window
+    dialog.showErrorBox('Tonix could not start', `${e.message}\n\nYour songs and settings are not lost. Try starting Tonix again; if this keeps happening, send this message to the developer.`);
+    app.exit(1);
+  }
 });
+// 21 + 9: save the library and stop ffmpeg jobs on every way of closing (also Windows log-off)
+function shutdown() {
+  try { if (lib) lib.flush(); } catch (_) { /* logged in flush */ }
+  ff.stopAll();
+}
+app.on('before-quit', shutdown);
 
 app.on('window-all-closed', () => {
-  if (editor) for (const id of [...editor.sessions.keys()]) editor.close(id);
   if (studio) studio.stopAll();
-  if (lib) lib.flush();
+  shutdown();
+  if (editor) for (const id of [...editor.sessions.keys()]) editor.close(id);
   if (server) server.close();
   app.quit();
 });

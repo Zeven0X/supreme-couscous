@@ -734,3 +734,10 @@ body[data-theme="pastel"] .clashmsg { color: #c03030; }
 .bt-pick input { width: 16px; height: 16px; accent-color: var(--accent); }
 .bt-skipped { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow-y: auto; color: var(--muted); font-size: 12.5px; margin-top: 8px; }
 .bt-skipped b { color: var(--text); }
+/* small windows (down to the 1080 px minimum, also with Big text): the top bar shrinks instead of pushing things off-screen */
+#topbar { min-width: 0; }
+.brand { flex: 0 1 330px; min-width: 120px; }
+.top-search { flex: 0 1 380px; min-width: 150px; }
+@media (max-width: 1240px) { .nav { padding: 0 10px; } .top-search kbd { display: none; } }
+@media (max-width: 1120px) { .nav-l { display: none; } .nav { padding: 0 12px; } }
+@media (max-width: 1240px) { #btn-save span:last-child, #btn-clear-all span:last-child, #btn-upload-file span:last-child { display: none; } #lib-toolbar .zoom input { width: 56px; } }

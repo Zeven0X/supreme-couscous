@@ -31,7 +31,12 @@
     if (k === 'blur') document.body.style.setProperty('--blur', `${Math.round((S.settings.blur ?? 70) * 0.32)}px`);
     if (k === 'animations') document.body.classList.toggle('no-anim', S.settings.animations === false);
     if (k === 'volumeLimit') applyVolumeLimit(true);
-    if (k === 'shuffle' && cur()) { S.queue = makeQueue(S.currentId); S.qPos = 0; renderNext(); }
+    if (k === 'shuffle' && cur() && !S.playStop) {
+      const pl = S.playlistId && window.TFPlaylists.list.find((p) => p.id === S.playlistId);
+      if (pl) { if (S.settings.shuffle) startShuffle(pl.trackIds, S.currentId); else { S.queue = pl.trackIds.slice(); S.shufflePool = null; } S.qPos = S.queue.indexOf(S.currentId); }
+      else { S.queue = makeQueue(S.currentId); S.qPos = 0; }
+      renderNext();
+    }
     if (k === 'videoBadge') renderGrid();
     if (['pathLabels', 'mapFollow', 'mapDot'].includes(k) && window.TFMap) window.TFMap.actions.refresh();
   }
@@ -156,7 +161,7 @@
     return card('saving', 'Saving',
       row('Save folder', '', pathBox(S.settings.exportDir), btn('Change…', async () => { const d = await guard(() => tf.pickDir(S.settings.exportDir)); if (d) { await patch('exportDir', d); render(); } }), btn('Open', () => tf.openPath(S.settings.exportDir))),
       row('Ask where to save every time', 'Off = save instantly into the save folder', tog('askWhereToSave', false)),
-      row('Saved file type', 'For single songs (the save window remembers your last choice). Albums are always MP3', seg('format', [['mp3', 'MP3'], ['m4a', 'M4A'], ['flac', 'FLAC'], ['wav', 'WAV'], ['ogg', 'OGG']])),
+      row('Saved file type', 'For single songs (the save window remembers your last choice). Saving many songs remembers its own type', seg('format', [['mp3', 'MP3'], ['m4a', 'M4A'], ['flac', 'FLAC'], ['wav', 'WAV'], ['ogg', 'OGG']])),
       row('Quality (MP3, M4A, OGG)', 'Higher = better sound, bigger files', seg('bitrate', [[128, '128'], [192, '192'], [256, '256'], [320, '320']])),
       row('File names', 'How saved songs are named', seg('fileNames', [['artist-title', 'Artist - Title'], ['title', 'Title'], ['title-artist', 'Title - Artist']])));
   }
@@ -170,10 +175,9 @@
           btn('Remove from library', async () => {
             const ok = await confirmModal(`Remove "${m.title}"?`, 'Its file is already gone from your PC, so it cannot be played.', 'Remove');
             if (!ok) return;
-            await guard(() => tf.removeTracks([m.id]));
-            S.tracks = S.tracks.filter((t) => t.id !== m.id); S.byId.delete(m.id);
+            await forgetTracks([m.id]);
             missing = missing.filter((x) => x.id !== m.id);
-            renderGrid(); render();
+            render();
           })));
       }
     }
@@ -272,7 +276,7 @@
       h('span', { class: 'n' }, a.label, changed ? h('em', {}, 'changed') : null),
       h('span', { class: 'ks' }, ...chips.flatMap((c, i) => (i ? [h('i', {}, '/'), c] : [c]))),
       changed ? h('button', { class: 'kreset', title: 'Back to the normal key', onclick: async (e) => { e.stopPropagation(); await patch('keys', TFKeys.resetOne(a.id, S.settings.keys || {})); window.TFShortcuts.refresh(); render(); } }, '↺') : null);
-    if (!a.fixed) r.addEventListener('click', () => { if (pending) return; recording = a.id; render(); });
+    if (!a.fixed) r.addEventListener('click', (e) => { e.stopPropagation(); if (pending) return; startRecording(a.id); });
     if (pending && pending.id === a.id) {
       r.append(h('div', { class: 'clashmsg' }, `⚠ ${TFKeys.label(pending.combo)} is already “${pending.other.label}”.`,
         h('button', { onclick: (e) => { e.stopPropagation(); finish('swap'); } }, 'Swap them'),
@@ -281,6 +285,16 @@
     }
     return r;
   }
+  let recTimer = null;
+  function startRecording(id) {
+    recording = id;
+    clearTimeout(recTimer);
+    recTimer = setTimeout(stopRecording, 10000); // nothing pressed: stop listening
+    render();
+  }
+  function stopRecording() { clearTimeout(recTimer); if (!recording && !pending) return; recording = null; pending = null; if (S.view === 'settings') render(); }
+  window.addEventListener('blur', stopRecording);
+  document.addEventListener('click', (e) => { if (recording && !e.target.closest('.kr')) stopRecording(); }, true);
   async function finish(mode) {
     const { id, combo } = pending;
     pending = null;
@@ -359,5 +373,5 @@
     if (section) { active = section; render(); const c = $(`#set-${section}`); if (c) c.scrollIntoView({ block: 'start' }); markNav(); }
   }
 
-  window.TFSettings = { render: () => { trash = null; about = null; render(); }, applyAll, open, patch };
+  window.TFSettings = { render: () => { trash = null; about = null; render(); }, applyAll, open, patch, stopRecording };
 })();

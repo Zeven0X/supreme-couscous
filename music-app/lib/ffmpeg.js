@@ -141,9 +141,13 @@ function pickTags(tags, filePath) {
 }
 
 // ---- running ffmpeg ----
+const running = new Set(); // every ffmpeg job, so they can all be stopped when Tonix closes
+function stopAll() { for (const p of running) { try { p.kill(); } catch (_) { /* gone */ } } }
 function run(args, { onProgress, duration, onLine, onSpawn } = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn(resolveFfmpeg(), ['-hide_banner', ...args], { windowsHide: true });
+    running.add(proc);
+    proc.on('close', () => running.delete(proc));
     if (onSpawn) onSpawn(proc);
     const out = [];
     let err = '';
@@ -205,9 +209,12 @@ async function extractCover(src, coverStream, dest) {
   return fs.existsSync(dest);
 }
 
+// A picture as input. A name with % in it ("50%d off.png") would be read as a numbered series of pictures,
+// so then the plain picture reader is used with numbering switched off.
+function imageInput(src) { return String(src).includes('%') ? ['-f', 'image2', '-pattern_type', 'none', '-i', src] : ['-i', src]; }
 // Any picture the user chooses -> normalized jpg.
 function imageToJpg(src, dest) {
-  return run(['-y', '-i', src, '-frames:v', '1', '-vf', "scale='min(1000,iw)':-2", '-q:v', '3', dest]);
+  return run(['-y', ...imageInput(src), '-frames:v', '1', '-update', '1', '-vf', "scale='min(1000,iw)':-2", '-q:v', '3', dest]);
 }
 
 // Peaks for the waveform: one value 0..1 per bucket.
@@ -270,7 +277,7 @@ function exportOne({ src, dest, fx, duration, tags, coverPath, format = 'mp3', b
   if (withCover) args.push(...coverOutArgs(1));
   args.push('-map_metadata', '-1', ...tagArgs(tags, format), ...FORMATS[format].codec(bitrate));
   args.push(dest);
-  return run(args, { duration: outDuration, onProgress });
+  return run(args, { duration: outDuration, onProgress }).catch((e) => { fs.rmSync(dest, { force: true }); throw e; }); // no broken file left
 }
 
 function escapeMeta(v) { return String(v).replace(/([=;#\\\n])/g, '\\$1'); }
@@ -298,13 +305,16 @@ async function exportCombined({ items, dest, tags, coverPath, bitrate = 320, for
   const withCover = coverPath && fs.existsSync(coverPath);
   if (withCover) args.push('-i', coverPath);
   const graph = chains.join(';') + ';' + items.map((_, i) => `[a${i}]`).join('') + `concat=n=${items.length}:v=0:a=1[out]`;
-  args.push('-filter_complex', graph, '-map', '[out]');
+  const graphFile = path.join(tmpDir, `join-${Date.now()}.txt`); // a long recipe would not fit on a Windows command line
+  fs.writeFileSync(graphFile, graph);
+  args.push('-filter_complex_script', graphFile, '-map', '[out]');
   if (withCover) args.push(...coverOutArgs(metaIdx + 1));
   args.push('-map_metadata', '-1', '-map_chapters', String(metaIdx), ...tagArgs(tags, format), ...FORMATS[format].codec(bitrate), dest);
   try {
     await run(args, { duration: t, onProgress });
-  } finally {
+  } catch (e) { fs.rmSync(dest, { force: true }); throw e; } finally {
     fs.rmSync(metaFile, { force: true });
+    fs.rmSync(graphFile, { force: true });
   }
   return { duration: t, chapters };
 }
@@ -313,5 +323,5 @@ module.exports = {
   AUDIO_EXT, VIDEO_EXT, LIMITS, DEFAULT_FX, FORMATS, formatOf,
   resolveFfmpeg, isSupported, extOf, normalizeFx, buildFilter, renderPitched,
   parseFfmetadata, parseInfo, pickTags,
-  run, probe, toMp3, extractCover, imageToJpg, peaks, exportOne, exportCombined, tagArgs, coverOutArgs,
+  run, stopAll, imageInput, probe, toMp3, extractCover, imageToJpg, peaks, exportOne, exportCombined, tagArgs, coverOutArgs,
 };

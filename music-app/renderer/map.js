@@ -1,5 +1,5 @@
 'use strict';
-/* global S, h, $, $$, coverEl, ICONS, modal, guard, toast, tf, TFChance, TFBackgrounds, TFStudio, sameLoudness, applyFx, renderFx */
+/* global S, h, $, $$, coverEl, ICONS, modal, guard, toast, tf, TFChance, TFBackgrounds, TFStudio, sameLoudness, applyFx, renderFx, renderNext */
 // The Map page: songs on a board, connected by paths. (Path settings and playing come in later steps.)
 (function () {
   const M = {
@@ -63,7 +63,7 @@
   }
   const snapshot = () => JSON.parse(JSON.stringify(M.map));
   function undoToast(msg, before) {
-    toast(msg, { action: () => { M.map = before; M.selected = null; M.selPath = null; render(); applyView(); save(); }, actionLabel: 'Undo' });
+    toast(msg, { action: () => { if (!M.map || before.id !== M.map.id) { toast('That was on another map.', { ms: 2000 }); return; } M.map = before; M.selected = null; M.selPath = null; render(); applyView(); save(); }, actionLabel: 'Undo' });
   }
 
   // ---------- view (move + zoom) ----------
@@ -506,7 +506,10 @@
   function redraw() { if (S.view === 'map') render(); }
   function startMap(stopId, time = 0) {
     const s = stopById(stopId || M.map.startId) || M.map.stops[0];
-    if (!s || !S.byId.get(s.trackId)) { toast('Add a song to the map first, then press Play map.'); return; }
+    const playableStop = (x) => x && S.byId.get(x.trackId);
+    const first = playableStop(s) ? s : M.map.stops.find(playableStop);
+    if (!first) { toast(M.map.stops.length ? 'The songs on this map are not in your library any more. Add songs, then press Play map.' : 'Add a song to the map first, then press Play map.'); return; }
+    if (first !== s) { toast('The Start song is missing, so the map starts from another song.', { ms: 3500 }); return startMap(first.id, 0); }
     clearTimeout(M.play && M.play.gap);
     M.play = { stopId: s.id, chosen: null, gap: null, token: (M.play ? M.play.token : 0) + 1 };
     M.map.progress = { stopId: s.id, time };
@@ -514,7 +517,8 @@
     playStop(s);
     if (time > 0) { // continue in the middle of the song
       const pl = audio;
-      pl.addEventListener('loadedmetadata', () => { if (time < pl.duration - 1) pl.currentTime = time; }, { once: true });
+      const want = pl.src;
+      pl.addEventListener('loadedmetadata', () => { if (pl.src === want && time < pl.duration - 1) pl.currentTime = time; }, { once: true });
     }
     redraw();
     follow(s);
@@ -526,6 +530,7 @@
     M.play = null;
     M.travelPath = null;
     $('#map-dot').hidden = true;
+    if (S.playStop) { S.playStop = null; S.playFx = null; applyFx(); renderFx(); renderNext(); } // the map no longer leads the sound
     redraw();
   }
   // The playing song reached its end: pick a path (the listener's choice, or luck) and travel it.

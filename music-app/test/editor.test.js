@@ -66,3 +66,25 @@ test('save: keep both, new takes the name, replace (to the bin)', async () => {
   await assert.rejects(ed.save(st.id, { orig: d, mode: 'replace', format: 'mp3', encodeArgs: ['-c:a', 'nosuchcodec'], trash: async () => { throw new Error('should not be called'); } }));
   assert.ok(fs.existsSync(d));
 });
+
+test('found in the bug hunt: Tonix\'s own copies are never binned; quick changes are not lost; failed open leaves nothing', async () => {
+  const lib = path.join(tmp, 'libmedia'); fs.mkdirSync(lib);
+  const own = path.join(lib, 'abc123.mp3'); // a song from an imported map: its only file is Tonix's own copy
+  await ff.run(['-y', '-f', 'lavfi', '-i', 'sine=d=6', '-c:a', 'libmp3lame', own]);
+  const ed = new Editor(path.join(tmp, 'work3'), ff);
+  let st = await ed.open('m', own);
+  // two changes asked for at the same moment: both happen, one after the other
+  const [x, y] = await Promise.all([ed.apply(st.id, { type: 'cut', a: 0, b: 1 }), ed.apply(st.id, { type: 'cut', a: 0, b: 1 })]);
+  assert.deepStrictEqual([x.version, y.version], [1, 2]);
+  assert.ok(Math.abs(y.duration - 4) < 0.1, `both cuts kept: ${y.duration}`);
+  const saveDir = path.join(tmp, 'exports');
+  const binned = [];
+  const r = await ed.save(st.id, { orig: own, mode: 'replace', format: 'mp3', encodeArgs: ['-c:a', 'libmp3lame'], trash: async (f) => binned.push(f), internal: true, saveDir, title: 'Map song' });
+  assert.deepStrictEqual(binned, [], 'nothing goes to the bin');
+  assert.strictEqual(path.dirname(r.dest), saveDir);
+  assert.strictEqual(path.basename(r.dest), 'Map song.mp3');
+  assert.ok(fs.existsSync(own) && fs.existsSync(r.dest), 'the copy and the new file are both there');
+  assert.ok(!fs.readdirSync(saveDir).some((f) => f.includes('tonix-saving')), 'no temporary file left');
+  await assert.rejects(ed.open('z', path.join(tmp, 'no-such-file.mp3')));
+  assert.strictEqual(fs.readdirSync(path.join(tmp, 'work3')).length, 1, 'a failed open leaves no folder');
+});
