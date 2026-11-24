@@ -85,7 +85,7 @@ window.TFEditTabs = (() => {
       row(h('b', {}, 'Split'), note('Cuts one long file into separate songs. Each part can have its own speed, pitch and volume, and is saved as its own song.')),
       row(btn('🔍 Find the songs', splitFind, { cls: 'tb pri' }),
         seg([[0.6, 'Short gaps'], [1.2, 'Normal'], [2.5, 'Long gaps']], P.gap, (v) => { P.gap = v; A().render(); }),
-        btn('+ Add a cut at the playhead', () => { const t = A().player.currentTime; if (t < 0.3 || t > dur() - 0.3 || P.cuts.some((c) => Math.abs(c - t) < 0.3)) return toast('Move the playhead to where the cut should be (not right next to another cut).'); P.cuts.push(+t.toFixed(3)); P.set = {}; A().render(); }),
+        btn('+ Add a cut at the playhead', () => { if (A().previewing) A().stopPreview(); const t = A().player.currentTime; if (t < 0.3 || t > dur() - 0.3 || P.cuts.some((c) => Math.abs(c - t) < 0.3)) return toast('Move the playhead to where the cut should be (not right next to another cut).'); P.cuts.push(+t.toFixed(3)); P.set = {}; A().render(); }),
         note('Drag the orange lines on the song track to move a cut.')),
       h('div', { class: 'ed-parts' }, ...rows),
       row(btn('🔊 Same loudness', async () => {
@@ -190,7 +190,7 @@ window.TFEditTabs = (() => {
         }))),
         note(pieceText, C.piece ? 'ok' : '')),
       row(h('span', { class: 'ed-l' }, '2. Where it goes'),
-        btn('Use the playhead', () => { C.at = +A().player.currentTime.toFixed(3); A().render(); }, { title: 'Move the playhead (click the song track) to the spot first' }),
+        btn('Use the playhead', () => { if (A().previewing) A().stopPreview(); C.at = +A().player.currentTime.toFixed(3); A().render(); }, { title: 'Move the playhead (click the song track) to the spot first' }),
         note(at === null ? 'not chosen yet' : `at ${timeText(at)}`, at === null ? '' : 'ok')),
       row(h('span', { class: 'ed-l' }, '3. How'),
         seg([['hard', 'Hard cut'], ['smooth', 'Smooth'], ['long', 'Long blend']], C.blend, (v) => { C.blend = v; A().render(); }),
@@ -249,7 +249,7 @@ window.TFEditTabs = (() => {
   }
   // the selection changed: the Loop panel shows A and B
   function refresh(tab) { if (tab === 'loop') A().render(); }
-  function onVersion() { T.trim.res = null; T.split.cuts = []; T.split.set = {}; T.connect.at = null; }
+  function onVersion() { T.trim.res = null; T.trim.loading = false; T.trim.failed = false; T.split.cuts = []; T.split.set = {}; T.connect.at = null; }
   function reset() { T = fresh(); }
   return { panel, overlay, mouseDown, markers, refresh, pickSong, pickSound, onVersion, reset, get state() { return T; } };
 })();

@@ -10,6 +10,9 @@ window.TFEdit = (() => {
   const E = {
     s: null, sel: null, zoom: 1, scroll: 0, busy: false, mode: 'both', panel: 'effects', tool: 'select', snap: 'off',
     loopOn: false, beats: null, tracks: [], selTrack: 'song', preview: null, stopAt: null, playFrom: 0, rec: null,
+    tok: 0, // goes up when something is stopped, so slow work that finishes later knows it is not wanted any more
+    bakes: {}, // "Apply to the song": the tracks before it, so Undo brings them back
+    recStarting: false,
   };
   const COLORS = ['#7aa8ff', '#ff9ad5', '#ffd36b', '#5cf2a8', '#c59bff', '#ff9f6b'];
   const SONG_H = 122, LAYER_H = 68, HEAD_W = 230;
@@ -27,14 +30,16 @@ window.TFEdit = (() => {
   async function open(trackId) {
     const t = S.byId.get(trackId);
     if (!t) return;
+    if (E.busy) { toast('Wait a moment: Tonix is still working on the song.'); return; }
     if (E.s && E.s.trackId !== trackId && unsaved()) {
       const ok = await confirmModal('Leave the song you are editing?', `"${(track() || {}).title}" has changes that are not saved. They will be lost.`, 'Leave without saving');
       if (!ok) return;
     }
     window.showView('edit');
+    stopRec(); // a recording for the other song is dropped
     stopAll();
     if (E.s) { tf.editClose(E.s.id).catch(() => {}); E.s = null; }
-    Object.assign(E, { sel: null, zoom: 1, scroll: 0, beats: null, tracks: [], selTrack: 'song', loopOn: false, preview: null });
+    Object.assign(E, { sel: null, zoom: 1, scroll: 0, beats: null, tracks: [], selTrack: 'song', loopOn: false, preview: null, bakes: {} });
     TFEditTabs.reset();
     render();
     busy(`Opening "${t.title}"…`);
@@ -50,6 +55,11 @@ window.TFEdit = (() => {
     stopAll();
     E.preview = null;
     E.s = { ...st, trackId: st.trackId || keep };
+    const b = E.bakes[st.version];
+    if (b && !mixPending()) { E.tracks = copyTracks(b.snap); E.selTrack = 'song'; b.restored = true; } // Undo after "Apply to the song": the tracks come back
+    for (const x of Object.values(E.bakes)) if (x.after === st.version && x.restored) { x.restored = false; cleanTracks(); } // Redo: mixed in again
+    const oldUrl = song().url;
+    if (oldUrl && oldUrl !== st.url) TFDaw.forget(oldUrl); // free the memory of the old working copy
     Object.assign(song(), { url: st.url, peaks: st.peaks, duration: st.duration });
     TFDaw.setTracks(E.tracks);
     TFDaw.seek(Math.min(at || 0, st.duration));
@@ -81,20 +91,25 @@ window.TFEdit = (() => {
 
   // ---------- changes to the song's shape (new working copy) ----------
   function busy(msg) { E.busy = !!msg; const b = el('ed-busy'); if (b) { b.hidden = !msg; b.textContent = msg || ''; } }
-  async function change(fn, msg) {
+  async function change(fn, msg, history = false) {
     if (!E.s || E.busy) return null;
     stopAll();
+    const sid = E.s.id, v = E.s.version;
     busy(msg);
     const st = await guard(fn, 'Edit: ');
     busy(null);
-    if (st) show(st);
+    if (!st || !E.s || E.s.id !== sid) return null; // another song was opened meanwhile
+    if (!history) for (const k of Object.keys(E.bakes)) if (+k >= v) delete E.bakes[k]; // a new change: older Redo steps are gone
+    show(st);
     return st;
   }
+  const copyTracks = (list) => list.map((t) => ({ ...t, fx: { ...t.fx }, nodes: null }));
+  function cleanTracks() { const s = song(); Object.assign(s, { fx: {}, volume: 100, pan: 0, mute: false, solo: false }); E.tracks = [s]; E.selTrack = 'song'; TFDaw.setTracks(E.tracks); TFDaw.fxChanged(s); }
   const needSel = () => { if (!E.sel) { toast('Select a part first: drag across the song.'); return false; } return true; };
   const cut = () => { if (!needSel()) return; const { a, b } = E.sel; E.sel = null; E.loopOn = false; return change(() => tf.editApply(E.s.id, { type: 'cut', a, b }), 'Cutting…'); };
   const keep = () => { if (!needSel()) return; const { a, b } = E.sel; E.sel = null; E.loopOn = false; return change(() => tf.editApply(E.s.id, { type: 'keep', a, b }), 'Keeping the selected part…'); };
-  const undo = () => E.s && E.s.canUndo && change(() => tf.editUndo(E.s.id), 'Undo…');
-  const redo = () => E.s && E.s.canRedo && change(() => tf.editRedo(E.s.id), 'Redo…');
+  const undo = () => E.s && E.s.canUndo && change(() => tf.editUndo(E.s.id), 'Undo…', true);
+  const redo = () => E.s && E.s.canRedo && change(() => tf.editRedo(E.s.id), 'Redo…', true);
 
   // ---------- the live mix → saved the same way ----------
   const fxOf = (t) => Object.fromEntries(Object.entries(t.fx || {}).filter(([, v]) => v !== undefined && v !== null));
@@ -106,14 +121,15 @@ window.TFEdit = (() => {
     const s = song();
     return {
       type: 'mix',
-      song: { fx: fxOf(s), volume: s.volume, pan: s.pan, mute: s.mute, solo: s.solo },
-      layers: layers().map((L) => ({ src: L.src, offset: L.offset, from: L.from, to: L.to, volume: L.volume, pan: L.pan, mute: L.mute, solo: L.solo, repeat: L.repeat, matchBeat: L.matchBeat, duck: L.duck, fx: fxOf(L) })),
+      song: { fx: fxOf(s), volume: s.volume, pan: s.pan, mute: s.mute, solo: s.solo && !s.mute },
+      layers: layers().map((L) => ({ src: L.src, offset: L.offset, from: L.from, to: L.to, volume: L.volume, pan: L.pan, mute: L.mute, solo: L.solo && !L.mute, repeat: L.repeat, matchBeat: L.matchBeat, duck: L.duck, fx: fxOf(L) })),
     };
   }
   async function bake() { // "Apply to the song": the tracks become one working copy (Undo takes it back)
     if (!mixPending()) { toast('Nothing to apply: no effects, volume change or layers.'); return null; }
+    const v = E.s.version, snap = copyTracks(E.tracks);
     const st = await change(() => tf.editDo(E.s.id, mixOp()), 'Mixing the tracks into the song…');
-    if (st) { Object.assign(song(), { fx: {}, volume: 100, pan: 0, mute: false, solo: false }); E.tracks = [song()]; E.selTrack = 'song'; TFDaw.setTracks(E.tracks); TFDaw.fxChanged(song()); render(); }
+    if (st) { E.bakes[v] = { snap, after: st.version, restored: false }; cleanTracks(); render(); }
     return st;
   }
   async function save() {
@@ -143,8 +159,9 @@ window.TFEdit = (() => {
 
   // ---------- layers (tracks on top of the song) ----------
   async function addLayer(src, extra = {}) {
+    const sid = E.s && E.s.id;
     const info = await guard(() => tf.editSource(src), 'Track: ');
-    if (!info || !E.s) return;
+    if (!info || !E.s || E.s.id !== sid) return; // another song was opened meanwhile
     const L = {
       id: `L${nextLayer}`, kind: 'layer', src, name: extra.name || info.name, color: COLORS[(nextLayer - 1) % COLORS.length], url: info.url, peaks: info.peaks, duration: info.duration,
       offset: +TFDaw.time().toFixed(2), from: 0, to: +info.duration.toFixed(3), volume: 70, pan: 0, mute: false, solo: false, repeat: 1, matchBeat: false, duck: false, fx: {}, ...extra,
@@ -154,7 +171,7 @@ window.TFEdit = (() => {
     E.selTrack = L.id;
     TFDaw.setTracks(E.tracks);
     TFDaw.load(L.url).catch(() => toast(`"${L.name}" could not be loaded.`, { type: 'error' }));
-    if (TFDaw.playing) TFDaw.play(TFDaw.time());
+    if (TFDaw.playing && !TFDaw.previewing) TFDaw.play(TFDaw.time()).catch(() => {});
     render();
   }
   async function setMatchBeat(L, on) {
@@ -168,19 +185,27 @@ window.TFEdit = (() => {
     toast(r.tempo === 1 ? 'Already at the same beat.' : `Beat matched: ${Math.round(r.layerBpm)} → ${Math.round(r.songBpm)} BPM.`, { ms: 2500 });
     layerChanged(L);
   }
-  function layerChanged(L, rerender = true) { TFDaw.apply(L); if (TFDaw.playing && !TFDaw.previewing) TFDaw.play(TFDaw.time()); if (rerender) render(); else drawAll(); }
-  function removeLayer(L) { E.tracks = E.tracks.filter((t) => t !== L); if (E.selTrack === L.id) E.selTrack = 'song'; TFDaw.setTracks(E.tracks); if (TFDaw.playing) TFDaw.play(TFDaw.time()); render(); }
+  function layerChanged(L, rerender = true) { TFDaw.apply(L); if (TFDaw.playing && !TFDaw.previewing) TFDaw.play(TFDaw.time()).catch(() => {}); if (rerender) render(); else drawAll(); }
+  function removeLayer(L) { E.tracks = E.tracks.filter((t) => t !== L); if (E.selTrack === L.id) E.selTrack = 'song'; TFDaw.setTracks(E.tracks); if (TFDaw.playing && !TFDaw.previewing) TFDaw.play(TFDaw.time()).catch(() => {}); render(); }
 
+  // stop the recording (a recorder that has not started yet is just dropped)
+  function stopRec() { const r = E.rec; if (!r) return; if (r.state === 'inactive') E.rec = null; else r.stop(); }
   // record your voice while everything plays
   async function toggleRecord() {
-    if (E.rec) { E.rec.stop(); return; }
+    if (E.rec) { stopRec(); return; }
+    if (E.recStarting || !E.s) return; // a double click doesn't start two recordings
+    if (E.preview) stopPreview();
     let stream, rec;
+    E.recStarting = true;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); rec = new MediaRecorder(stream); } catch (e) {
+      E.recStarting = false;
       if (stream) stream.getTracks().forEach((t) => t.stop());
       toast(`Tonix can't use the microphone (${e.message}). Check Windows Settings → Privacy → Microphone.`, { type: 'error', ms: 8000 });
       return;
     }
+    E.recStarting = false;
     const chunks = [], at = TFDaw.time(), sid = E.s.id, t0 = Date.now();
+    let startT = at; // the song time you heard when the recording started
     rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
     rec.onstop = async () => {
       stream.getTracks().forEach((t) => t.stop());
@@ -191,37 +216,44 @@ window.TFEdit = (() => {
       const buf = new Uint8Array(await new Blob(chunks, { type: 'audio/webm' }).arrayBuffer());
       if (buf.length < 2000) { toast('Nothing was recorded.'); render(); return; }
       const src = await guard(() => tf.editRecording(buf), 'Recording: ');
-      if (src) { TFDaw.seek(at); await addLayer(src, { volume: 100, duck: true, name: 'Your voice' }); }
+      // the voice lines up with what you heard (the sound reaches the speakers a little late)
+      const rate = TFDaw.songRate();
+      if (src) { TFDaw.seek(at); await addLayer(src, { volume: 100, duck: true, name: 'Your voice', offset: +Math.max(0, startT).toFixed(3), from: +Math.max(0, -startT / rate).toFixed(3) }); }
       render();
     };
     const timer = setInterval(() => { const b = el('dw-rec'); if (b) b.textContent = `■ Stop (${fmtTime((Date.now() - t0) / 1000)})`; }, 250);
     E.rec = rec;
+    try { await TFDaw.play(at); } catch (_) { /* the song could not load: record anyway */ } // talk / sing along
+    if (!E.s || E.s.id !== sid || E.rec !== rec) { stream.getTracks().forEach((t) => t.stop()); clearInterval(timer); if (E.rec === rec) E.rec = null; return; }
     rec.start(250);
-    TFDaw.play(at); // talk / sing along
+    startT = TFDaw.time() - TFDaw.latency() * TFDaw.songRate();
     render();
   }
 
   // ---------- playing ----------
-  function stopAll() { TFDaw.pause(); E.stopAt = null; if (E.preview) { E.preview = null; } }
+  function stopAll() { TFDaw.pause(); E.stopAt = null; E.tok++; if (E.preview) { TFDaw.forget(E.preview.url); E.preview = null; } }
   async function playPause() {
-    if (!E.s) return;
+    if (!E.s || E.busy) return;
+    if (E.preview) { stopPreview(); return; }
     if (TFDaw.playing) { TFDaw.pause(); drawBar(); return; }
     pause(); // the main player stops: one thing plays at a time
     E.stopAt = null; E.playFrom = TFDaw.time();
     if (TFDaw.time() >= dur() - 0.05) TFDaw.seek(0);
-    await TFDaw.play(TFDaw.time() >= dur() - 0.05 ? 0 : TFDaw.time());
+    await TFDaw.play(TFDaw.time() >= dur() - 0.05 ? 0 : TFDaw.time()).catch((e) => toast(e.message, { type: 'error' }));
     drawBar();
   }
   function stopButton() { TFDaw.pause(); TFDaw.seek(E.playFrom || 0); E.stopAt = null; drawAll(); drawBar(); }
-  function playRange(a, b) { if (!E.s) return; pause(); E.stopAt = b; TFDaw.play(a); drawBar(); }
+  function playRange(a, b) { if (!E.s || E.busy) return; if (E.preview) stopPreview(); pause(); E.stopAt = b; TFDaw.play(a).catch((e) => toast(e.message, { type: 'error' })); drawBar(); }
   const seek = (t) => { TFDaw.seek(Math.max(0, Math.min(dur(), t))); drawAll(); drawBar(); };
-  TFDaw.onEnd(() => { if (E.preview && !TFDaw.previewing) { E.preview = null; render(); } drawBar(); });
+  TFDaw.onEnd(() => { if (E.preview && !TFDaw.previewing) { TFDaw.forget(E.preview.url); E.preview = null; render(); } drawBar(); });
   (function tick() {
+    if (E.s && E.preview && !TFDaw.previewing && !E.busy) { E.preview = null; render(); } // the preview was stopped elsewhere
     if (E.s && TFDaw.playing) {
       const t = TFDaw.time();
       if (!E.preview) {
         if (E.stopAt !== null && t >= E.stopAt) { TFDaw.pause(); TFDaw.seek(E.stopAt); E.stopAt = null; }
-        else if (E.loopOn && E.sel && t >= E.sel.b) TFDaw.play(E.sel.a); // Loop A–B
+        else if (t >= dur() && !(E.loopOn && E.sel)) { TFDaw.pause(); TFDaw.seek(dur()); } // the end (even if the song itself stopped early)
+        else if (E.loopOn && E.sel && t >= E.sel.b) TFDaw.play(E.sel.a).catch(() => {}); // Loop A–B
         follow(t);
       }
       drawAll(); drawBar(); drawMeters();
@@ -235,15 +267,17 @@ window.TFEdit = (() => {
   async function preview(op, { from = null, label = 'Preview' } = {}) {
     if (!E.s || E.busy) return;
     stopAll();
+    const tok = E.tok, sid = E.s.id, back = TFDaw.time();
     busy('Making a preview…');
     const p = await guard(() => tf.editPreview(E.s.id, op), 'Preview: ');
     busy(null);
-    if (!p) return;
-    E.preview = { ...p, label, back: TFDaw.time() };
-    await TFDaw.playPreview(p.url, from ?? E.preview.back);
+    if (!p || tok !== E.tok || S.view !== 'edit' || !E.s || E.s.id !== sid) return; // stopped, another page or another song meanwhile
+    await TFDaw.playPreview(p.url, from ?? back);
+    if (tok !== E.tok) { TFDaw.stopPreview(true); return; }
+    E.preview = { ...p, label, back };
     render();
   }
-  function stopPreview() { if (!E.preview) return; const back = E.preview.back; E.preview = null; TFDaw.stopPreview(true); TFDaw.seek(back); render(); }
+  function stopPreview() { if (!E.preview) return; const back = E.preview.back; TFDaw.forget(E.preview.url); E.preview = null; TFDaw.stopPreview(true); TFDaw.seek(back); render(); }
 
   // ---------- time ↔ pixels; snapping; bars ----------
   const lanesW = () => { const c = el('dw-lanes'); return c ? c.clientWidth : 1; };
@@ -586,7 +620,7 @@ window.TFEdit = (() => {
   const FX_TIPS = { echo: 'Repeats the sound, like in a big hall', slowed: 'Slower and lower, with a soft room', nightcore: 'Faster and higher', bass: 'Stronger low sounds', eightd: 'Moves around your head (headphones)', oned: 'Every speaker the same; nothing moves' };
   const lastStr = { echo: 40, slowed: 50, nightcore: 50, bass: 50, eightd: 50, oned: 100 };
   let fxTimer = null;
-  function fxChanged(T, rerender = true) { clearTimeout(fxTimer); fxTimer = setTimeout(() => TFDaw.fxChanged(T), 60); if (rerender) render(); else { renderSide(); renderHeads(); } }
+  function fxChanged(T, rerender = true) { clearTimeout(fxTimer); fxTimer = setTimeout(() => TFDaw.fxChanged(T), rerender ? 30 : 220); if (rerender) render(); else { renderSide(); renderHeads(); } }
   function renderHeads() { const box = el('dw-heads'); if (!box) return; box.innerHTML = ''; for (const T of E.tracks) box.append(header(T)); }
   function fxPanel() {
     const T = selT(), isSong = T.kind === 'song';
@@ -615,7 +649,7 @@ window.TFEdit = (() => {
         h('span', { class: 'ed-note' }, 'Switch an effect on and turn its knob while the music plays: you hear it at once. Click a track on the left to give it its own effects. Save keeps what you hear.'),
         h('span', { class: 'grow' }),
         h('button', { class: 'tb', onclick: () => { T.fx = {}; fxChanged(T); } }, '↺ All off'),
-        h('button', { class: 'tb pri', title: 'Mix the tracks, effects and volumes into the song now (Undo takes it back)', onclick: bake }, 'Apply to the song')),
+        h('button', { class: 'tb pri', title: 'Mix the tracks, effects and volumes into the song now (Undo brings the tracks and effects back)', onclick: bake }, 'Apply to the song')),
       h('div', { class: 'dw-fxs' }, ...TFFxMath.ORDER.map(card)));
   }
 
@@ -630,11 +664,12 @@ window.TFEdit = (() => {
     if (run) { e.preventDefault(); e.stopImmediatePropagation(); run(); }
   }, true);
 
-  const stop = () => { TFDaw.pause(); if (E.preview) { E.preview = null; TFDaw.stopPreview(true); } drawBar(); };
+  // leaving the page or playing in the main player: everything here goes quiet, the microphone too
+  const stop = () => { stopRec(); E.tok++; TFDaw.pause(); if (E.preview) { TFDaw.forget(E.preview.url); E.preview = null; TFDaw.stopPreview(true); } drawBar(); };
   // a small stand-in for the old <audio> player, used by the panels (edittabs.js)
   const player = {
     get currentTime() { return TFDaw.time(); }, set currentTime(t) { seek(t); },
-    get paused() { return !TFDaw.playing; }, play: () => playPause(), pause: () => { TFDaw.pause(); drawBar(); },
+    get paused() { return !TFDaw.playing; }, play: () => playPause(), pause: () => { if (E.preview) stopPreview(); else TFDaw.pause(); drawBar(); },
   };
   const api = {
     get session() { return E.s; }, get sel() { return E.sel; }, set sel(v) { E.sel = v; drawAll(); drawBar(); },

@@ -928,7 +928,6 @@ app.whenReady().then(async () => {
     studio = new Studio(path.join(lib.dataDir, 'studio-pitch'), ff, log);
     editor = new Editor(path.join(lib.dataDir, 'editing'), ff);
     fs.rmSync(path.join(lib.dataDir, 'stretch'), { recursive: true, force: true }); // match-beat copies: made again when needed
-  fs.rmSync(path.join(lib.dataDir, 'stretch'), { recursive: true, force: true }); // match-beat copies are made again when needed
     await startServer();
     registerIpc();
     await createWindow();

@@ -10,7 +10,9 @@ window.TFDaw = (() => {
   const buffers = new Map(); // url -> Promise<AudioBuffer>
   let tracks = []; // set by the page: [{ id, kind: 'song'|'layer', url, ... }]
   let playing = null; // { c0, t0, rate, sources: [] }
-  let gen = 0; // goes up on every stop, so a Play that is still loading knows it was cancelled
+  let gen = 0;
+  let loading = null; // song time a Play is loading from (a seek meanwhile restarts it)
+  let duckRaf = 0; // goes up on every stop, so a Play that is still loading knows it was cancelled
   let pos = 0; // song time when stopped
   let preview = null; // { buffer, c0, t0, src } — hearing a preview file instead of the tracks
   const listeners = { end: [] };
@@ -29,7 +31,9 @@ window.TFDaw = (() => {
     if (!url) return Promise.resolve(null);
     if (!buffers.has(url)) {
       buffers.set(url, fetch(url).then((r) => { if (!r.ok) throw new Error(`could not load (${r.status})`); return r.arrayBuffer(); }).then((b) => audio().decodeAudioData(b)).catch((e) => { buffers.delete(url); throw e; }));
-      if (buffers.size > 24) buffers.delete(buffers.keys().next().value); // keep memory in check
+      // keep memory in check: decoded songs are big (5 min ≈ 115 MB); never drop a track that is in use
+      const inUse = new Set(tracks.flatMap((t) => [t.url, t.playUrl]));
+      for (const k of [...buffers.keys()]) { if (buffers.size <= 8) break; if (!inUse.has(k) && k !== url) buffers.delete(k); }
     }
     return buffers.get(url);
   }
@@ -39,20 +43,25 @@ window.TFDaw = (() => {
   // ---------- one track's sound chain: [sources] -> effects -> volume -> left/right -> meter -> (auto-quiet) -> master
   function buildChain(t) {
     const c = audio();
-    const n = { input: c.createGain(), vol: c.createGain(), pan: c.createStereoPanner(), meter: c.createAnalyser(), duck: c.createGain(), fx: [] };
+    const n = { input: c.createGain(), vol: c.createGain(), meter: c.createAnalyser(), duck: c.createGain(), fx: [] };
+    // mono sources become stereo first (like the saved file), so 8D / 1D / left-right work on them too
+    n.input.channelCount = 2; n.input.channelCountMode = 'explicit'; n.input.channelInterpretation = 'speakers';
+    // left / right exactly like the saved file: turn one side down (no folding of the other side in)
+    n.split = c.createChannelSplitter(2); n.gL = c.createGain(); n.gR = c.createGain(); n.merge = c.createChannelMerger(2);
+    n.split.connect(n.gL, 0); n.split.connect(n.gR, 1); n.gL.connect(n.merge, 0, 0); n.gR.connect(n.merge, 0, 1);
     n.meter.fftSize = 1024;
     let last = n.input;
     const link = (node) => { last.connect(node); last = node; return node; };
     for (const e of TFFxMath.params(t.fx).list) {
       if (e.rate && t.kind !== 'song') continue; // speed effects are for the song track
-      if (e.room) last = taps(last, e.room, n.fx); // reverb taps (Slowed's room, 8D's small room)
       if (e.k === 'bass') { const b = link(c.createBiquadFilter()); b.type = 'lowshelf'; b.frequency.value = e.freq; b.gain.value = e.gain; n.fx.push(b); }
       if (e.k === 'echo') last = taps(last, { inGain: e.inGain, outGain: e.outGain, taps: [[e.ms, e.decay]] }, n.fx);
       if (e.k === 'eightd') last = pulsate(last, e, n.fx);
       if (e.k === 'oned') last = matrix(last, e.mix, n.fx);
+      if (e.room) last = taps(last, e.room, n.fx); // reverb taps after the effect, like the saved file (Slowed's room, 8D's small room)
     }
     last.connect(n.vol);
-    n.vol.connect(n.pan).connect(n.meter).connect(n.duck).connect(master);
+    n.vol.connect(n.split); n.merge.connect(n.meter).connect(n.duck).connect(master);
     t.nodes = n;
     apply(t);
     return n;
@@ -95,11 +104,13 @@ window.TFDaw = (() => {
     if (!t.nodes) return;
     const now = audio().currentTime;
     t.nodes.vol.gain.setTargetAtTime(audibleGain(t), now, 0.015);
-    t.nodes.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, (+t.pan || 0) / 100)), now, 0.015);
+    const x = Math.max(-1, Math.min(1, (+t.pan || 0) / 100));
+    t.nodes.gL.gain.setTargetAtTime(Math.min(1, 1 - x), now, 0.015);
+    t.nodes.gR.gain.setTargetAtTime(Math.min(1, 1 + x), now, 0.015);
   }
   function teardown(t) {
     if (!t.nodes) return;
-    for (const n of [t.nodes.input, ...t.nodes.fx, t.nodes.vol, t.nodes.pan, t.nodes.meter, t.nodes.duck]) { try { n.disconnect(); } catch (_) { /* gone */ } if (n.stop) try { n.stop(); } catch (_) { /* not started */ } }
+    for (const n of [t.nodes.input, ...t.nodes.fx, t.nodes.vol, t.nodes.split, t.nodes.gL, t.nodes.gR, t.nodes.merge, t.nodes.meter, t.nodes.duck]) { try { n.disconnect(); } catch (_) { /* gone */ } if (n.stop) try { n.stop(); } catch (_) { /* not started */ } }
     t.nodes = null;
   }
 
@@ -111,12 +122,16 @@ window.TFDaw = (() => {
   }
   function duration() { const s = songTrack(); return s ? s.duration : 0; }
   async function play(from = time()) {
-    stop(true);
+    stop(true); stopPreview(true);
     const my = gen;
+    loading = from;
     const c = audio();
     if (c.state === 'suspended') await c.resume();
     const all = await Promise.all(tracks.map((t) => load(t.playUrl || t.url).then((b) => [t, b]).catch(() => [t, null])));
     if (my !== gen) return; // paused / stopped / played again while loading
+    loading = null;
+    const songBuf = (all.find(([t]) => t.kind === 'song') || [])[1];
+    if (!songBuf) throw new Error('The song could not be loaded. Try opening it again.');
     stop(true);
     const rate = songRate();
     const c0 = c.currentTime + 0.06; // a moment to get everything started together
@@ -156,15 +171,16 @@ window.TFDaw = (() => {
     playing = p;
     duckLoop();
   }
-  function stop(keepPos = false) {
-    gen++;
-    if (playing) { if (keepPos !== 'keep') pos = time(); for (const s of playing.sources) { try { s.onended = null; s.stop(); } catch (_) { /* done */ } } }
+  function stop() {
+    gen++; loading = null;
+    if (playing) { pos = time(); for (const s of playing.sources) { try { s.onended = null; s.stop(); } catch (_) { /* done */ } } }
     playing = null;
   }
-  function pause() { if (playing) { pos = time(); stop(true); } else gen++; stopPreview(true); if (songTrack() && songTrack().nodes) songTrack().nodes.duck.gain.value = 1; }
-  function seek(t) { const was = !!playing; pos = Math.max(0, Math.min(duration(), t)); if (was) play(pos); }
+  function pause() { if (playing) { pos = time(); stop(true); } else { gen++; loading = null; } stopPreview(true); if (songTrack() && songTrack().nodes) songTrack().nodes.duck.gain.value = 1; }
+  function seek(t) { const was = !!playing || loading !== null; pos = Math.max(0, Math.min(duration(), t)); if (was) play(pos).catch(() => {}); }
   // auto-quiet: while a layer with Auto-quiet sounds, the song gets quieter (like the saved file's sidechain)
   function duckLoop() {
+    cancelAnimationFrame(duckRaf);
     if (!playing) return;
     const song = songTrack(), keys = tracks.filter((t) => t.kind !== 'song' && t.duck && t.nodes && audibleGain(t) > 0);
     if (song && song.nodes) {
@@ -172,7 +188,7 @@ window.TFDaw = (() => {
       for (const t of keys) loud = Math.max(loud, level(t.nodes.meter));
       song.nodes.duck.gain.setTargetAtTime(loud > 0.03 ? 0.28 : 1, audio().currentTime, loud > 0.03 ? 0.02 : 0.35);
     }
-    requestAnimationFrame(duckLoop);
+    duckRaf = requestAnimationFrame(duckLoop);
   }
   const tmp = new Float32Array(1024);
   function level(an) { if (!an) return 0; an.getFloatTimeDomainData(tmp); let m = 0; for (let i = 0; i < tmp.length; i++) { const v = Math.abs(tmp[i]); if (v > m) m = v; } return m; }
@@ -214,5 +230,6 @@ window.TFDaw = (() => {
     load, play, pause, stop, seek, time, duration, setTracks, apply, fxChanged, meters, forget, playPreview, stopPreview,
     get playing() { return !!playing || !!preview; }, get previewing() { return !!preview; }, get previewDuration() { return preview ? preview.duration : 0; },
     onEnd: (f) => listeners.end.push(f), songRate,
+    latency: () => (ctx ? (ctx.outputLatency || 0) + (ctx.baseLatency || 0) : 0), // how late the sound reaches the speakers
   };
 })();

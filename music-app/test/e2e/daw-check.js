@@ -99,6 +99,41 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   await w.keyboard.press('Control+y'); await w.waitForFunction((d) => Math.abs(TFEdit.session.duration - d) < 0.1, dur1);
   ok('Ctrl+Z / Ctrl+Y', true);
 
+  // ---- found in review: Apply + Undo brings the tracks back; Redo mixes them in again
+  const vA = await ev(() => TFEdit.session.version);
+  await w.click('.dw-panel .tb.pri:has-text("Apply to the song")'); await w.waitForFunction((v) => TFEdit.session.version === v + 1, vA, { timeout: 60000 });
+  ok('Apply to the song: tracks mixed in', await ev(() => TFEdit.api.tracks.length === 1));
+  await w.keyboard.press('Control+z'); await w.waitForFunction((v) => TFEdit.session.version === v, vA, { timeout: 30000 }); await wait(200);
+  ok('Undo brings the tracks and effects back', await ev(() => TFEdit.api.tracks.length === 4 && TFEdit.api.tracks[0].fx.echo > 0));
+  await w.keyboard.press('Control+y'); await w.waitForFunction((v) => TFEdit.session.version === v + 1, vA, { timeout: 30000 }); await wait(200);
+  ok('Redo mixes them in again (no double sound)', await ev(() => TFEdit.api.tracks.length === 1 && !Object.keys(TFEdit.api.tracks[0].fx).length));
+  await w.keyboard.press('Control+z'); await w.waitForFunction((v) => TFEdit.session.version === v, vA, { timeout: 30000 }); await wait(200);
+  // ---- a preview and the live tracks never play together
+  await w.click('.dw-tools .dw-b:has-text("Loop")'); await wait(200);
+  await ev(() => { TFEdit.api.sel = { a: 2, b: 4 }; TFEdit.api.render(); });
+  await w.click('.dw-panel .tb:has-text("Listen to the join")'); await w.waitForFunction(() => TFEdit.api.previewing, null, { timeout: 60000 });
+  await w.keyboard.press('Space'); await wait(200);
+  ok('Space during a preview stops it (banner gone, nothing plays)', await ev(() => !TFEdit.api.previewing && !TFDaw.playing && !document.querySelector('.ed-preview')));
+  await w.click('.dw-panel .tb:has-text("Listen to the join")'); await w.waitForFunction(() => TFEdit.api.previewing, null, { timeout: 60000 });
+  await w.click('.dw-add button:has-text("Built-in sound")'); await w.click('.pl-pick-row:has-text("Ocean")'); await w.waitForFunction(() => TFEdit.api.tracks.length === 5, null, { timeout: 30000 }); await wait(300);
+  ok('adding a track during a preview does not start the tracks over it', await ev(() => TFDaw.previewing));
+  await w.click('.ed-preview .tb'); await wait(150);
+  await w.click('.dw-head:has-text("Ocean") .dw-x'); await wait(100);
+  // ---- leaving the page stops the microphone; a slow preview doesn't start on another page
+  await w.click('.dw-add button:has-text("Record voice")'); await wait(1200);
+  ok('recording…', await ev(() => !!document.querySelector('.dw-recbtn.on')));
+  await w.keyboard.press('Control+1'); await wait(1500);
+  ok('leaving the Edit page stops the recording', await ev(() => !TFDaw.playing && !document.querySelector('.dw-recbtn.on')));
+  await w.keyboard.press('Control+3'); await w.waitForFunction(() => TFEdit.api.tracks.length === 5, null, { timeout: 30000 }).catch(() => {});
+  ok('…and keeps it as a track', await ev(() => TFEdit.api.tracks.length === 5), String(await ev(() => TFEdit.api.tracks.length)));
+  await w.click('.dw-head:has-text("Your voice") >> nth=-1'); await w.click('.dw-head.sel .dw-x'); await wait(100);
+  await w.click('.dw-tools .dw-b:has-text("Loop")').catch(() => {}); await wait(100);
+  if (!(await w.isVisible('.dw-panel:has-text("Listen to the join")'))) await w.click('.dw-tools .dw-b:has-text("Loop")');
+  await ev(() => { TFEdit.api.sel = { a: 2, b: 4 }; TFEdit.api.render(); });
+  await w.click('.dw-panel .tb:has-text("Listen to the join")'); await w.keyboard.press('Control+1'); await wait(4000);
+  ok('a preview still being made does not play on another page', await ev(() => !TFDaw.previewing && !TFDaw.playing));
+  await w.keyboard.press('Control+3'); await wait(400);
+  if (!(await w.isVisible('.dw-fxs'))) await w.click('.dw-tools .dw-b:has-text("Effects")');
   // Save keep both: one file with everything mixed (slowed → longer)
   await w.selectOption('.dw-mode', 'both');
   await w.click('.dw-b:has-text("Save")');

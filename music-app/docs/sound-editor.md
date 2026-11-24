@@ -47,9 +47,25 @@ You showed a screenshot of a music studio program (Ardour) and asked for the edi
 - A voice track with **Auto-quiet** used to cut the saved song short where the voice ended. Now the song plays to its end.
 - Pressing Play then Pause quickly could still start the sound a moment later. Now Pause wins.
 
+### Fixed after the independent review (14 findings, 2026-11-24)
+- A preview and the live tracks could play on top of each other; Space during a preview left the blue bar stuck.
+- **Rec voice** kept the microphone on after leaving the Edit page or opening another song. Now it stops (and keeps the recording as a track on the same song).
+- A preview that took a while could start playing on another page. Now it is dropped.
+- Memory: old working copies stayed decoded in memory (≈ 115 MB each for a 5-minute song). Now only what is in use is kept.
+- The auto-quiet helper piled up while playing for a long time. Now there is only one.
+- **Left ⟷ Right** sounded different live than in the saved file. Now both turn one side down the same way.
+- Your voice landed a little late in the mix. Now it lines up with what you heard.
+- 8D and 1D sounded lopsided live on mono songs. Fixed (mono becomes stereo first, like the saved file).
+- **Apply to the song**, then Undo, lost the tracks and effects. Now Undo brings them back and Redo mixes them in again.
+- Play could run past the end if the song failed to load; now it stops at the end or shows an error.
+- A slow change (cut, trim…) finishing after you opened another song could land on the wrong song. Now it is dropped, and opening waits until the change is done.
+- Trim could stay stuck on "Looking for silent parts…" after an Undo.
+- "Use the playhead" during a preview used the preview's time. Now it stops the preview first.
+- Double-click on Rec started two recordings; a muted solo track counted as solo in the saved file only; 8D's room order differed.
+
 ### Checked
 - **Unit tests:** 74 pass (new: a track longer than the song stops with it; a short auto-quiet track doesn't cut the song).
-- **In the real app (automatic):** new studio check 25 / 25 (open, select, play, meters, Space, live Echo + Slowed, knob drag,
+- **In the real app (automatic):** new studio check 34 / 34 (the review's scenarios too; open, select, play, meters, Space, live Echo + Slowed, knob drag,
   rain / song / voice tracks, Move, Mute, all panels, cut / undo / redo keep the tracks, Save = slowed file with everything mixed);
   Edit check 14 / 14 (3 save modes); panels check 18 / 18 (Trim, Split + Same loudness, live effects + Apply, Loop + Smart loop,
   tracks + Match beat + Apply, Smart connect).
