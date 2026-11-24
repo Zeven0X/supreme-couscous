@@ -136,21 +136,25 @@ function tempoMatch(songBpm, layerBpm) {
 // ---------- recipes (filter graphs) ----------
 // Effects: strength 0..100. Order is fixed so the result is the same whichever you switch on first.
 const EFFECTS = ['slowed', 'nightcore', 'bass', 'echo', 'eightd', 'oned'];
+const FXM = require('../renderer/fxmath');
+const tapsFilter = (r) => `aecho=${r.inGain}:${r.outGain}:${r.taps.map((t) => t[0]).join('|')}:${r.taps.map((t) => t[1].toFixed(2)).join('|')}`;
+// The ffmpeg filters for a set of effects (numbers from renderer/fxmath.js, shared with the live player).
+// noRate: layers can't use the speed effects (Slowed / Nightcore); those are for the song track.
+function effectFilters(fx = {}, { noRate = false } = {}) {
+  const out = [];
+  for (const e of FXM.params(fx).list) {
+    if (e.rate && noRate) continue;
+    if (e.k === 'slowed') out.push(`asetrate=${Math.round(RATE * e.rate)}`, `aresample=${RATE}`, tapsFilter(e.room));
+    if (e.k === 'nightcore') out.push(`asetrate=${Math.round(RATE * e.rate)}`, `aresample=${RATE}`);
+    if (e.k === 'bass') out.push(`bass=g=${e.gain.toFixed(1)}:f=${e.freq}:w=0.6`);
+    if (e.k === 'echo') out.push(`aecho=${e.inGain}:${e.outGain}:${e.ms}:${e.decay.toFixed(2)}`);
+    if (e.k === 'eightd') out.push(`apulsator=mode=sine:hz=${e.hz.toFixed(3)}:amount=${e.amount.toFixed(2)}`, tapsFilter(e.room));
+    if (e.k === 'oned') out.push(`pan=stereo|c0=${(1 - e.mix).toFixed(3)}*c0+${e.mix.toFixed(3)}*c1|c1=${e.mix.toFixed(3)}*c0+${(1 - e.mix).toFixed(3)}*c1`);
+  }
+  return out;
+}
 function effectChain(fx = {}) {
-  const parts = [];
-  const s = (k) => clamp((+fx[k] || 0) / 100, 0, 1);
-  if (fx.slowed !== undefined) { // slower and lower (like a slowed-down record) + a soft room
-    const f = 1 - 0.08 - 0.17 * s('slowed');
-    parts.push(`asetrate=${Math.round(RATE * f)}`, `aresample=${RATE}`, `aecho=0.8:0.85:60|120|190|280:${(0.25 + 0.2 * s('slowed')).toFixed(2)}|${(0.2 + 0.15 * s('slowed')).toFixed(2)}|${(0.15 + 0.1 * s('slowed')).toFixed(2)}|${(0.1 + 0.08 * s('slowed')).toFixed(2)}`);
-  }
-  if (fx.nightcore !== undefined) { const f = 1.1 + 0.25 * s('nightcore'); parts.push(`asetrate=${Math.round(RATE * f)}`, `aresample=${RATE}`); }
-  if (fx.bass !== undefined) parts.push(`bass=g=${(3 + 12 * s('bass')).toFixed(1)}:f=100:w=0.6`);
-  if (fx.echo !== undefined) parts.push(`aecho=0.8:0.9:${Math.round(150 + 350 * s('echo'))}:${(0.2 + 0.45 * s('echo')).toFixed(2)}`);
-  if (fx.eightd !== undefined) parts.push(`apulsator=mode=sine:hz=${(0.06 + 0.14 * s('eightd')).toFixed(3)}:amount=${(0.5 + 0.5 * s('eightd')).toFixed(2)}`, 'aecho=0.8:0.6:40:0.15');
-  if (fx.oned !== undefined) { // every speaker plays the same: left and right mixed together
-    const k = 0.5 * (0.4 + 0.6 * s('oned'));
-    parts.push(`pan=stereo|c0=${(1 - k).toFixed(3)}*c0+${k.toFixed(3)}*c1|c1=${k.toFixed(3)}*c0+${(1 - k).toFixed(3)}*c1`);
-  }
+  const parts = effectFilters(fx);
   if (!parts.length) return null;
   parts.push('alimiter=limit=0.97:level=false', `aformat=sample_rates=${RATE}:channel_layouts=stereo`);
   return `[0:a]${parts.join(',')}[out]`;
@@ -178,8 +182,13 @@ function panFilter(p) {
   const l = Math.min(1, 1 - x), r = Math.min(1, 1 + x);
   return `pan=stereo|c0=${l.toFixed(3)}*c0|c1=${r.toFixed(3)}*c1`;
 }
-function mixGraph(layers, songDur, { songVolume = 100 } = {}) {
-  const solo = layers.some((L) => L.solo && !L.mute);
+// The whole Edit page as one recipe: the song track (its effects, volume, left/right, mute) + every layer
+// (part, tempo, repeat, its effects, volume, left/right, auto-quiet). Layer start times are in song time;
+// when the song's own effects change its speed (Slowed / Nightcore), the layers move with it.
+function mixGraph(layers, songDur, { songVolume = 100, songPan = 0, songMute = false, songSolo = false, songFx = {} } = {}) {
+  const rate = FXM.params(songFx).rate;
+  const outDur = songDur / rate;
+  const solo = songSolo || layers.some((L) => L.solo && !L.mute); // any solo: only solo tracks are heard
   const live = layers.map((L, i) => ({ ...L, input: i + 1 })).filter((L) => !L.mute && (!solo || L.solo));
   const g = [], outs = [], ducks = [];
   for (const L of live) {
@@ -187,26 +196,31 @@ function mixGraph(layers, songDur, { songVolume = 100 } = {}) {
     if (L.to > L.from) chain.push(`atrim=${f4(L.from || 0)}:${f4(L.to)}`, 'asetpts=N/SR/TB');
     if (L.tempo && Math.abs(L.tempo - 1) > 1e-4) chain.push(`rubberband=tempo=${L.tempo.toFixed(5)}:pitchq=quality:channels=together`);
     const len = ((L.to || 0) - (L.from || 0)) / (L.tempo || 1);
-    const reps = L.repeat === 0 && len > 0 ? Math.ceil(Math.max(0, songDur - (L.offset || 0)) / len) : (L.repeat || 1);
+    const start = (L.offset || 0) / rate;
+    const reps = L.repeat === 0 && len > 0 ? Math.ceil(Math.max(0, outDur - start) / len) : (L.repeat || 1);
     if (reps > 1 && len > 0) chain.push(`aloop=loop=${Math.min(999, reps - 1)}:size=${Math.round(len * RATE)}:start=0`);
-    if (L.repeat === 0) chain.push(`atrim=0:${f4(Math.max(0.01, songDur - (L.offset || 0)))}`);
+    if (L.repeat === 0) chain.push(`atrim=0:${f4(Math.max(0.01, outDur - start))}`);
+    chain.push(...effectFilters(L.fx, { noRate: true }));
     chain.push(`volume=${((L.volume ?? 100) / 100).toFixed(4)}`, panFilter(L.pan));
-    const ms = Math.round((L.offset || 0) * 1000);
+    const ms = Math.round(start * 1000);
     if (ms > 0) chain.push(`adelay=${ms}|${ms}`);
     const tag = `l${L.input}`;
     if (L.duck) { chain.push(`asplit=2[${tag}][${tag}d]`); ducks.push(`[${tag}d]`); g.push(`[${L.input}:a]${chain.join(',')}`); } else g.push(`[${L.input}:a]${chain.join(',')}[${tag}]`);
     outs.push(`[${tag}]`);
   }
-  let song = `[0:a]aresample=${RATE},aformat=sample_rates=${RATE}:channel_layouts=stereo,volume=${(songVolume / 100).toFixed(4)}[song]`;
-  g.unshift(song);
+  const vol = songMute || (solo && !songSolo) ? 0 : songVolume;
+  const song = [`aresample=${RATE}`, `aformat=sample_rates=${RATE}:channel_layouts=stereo`, ...effectFilters(songFx), `volume=${(vol / 100).toFixed(4)}`];
+  if (+songPan) song.push(panFilter(songPan));
+  g.unshift(`[0:a]${song.join(',')}[song]`);
   let songTag = '[song]';
   if (ducks.length) { // auto-quiet: the song gets quieter while these layers sound
     const key = ducks.length > 1 ? (g.push(`${ducks.join('')}amix=inputs=${ducks.length}:normalize=0[key]`), '[key]') : ducks[0];
-    g.push(`${songTag}${key}sidechaincompress=threshold=0.02:ratio=10:attack=15:release=450:makeup=1[songd]`);
+    g.push(`${key}apad[keyp]`); // the key goes on (silent) after it ends, so the song is not cut short there
+    g.push(`${songTag}[keyp]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=450:makeup=1[songd]`);
     songTag = '[songd]';
   }
-  if (!outs.length) return `${g[0].replace('[song]', '[out]')}`;
-  g.push(`${songTag}${outs.join('')}amix=inputs=${outs.length + 1}:duration=longest:normalize=0,alimiter=limit=0.97:level=false[out]`);
+  if (!outs.length) return `${g[0].replace('[song]', ',alimiter=limit=0.97:level=false[out]').replace(',,', ',')}`;
+  g.push(`${songTag}${outs.join('')}amix=inputs=${outs.length + 1}:duration=first:normalize=0,alimiter=limit=0.97:level=false[out]`);
   return g.join(';');
 }
 
@@ -262,5 +276,5 @@ async function makeSound(ff, key, dest) {
 module.exports = {
   RATE, TRIM_LEVELS, parseSilence, silences, trimPoints, splitPoints, loudness, sameLoudness, decodeMono,
   smartLoop, zeroCross, beats, snapToBeat, tempoMatch, EFFECTS, effectChain, loopLength, loopGraph, panFilter,
-  mixGraph, BLENDS, connectGraph, SOUNDS, makeSound,
+  mixGraph, effectFilters, BLENDS, connectGraph, SOUNDS, makeSound,
 };

@@ -1,8 +1,60 @@
 # Sound editor (📏 Edit page)
 
 Its own page: the **📏 Edit** button in the top bar (or **Ctrl+3**), or right-click a song → **📏 Edit…**
-Tabs: **Trim · Split · Effects · Loop · Layers**.
-Status: **all 8 parts built** (2026-11-23). Click a tab to open its panel under the waveform; click it again to close it.
+Now laid out like a music studio program (see **Version 2** below). Panels: **Trim · Split · Effects · Loop · Connect**.
+*Before (2026-11-23):* tabs **Trim · Split · Effects · Loop · Layers** under one big waveform.
+
+## Version 2 — studio layout with live effects 🔄 (2026-11-24)
+You showed a screenshot of a music studio program (Ardour) and asked for the editing to look like that, and chose
+**live effects** (heard at once while playing). Concept v2 approved ("A1"), then built.
+*Before:* one big waveform, 5 tabs under it, and every effect / layer needed **Preview** then **Apply**.
+
+### What you see (top to bottom)
+1. **Transport bar:** ⏮ start · ⏪ back 5 s · ▶ play / pause · ■ stop (back to where you pressed Play) · ⏩ forward 5 s ·
+   **⟲ Loop A–B** (plays the selected part over and over, key **L**) · **● Rec voice** · the clocks: **Time** (green),
+   **Bar | Beat**, **Tempo** (BPM), **Selected** · **↶ Undo / ↷ Redo** · **📂 Open…** · how to save (Keep both / New takes the name /
+   Replace the original) · **💾 Save**.
+2. **Tool bar:** **⬚ Select** · **✂ Cut out** · **◧ Keep only** · **↔ Move** (drag a track's sound left / right) ·
+   **Snap** Off / Beat / Bar (selections and moved sounds land on the beat or the bar) · **Panel** Trim / Split / Effects / Loop / Connect ·
+   zoom − / + / Fit (Ctrl + mouse wheel zooms too).
+3. **Left: the selected track** (click a track to select it): its name, its **effect chain** (green dot = on, **LIVE**;
+   click a chip to switch it off), **+ Add effect**, Left ⟷ Right, a big **volume fader** with a level meter, **M** / **S**.
+   For an added track also: which part of the sound to use, where it starts, Repeat, **Match beat**, **Auto-quiet**.
+4. **The tracks:** an **overview** of the whole song (click / drag to look at another part when zoomed in), a ruler with
+   **Time**, **Bars** and **Markers** (A and B of the selection, the split cuts, the Connect point), then one row per track.
+   Each row has a coloured strip, **M** (mute), **S** (solo: only solo tracks are heard), a volume slider and a left / right
+   slider; its sound is drawn as a rounded clip with a title bar. Under them: **+ Song track**, **+ Built-in sound**, **+ Record voice**.
+5. **Bottom panel:** **Effects** = 6 knob cards (switch on, then drag the knob up / down or use the mouse wheel), **All off**,
+   **Apply to the song**. Or Trim, Split, Loop, Connect (they work as before).
+- On the Edit page the left column (Now playing, Sound) is hidden so the tracks get the whole width. It comes back on the other pages.
+
+### How it works (simple words)
+- **Everything plays live.** Each track goes through its own chain: effects → volume → left / right → level meter → the main output.
+  Turning a knob or a slider changes what you hear right away; switching an effect on or off restarts the sound at the same spot
+  (a tiny jump you may hear).
+- **The same numbers for listening and saving.** One small file (`fxmath.js`) holds the effect numbers (how long the echo is,
+  how much bass, …). The live player and the saving engine both read it, so the saved file sounds like what you heard.
+- **Save** first mixes everything you hear (effects, volumes, left / right, mute / solo, added tracks) into the song as one change,
+  then saves it in the way you picked. **Apply to the song** does the mixing step only (Undo takes it back).
+- **Slowed + reverb** and **Nightcore** change the speed, so they only work on the song track (on other tracks they are greyed out).
+  The added tracks move with the song when it is slowed.
+- **Cut, Trim, Split, Loop, Connect** still change the song itself (a new working copy each time, so Undo works). Your added tracks
+  and live effects stay while you do that.
+- **Auto-quiet** (good for your voice): the song gets quieter while that track sounds, live and in the saved file.
+- The saved mix stops when the song ends (like the live player); a longer added track is cut there.
+
+### Fixed while building it
+- A voice track with **Auto-quiet** used to cut the saved song short where the voice ended. Now the song plays to its end.
+- Pressing Play then Pause quickly could still start the sound a moment later. Now Pause wins.
+
+### Checked
+- **Unit tests:** 74 pass (new: a track longer than the song stops with it; a short auto-quiet track doesn't cut the song).
+- **In the real app (automatic):** new studio check 25 / 25 (open, select, play, meters, Space, live Echo + Slowed, knob drag,
+  rain / song / voice tracks, Move, Mute, all panels, cut / undo / redo keep the tracks, Save = slowed file with everything mixed);
+  Edit check 14 / 14 (3 save modes); panels check 18 / 18 (Trim, Split + Same loudness, live effects + Apply, Loop + Smart loop,
+  tracks + Match beat + Apply, Smart connect).
+- **Not checked:** how it *sounds* to a person (the test machine has no speakers); a real microphone (only a fake one).
+
 
 ## Build plan (agreed 2026-11-23; you chose "all at once" for parts 2–8)
 1. ✅ The Edit page: big waveform, select, zoom, cut out / keep only, Undo / Redo, Save in 3 modes.
@@ -31,7 +83,7 @@ Status: **all 8 parts built** (2026-11-23). Click a tab to open its panel under 
 - **🔊 Same loudness:** measures how loud each part is on average (the way radio stations measure it) and sets the volumes so they all sound equally loud.
 - **💾 Save all N parts as songs:** each part becomes its own file **next to the original** (never replacing anything), with its own speed / pitch / volume, track number "1/5", picture and information, and joins your library.
 
-## Part 4 — Effects ✅
+## Part 4 — Effects 🔄 (now live knobs, see Version 2)
 - 6 cards, each with an on / off switch and a **strength** slider:
   - **Echo:** repeats, like a big hall.
   - **Slowed + reverb:** slower and lower, with a soft room. (The song gets longer.)
@@ -39,7 +91,8 @@ Status: **all 8 parts built** (2026-11-23). Click a tab to open its panel under 
   - **Bass boost:** stronger low sounds.
   - **8D:** the sound slowly moves around your head (best with headphones).
   - **1D:** every speaker plays the same; nothing moves left or right.
-- Several can be on together. **▶ Preview**, then **✓ Apply effects**. A limiter stops it from getting too loud.
+- Several can be on together. A limiter stops it from getting too loud.
+- *Before (2026-11-23):* **▶ Preview**, then **✓ Apply effects**, on the song only. Now each track has its own effects, heard live.
 
 ## Part 5 — Loop ✅
 - Select the part on the waveform: start = **A**, end = **B** (green letters, with "×3").
@@ -47,14 +100,14 @@ Status: **all 8 parts built** (2026-11-23). Click a tab to open its panel under 
 - **Play it − 3 + times**, with **New length: 4:21 (now 3:10)**.
 - **▶ Listen to the join** plays the moment where B jumps back to A. **✓ Apply loop**.
 
-## Parts 6–8 — Layers + Smart connect ✅
+## Parts 6–8 — Layers + Smart connect 🔄 (layers are now tracks, see Version 2)
 - **Add a layer** (it starts at the playhead):
   - **+ Song…**: any song from your library.
   - **+ Built-in sound…**: Rain, Ocean waves, Vinyl crackle, Wind, Campfire, Beat (120 BPM click). Tonix makes these itself from noise and tones; nothing is copied. They repeat until the song ends.
   - **🎙 Record your voice**: the song plays while you record, so you can talk or sing along. Your voice gets **Auto-quiet** switched on.
 - **The layer lanes:** each layer as a strip with its little waveform, on the same timeline as the song. **Drag a strip** left or right to move it.
 - **Each layer:** Starts at, Part (from – to: use only a piece of it), Volume, Left ⟷ Right, Repeat (1× / 2× / 4× / 8× / Until the end), **♪ Match beat** (speeds the layer up or down so its beat matches the song), **🔉 Auto-quiet** (the song gets quieter while this layer sounds), **M** mute, **S** solo, **✕** remove. Plus **Song volume** for the song itself.
-- **▶ Preview the mix**, then **✓ Mix in** (one change; Undo takes the layers out again).
+- *Before (2026-11-23):* **▶ Preview the mix**, then **✓ Mix in**, in a Layers panel with small lanes. Now each layer is a track row, heard live, and **Save** mixes it in.
 - **Smart connect** (bottom of the Layers panel):
   1. **The piece:** "Use the selection" (a part of this song) or "From another song…" (pick a song, type from / to).
   2. **Where it goes:** move the playhead there, "Use the playhead" (a green line shows it).

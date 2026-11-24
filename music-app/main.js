@@ -78,6 +78,10 @@ function startServer() {
       const t = lib.byId(parts[2]);
       if (parts[1] === 'media' && t) return serveFile(req, res, t.mediaPath);
       if (parts[1] === 'mapasset' && /^[a-f0-9]{12}-[a-f0-9]{8}\.png$/.test(parts[2] || '')) return serveFile(req, res, path.join(maps.assetDir, parts[2]));
+      if (parts[1] === 'editsrc' && lib) { // built-in sounds and voice recordings for the Edit page's live player
+        const dir = { sound: 'sounds', rec: 'recordings', stretch: 'stretch' }[parts[2]] ? path.join(lib.dataDir, { sound: 'sounds', rec: 'recordings', stretch: 'stretch' }[parts[2]]) : null;
+        if (dir && /^[\w-]+\.flac$/.test(parts[3] || '')) return serveFile(req, res, path.join(dir, parts[3]));
+      }
       if (parts[1] === 'edit' && editor && /^[a-f0-9]{10}$/.test(parts[2] || '') && /^v[\w-]+\.flac$/.test(parts[3] || '')) return serveFile(req, res, path.join(editor.dir, parts[2], parts[3]));
       if (parts[1] === 'studio' && studio) { const f = studio.fileFor(parts[2] || ''); if (f) return serveFile(req, res, f); }
       if (parts[1] === 'plcover') { const p = lib.playlistById(parts[2]); if (p && p.cover) return serveFile(req, res, path.join(lib.coverDir, p.cover)); }
@@ -612,8 +616,9 @@ function registerIpc() {
         if (!(times >= 1 && times <= 200)) throw new Error('Choose how many times (1 to 200).');
         return { type: 'graph', graph: T.loopGraph(a, b, times, dur), label: `Loop ${(b - a).toFixed(2)} s × ${times}` };
       }
-      case 'layers': {
+      case 'mix': case 'layers': {
         const inputs = [], layers = [];
+        op.layers = Array.isArray(op.layers) ? op.layers : [];
         const song = op.layers.some((L) => L.matchBeat) ? await bpmOf(cur) : null;
         for (const L of op.layers) {
           const { file } = await sourceFile(L.src);
@@ -621,8 +626,12 @@ function registerIpc() {
           const tempo = L.matchBeat && song && song.bpm ? T.tempoMatch(song.bpm, (await bpmOf(file)).bpm) : 1;
           layers.push({ ...L, tempo });
         }
-        if (!layers.length) throw new Error('Add a layer first.');
-        return { type: 'graph', graph: T.mixGraph(layers, dur, { songVolume: op.songVolume ?? 100 }), inputs, label: `Mixed in ${layers.filter((L) => !L.mute).length} layer(s)` };
+        const sg = op.song || {};
+        const songFx = sg.fx && typeof sg.fx === 'object' ? sg.fx : {};
+        if (op.type === 'layers' && !layers.length) throw new Error('Add a layer first.');
+        const opts = { songVolume: Number.isFinite(+sg.volume) ? +sg.volume : (op.songVolume ?? 100), songPan: +sg.pan || 0, songMute: !!sg.mute, songSolo: !!sg.solo, songFx };
+        const what = [Object.keys(songFx).length ? `effects: ${Object.keys(songFx).join(', ')}` : '', layers.length ? `${layers.filter((L) => !L.mute).length} layer(s)` : ''].filter(Boolean).join(' + ');
+        return { type: 'graph', graph: T.mixGraph(layers, dur, opts), inputs, label: `Mixed (${what || 'volume'})` };
       }
       case 'connect': {
         let P = t(op.P), a = Math.max(0, +op.a), b = Math.max(0, +op.b);
@@ -673,10 +682,27 @@ function registerIpc() {
     return { a: r.a + from, b: r.b + from, score: r.score };
   });
   handle('edit-sounds', () => Object.entries(T.SOUNDS).map(([key, s]) => ({ key, name: s.name })));
-  handle('edit-source', async (src) => { // a layer's length and little waveform
+  handle('edit-source', async (src) => { // a layer's length, little waveform and web address (for the live player)
     const { file, name } = await sourceFile(src);
-    return { name, duration: (await ff.probe(file)).info.duration, peaks: await ff.peaks(file, 600) };
+    const url = src.kind === 'track' ? `${baseUrl}/media/${src.id}` : `${baseUrl}/editsrc/${src.kind === 'sound' ? 'sound' : 'rec'}/${path.basename(file)}`;
+    return { name, url, duration: (await ff.probe(file)).info.duration, peaks: await ff.peaks(file, 2000) };
   });
+  // Match beat for the live player: a copy of the layer at the song's tempo (studio quality, same pitch)
+  const stretchDir = () => { const d = path.join(lib.dataDir, 'stretch'); fs.mkdirSync(d, { recursive: true }); return d; };
+  handle('edit-matchbeat', async (sid, src) => {
+    const cur = editor.current(editor.get(sid));
+    const { file } = await sourceFile(src);
+    const song = await bpmOf(cur), layer = await bpmOf(file);
+    const tempo = T.tempoMatch(song.bpm, layer.bpm);
+    if (Math.abs(tempo - 1) < 1e-4) return { tempo: 1, url: null, songBpm: song.bpm, layerBpm: layer.bpm };
+    const st = fs.statSync(file);
+    const name = `${crypto.createHash('sha1').update(`${file}|${st.size}|${st.mtimeMs}|${tempo}`).digest('hex').slice(0, 20)}.flac`;
+    const dest = path.join(stretchDir(), name);
+    if (!fs.existsSync(dest)) await ff.run(['-y', '-i', file, '-map', '0:a:0', '-af', `aresample=44100,rubberband=tempo=${tempo.toFixed(5)}:pitchq=quality:channels=together`, '-ac', '2', '-c:a', 'flac', dest]);
+    return { tempo, url: `${baseUrl}/editsrc/stretch/${name}`, songBpm: song.bpm, layerBpm: layer.bpm };
+  });
+  // tempo + beat times of the song being edited (bar | beat clock, snapping)
+  handle('edit-bpm', async (sid) => { const b = await bpmOf(editor.current(editor.get(sid))); return { bpm: b.bpm, times: b.times }; });
   handle('edit-recording', async (bytes) => {
     // the browser's recording has no length inside, so it becomes a normal FLAC file right away
     const stamp = Date.now(), raw = path.join(recDir(), `voice-${stamp}.webm`), name = `voice-${stamp}.flac`;
@@ -901,6 +927,8 @@ app.whenReady().then(async () => {
     maps = new MapStore(path.join(lib.dataDir, 'maps'));
     studio = new Studio(path.join(lib.dataDir, 'studio-pitch'), ff, log);
     editor = new Editor(path.join(lib.dataDir, 'editing'), ff);
+    fs.rmSync(path.join(lib.dataDir, 'stretch'), { recursive: true, force: true }); // match-beat copies: made again when needed
+  fs.rmSync(path.join(lib.dataDir, 'stretch'), { recursive: true, force: true }); // match-beat copies are made again when needed
     await startServer();
     registerIpc();
     await createWindow();

@@ -1324,6 +1324,7 @@ function showView(v) {
   for (const b of $$('.nav')) b.classList.toggle('active', b.dataset.view === v);
   for (const el of $$('.view')) el.classList.toggle('active', el.id === `view-${v}`);
   $('#main').classList.toggle('no-right', v !== 'library');
+  $('#main').classList.toggle('wide', v === 'edit'); // the studio page needs the whole width
   if (v === 'tools') { const term = $('#terminal'); term.scrollTop = term.scrollHeight; }
   if (v !== 'map' && S.edit) setEdit(null); // away from the map, the Sound panel edits the playing song again
   if (v === 'map' && window.TFMap) window.TFMap.show();

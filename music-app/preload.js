@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld('tf', {
   editSplitSave: (sid, parts) => call('edit-split-save', sid, parts),
   editSmartLoop: (sid, a, b) => call('edit-smartloop', sid, a, b),
   editSounds: () => call('edit-sounds'),
+  editBpm: (sid) => call('edit-bpm', sid),
+  editMatchBeat: (sid, src) => call('edit-matchbeat', sid, src),
   editSource: (src) => call('edit-source', src),
   editRecording: (bytes) => call('edit-recording', bytes),
   playlistCreate: (name, trackIds) => call('playlist-create', name, trackIds),

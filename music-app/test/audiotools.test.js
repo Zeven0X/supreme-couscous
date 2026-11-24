@@ -117,3 +117,28 @@ test('smart connect at the very start or the very end still works (found in revi
   const o = T.connectGraph({ P: 0, a: 0, b: 2, src: 1, after: 'continue', blend: 'hard', dur: 10.5 });
   assert.ok(Math.abs((await render(o.graph, path.join(tmp, 'edge-other.flac'), [song, song])) - o.length) < 0.05);
 });
+
+test('the whole Edit page as one mix: song effects + volume / pan / mute / solo, layer effects', async () => {
+  const rain = path.join(tmp, 'rain2.flac');
+  await T.makeSound(ff, 'rain', rain);
+  // the song slowed down: layers move with it, the mix is longer
+  const g = T.mixGraph([{ offset: 2, from: 0, to: 2, volume: 80, pan: 30, repeat: 1, fx: { echo: 50, bass: 40, slowed: 50 } }], 10.5, { songFx: { slowed: 50 }, songVolume: 90, songPan: -20 });
+  assert.ok(!/asetrate=[\\d]+[^;]*\\[l1\\]/.test(g.split(';')[1] || ''), 'layers never get the speed effects');
+  const d = await render(g, path.join(tmp, 'mix2.flac'), [song, rain]);
+  const rate = require('../renderer/fxmath').params({ slowed: 50 }).rate;
+  assert.ok(d - 10.5 / rate > -0.1 && d - 10.5 / rate < 0.35, `slowed mix ${d} vs ${10.5 / rate} (+ up to 0.28 s of reverb tail)`);
+  // song muted / a layer solo / the song solo: valid recipes
+  for (const opts of [{ songMute: true }, { songSolo: true }, {}]) {
+    const gg = T.mixGraph([{ offset: 0, from: 0, to: 2, solo: !opts.songSolo && !opts.songMute }], 10.5, opts);
+    assert.ok((await render(gg, path.join(tmp, `mix-${Object.keys(opts).join('') || 'solo'}.flac`), [song, rain])) > 10);
+  }
+  assert.ok(T.mixGraph([], 10.5, { songFx: { echo: 30 } }).includes('aecho'), 'no layers: just the song with its effects');
+  // a layer longer than the song stops where the song ends (like the live player)
+  const long = T.mixGraph([{ offset: 8, from: 0, to: 2, repeat: 4 }], 10.5);
+  assert.ok(Math.abs((await render(long, path.join(tmp, 'mix-long.flac'), [song, rain])) - 10.5) < 0.1, 'stops with the song');
+  // a short auto-quiet layer doesn't cut the song short (found by the studio page check)
+  const short = T.mixGraph([{ offset: 1, from: 0, to: 1, duck: true }], 10.5);
+  assert.ok(Math.abs((await render(short, path.join(tmp, 'mix-short-duck.flac'), [song, rain])) - 10.5) < 0.1, 'the song plays to its end');
+  // the shared numbers make the same filters as before
+  assert.ok(T.effectChain({ echo: 40 }).includes('aecho=0.8:0.9:290:0.38'));
+});
