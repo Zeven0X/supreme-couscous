@@ -1,10 +1,78 @@
 # Sound editor (📏 Edit page)
 
 Its own page: the **📏 Edit** button in the top bar (or **Ctrl+3**), or right-click a song → **📏 Edit…**
-Now laid out like a music studio program (see **Version 2** below). Panels: **Trim · Split · Effects · Loop · Connect**.
+Now laid out like a music studio program, design B (see **Version 3** below). Bottom tabs: **Sound · Effects · Mixer · Trim · Split · Loop · Connect**.
+*Before (2026-11-24):* version 2, with panels **Trim · Split · Effects · Loop · Connect** and a left inspector strip.
 *Before (2026-11-23):* tabs **Trim · Split · Effects · Loop · Layers** under one big waveform.
 
-## Version 2 — studio layout with live effects 🔄 (2026-11-24)
+## Version 3 — design B: marks, Smart loop v2, Sound + Fades for every track 🔄 (2026-11-25)
+You tried version 2 and said: loops were hard to make (dragging the exact spot, zoom moving by itself), the play bar at the
+bottom was confusing, Speed / Pitch / Volume / Fade in / Fade out were missing, and the emojis looked poor. You picked
+**design B (dark pro studio), improved**, after seeing 3 designs. Built "all at once".
+*Before:* version 2 (see below): a left "inspector" strip, emojis, tool bar + panel buttons in two rows, no marks.
+
+### What you see
+1. **Top bar (one row, drawn icons):** start · back 5 s · ▶ play · ■ stop · forward 5 s · **Loop A–B** · **Rec** · green clocks
+   (**TIME**, **BAR | BEAT**, **TEMPO**) · tools **Select / Cut / Keep / Move** · **Snap** (Off → Beat → Bar, click to change) ·
+   **Mark (M)** · Undo / Redo · zoom − / + · **Follow** (off: the view stays where you put it) · Open · how to save · **Save**.
+2. **Left column:**
+   - **MARKS:** your landmarks. Each has a colour, a name you can type, its time (click it to jump there), **A**, **B** and ✕.
+   - **Part:** the A → B part.
+   - **Smart loop**, and its results.
+   - **ADD A TRACK:** Song track, Built-in sound, Record voice.
+3. **The tracks:**
+   - **Overview strip:** the whole song.
+   - **Ruler with 3 rows:** time, bars, and **marks** (coloured flags; the A and B marks are green).
+   - **One row per track:** a coloured strip, its icon, **M**, **S**, volume, a level meter, and a short line like "Speed 100% · Pitch +0.0 · 2 effects · fades".
+   - **Fades are drawn on each track** as a white curve. The selected track shows **two white squares** you can drag to change the fades.
+4. **Bottom tabs:**
+   - **Sound:** for the selected track. Three sections side by side:
+     - **SOUND:** Speed, Pitch (with semitones), Volume. Each has a slider, the exact number (you can type it), and **−25 −5 −1 ↺ +1 +5 +25** buttons. **Natural voice**, **Reset all**.
+     - **FADES:** Fade in, Fade out, each with **−1 −0.5 −0.1 ↺ +0.1 +0.5 +1** second buttons. Three shapes: **Straight**, **Smooth**, **Slow start**. A small picture of the fades.
+     - **TRACK:** Left ⟷ Right. For an added track also: which part of the sound to use, where it starts, Repeat, Match beat, Auto-quiet.
+   - **Effects:** the 6 live knobs.
+   - **Mixer:** a strip per track with a fader, a meter, left/right, M and S, plus **MASTER**.
+   - **Trim, Split, Loop, Connect:** the same as before.
+5. **The Library player** becomes a small, quiet bar at the bottom while you are on the Edit page.
+
+### Marks (landmarks on the song)
+- **Put one:** press **M** while the song plays (or is stopped), click **Mark (M)**, or click the **bottom row of the ruler**.
+- **Move one:** drag its flag. **Rename:** type in the list (or double-click the flag). **Remove:** ✕.
+- **Choose a part:** press **A** on one mark and **B** on a later one. The part between them is selected, ready for
+  Loop, Cut, Keep or Smart loop. Snap (Beat / Bar) also puts new marks on the beat.
+- When you **cut**, **keep** or **trim**, the marks move with the music. Marks inside a removed part go away.
+  *Not done yet:* Undo does not bring removed marks back.
+
+### Smart loop v2
+- Press **Smart loop** (left column, or in the Loop tab) after choosing A and B.
+- **What it does:** Tonix looks at **every beat up to 4 bars before and after your A and your B**. For each possible
+  start and end, it checks how alike the music sounds around the end and around the start:
+  - the notes and tone, in 24 bands from low to high;
+  - the loudness.
+  Joins that are a whole number of bars get a small bonus, because they feel natural. It also prefers to stay close to your marks.
+- It shows the **3 best joins**, each with a score ("97%"), the bars ("Bar 6 → 13") and the length. Press ▶ on one to
+  hear the moment the end jumps back to the start, then **Use it**. Your A and B marks move to that join, and the Loop tab opens.
+- Each join is then fine-tuned to the exact sample so the waveforms line up, with no click.
+- *Before (version 1–2):* Smart loop only moved B by at most 0.25 s.
+
+### Sound + Fades for every track
+- **Speed / Pitch:** Tonix makes a studio-quality copy of the track at that speed and pitch in the background (you see
+  "Making the new sound…" for a moment). The live player then plays that copy. Natural voice works as in the Library.
+  When the song itself is faster or slower, the added tracks move with it, like with Slowed.
+- **Volume and fades** change at once while it plays.
+- **Fade curves** use exactly the same maths live and in the saved file: Straight = straight line, Smooth = half a wave,
+  Slow start = squared. They were checked against ffmpeg's own fades.
+- **Save** writes everything: speed, pitch, volume, fades, effects and tracks.
+
+### Checked
+- **Unit tests:** 75 pass. New: Smart loop v2 on a made-up song with chords repeating every 4 bars finds 3 perfect
+  8 s and 16 s loops on the beat, in 0.24 s; a join into a different part scores lower.
+- **In the real app (automatic):** studio check 55 / 55 (new: small Library bar, M key mark, ruler-click mark, A/B, rename,
+  Smart loop 3 results within 4 bars, Use it, Speed +25 plays faster from a copy, fades, Mixer strips, saved file has the
+  speed (29.3 s as expected) and fades in); Edit check 14 / 14; panels check 19 / 19.
+- **Not checked:** how it sounds through speakers; a real microphone; Smart loop on many real songs (only the 3 test songs).
+
+## Version 2 — studio layout with live effects 🔄 (2026-11-24, reworked in version 3)
 You showed a screenshot of a music studio program (Ardour) and asked for the editing to look like that, and chose
 **live effects** (heard at once while playing). Concept v2 approved ("A1"), then built.
 *Before:* one big waveform, 5 tabs under it, and every effect / layer needed **Preview** then **Apply**.
@@ -122,7 +190,7 @@ You showed a screenshot of a music studio program (Ardour) and asked for the edi
 - Several can be on together. A limiter stops it from getting too loud.
 - *Before (2026-11-23):* **▶ Preview**, then **✓ Apply effects**, on the song only. Now each track has its own effects, heard live.
 
-## Part 5 — Loop ✅
+## Part 5 — Loop 🔄 (Smart loop v2 + marks, see Version 3)
 - Select the part on the waveform: start = **A**, end = **B** (green letters, with "×3").
 - **✨ Smart loop:** moves A and B a tiny bit (at most 0.25 s) to the spot where the end flows into the start without a bump. It tells you how far it moved them.
 - **Play it − 3 + times**, with **New length: 4:21 (now 3:10)**.

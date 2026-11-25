@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-24: the **Edit page is now a studio layout** (tracks, live effects with knobs, transport, inspector, snap, Loop A–B), plus a big bug hunt. Next: you try it on your PC and tell me what feels wrong.
+- 2026-11-25: **Edit page design B** is built: marks + A/B, Smart loop v2 (3 best joins), Sound + Fades for every track, Mixer, drawn icons, small Library bar. Next: you try it on your PC and tell me what feels wrong.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -18,7 +18,7 @@
 3. [Sound panel](docs/sound-panel.md): pitch (studio quality, Natural voice), speed, volume, fades.
 4. [Saving songs](docs/saving.md): the save window, Fill from name, file types.
 5. [Library](docs/library.md): Clear all music, Playlists, smart shuffle, saving a playlist, stars 1–10, information inside saved files, smart playlists (genre + stars).
-6. [Sound editor](docs/sound-editor.md): studio layout (tracks, live effects), Trim, Split, Loop, Smart connect. All built.
+6. [Sound editor](docs/sound-editor.md): studio layout design B (marks, Smart loop v2, Sound + Fades per track, live effects, Mixer), Trim, Split, Loop, Smart connect. All built.
 
 ## Top bar buttons
 | Button | Status |
@@ -29,6 +29,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-25: **Edit page design B** (you chose it from 3 designs): one top bar with drawn icons and labels, **marks** on the song (M key / click the ruler, rename, drag, A and B choose the part), **Smart loop v2** (searches every beat up to 4 bars around A and B, compares the sound, gives the 3 best joins with a score to listen to and use), **Sound** (speed, pitch, natural voice, volume with −25…+25 buttons) and **Fades** (in / out, 3 shapes, drag squares on the track) for every track, a **Mixer** tab, zoom that stays put (Follow switch), and the Library player as a small bar while editing.
 - 2026-11-24: **Edit page v2, studio layout** like Ardour: transport bar with clocks (time, bar | beat, tempo), tool bar (Select, Cut out, Keep only, Move, Snap to beat / bar), selected-track strip (effect chain, fader, meter), one row per track (song, other songs, built-in sounds, your voice) with M / S / volume / left-right, live effect knobs, Loop A–B, Rec voice. Save mixes what you hear. Fixed: auto-quiet voice cut the saved song short; Play-then-Pause race.
 - 2026-11-24: **Bug hunt** (3 checkers): server crash on bad links, stuck downloads, a second Tonix window, very long join commands, missing save folder, settings save retries, progress bar stuck, ffmpeg left running on quit, edit jobs overlapping, safer save order, % in picture names, Esc closing every window, shortcut recording, Playlists tab keys, map stopping when its song is removed, small-window layout, and more.
 - 2026-11-24: **Save many songs separately** (new "Separate songs" choice: each song in the save folder with its own name, no folder, no numbers) and **Edit many songs together** (right-click → Edit N songs together: Trim and / or Effects, each saved Keep both / New takes the name / Replace).
