@@ -2,7 +2,7 @@
 
 ## Quick facts
 - Offline music app for Windows. Built with Electron (a way to make desktop apps with web code) + ffmpeg (the sound engine).
-- Folder: `music-app\`. Name: **Tonix** (renamed from "Tune Forge" 2026-11-23). Version 1.4.0 (Edit page design B).
+- Folder: `music-app\`. Name: **Tonix** (renamed from "Tune Forge" 2026-11-23). Version 1.4.1 (Edit page design B, original Smart loop).
 - Updates: Claude installs them on the user's PC. Old installer goes to `Documents\Tonix\Old versions` (not built yet).
 
 ## How to run
@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-25: **Edit page design B** is built: marks + A/B, Smart loop v2 (3 best joins), Sound + Fades for every track, Mixer, drawn icons, small Library bar. Next: you try it on your PC and tell me what feels wrong.
+- 2026-11-25: **Edit page design B** is built: marks + A/B, Smart loop v2 (3 best joins), Sound + Fades for every track, Mixer, drawn icons, small Library bar. Then (1.4.1): original Smart loop back, cleaner mark flags, Close button. Next: you try 1.4.1.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -18,7 +18,7 @@
 3. [Sound panel](docs/sound-panel.md): pitch (studio quality, Natural voice), speed, volume, fades.
 4. [Saving songs](docs/saving.md): the save window, Fill from name, file types.
 5. [Library](docs/library.md): Clear all music, Playlists, smart shuffle, saving a playlist, stars 1–10, information inside saved files, smart playlists (genre + stars).
-6. [Sound editor](docs/sound-editor.md): studio layout design B (marks, Smart loop v2, Sound + Fades per track, live effects, Mixer), Trim, Split, Loop, Smart connect. All built.
+6. [Sound editor](docs/sound-editor.md): studio layout design B (marks, Smart loop, Sound + Fades per track, live effects, Mixer, Close), Trim, Split, Loop, Smart connect. All built.
 
 ## Top bar buttons
 | Button | Status |
@@ -29,6 +29,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-25: after you tried 1.4.0: **Smart loop back to the original** (v2 removed), **mark flags redrawn** (thin line, pin, dark label, A / B badges), new **Close** button on the Edit page (asks first if not saved).
 - 2026-11-25: **Edit page design B** (you chose it from 3 designs): one top bar with drawn icons and labels, **marks** on the song (M key / click the ruler, rename, drag, A and B choose the part), **Smart loop v2** (searches every beat up to 4 bars around A and B, compares the sound, gives the 3 best joins with a score to listen to and use), **Sound** (speed, pitch, natural voice, volume with −25…+25 buttons) and **Fades** (in / out, 3 shapes, drag squares on the track) for every track, a **Mixer** tab, zoom that stays put (Follow switch), and the Library player as a small bar while editing.
 - 2026-11-24: **Edit page v2, studio layout** like Ardour: transport bar with clocks (time, bar | beat, tempo), tool bar (Select, Cut out, Keep only, Move, Snap to beat / bar), selected-track strip (effect chain, fader, meter), one row per track (song, other songs, built-in sounds, your voice) with M / S / volume / left-right, live effect knobs, Loop A–B, Rec voice. Save mixes what you hear. Fixed: auto-quiet voice cut the saved song short; Play-then-Pause race.
 - 2026-11-24: **Bug hunt** (3 checkers): server crash on bad links, stuck downloads, a second Tonix window, very long join commands, missing save folder, settings save retries, progress bar stuck, ffmpeg left running on quit, edit jobs overlapping, safer save order, % in picture names, Esc closing every window, shortcut recording, Playlists tab keys, map stopping when its song is removed, small-window layout, and more.

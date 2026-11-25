@@ -60,12 +60,9 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   await tab('Loop');
   ok('Loop asks for a part first (marks A and B, or a drag)', /two of your marks/.test(await w.textContent('.dw-panel')));
   await ev(() => { TFEdit.api.sel = { a: 2, b: 4.02 }; TFEdit.api.render(); });
-  await w.click('.dw-panel .tb:has-text("Smart loop")'); await w.waitForFunction(() => TFEdit.api.loops, null, { timeout: 60000 });
-  const found = await ev(() => TFEdit.api.loops);
-  ok('Smart loop finds the 3 best joins near A and B (on the beat, within 4 bars)', found.length >= 1 && found.every((L) => L.b > L.a && Math.abs(L.a - 2) < 9 && Math.abs(L.b - 4.02) < 9), JSON.stringify(found));
-  await w.click('.dw-resb .dw-b:has-text("Use it")'); await wait(300);
+  await w.click('.dw-panel .tb:has-text("Smart loop")'); await wait(1500);
   const sel = await ev(() => TFEdit.api.sel);
-  ok('Use it: the loop part is the best join', Math.abs(sel.a - found[0].a) < 0.001 && Math.abs(sel.b - found[0].b) < 0.001 && /Apply loop/.test(await w.textContent('.dw-panel')), JSON.stringify(sel));
+  ok('Smart loop moves A / B a tiny bit', Math.abs(sel.a - 2) < 0.01 && Math.abs(sel.b - 4.02) < 0.26, JSON.stringify(sel));
   await w.click('.dw-panel .tb:has-text("+")'); await wait(150);
   const newLenText = await w.textContent('.dw-panel .ed-note.ok');
   await w.screenshot({ path: SP + '/concepts/tab-loop.png' });

@@ -43,7 +43,20 @@ bottom was confusing, Speed / Pitch / Volume / Fade in / Fade out were missing, 
 - When you **cut**, **keep** or **trim**, the marks move with the music. Marks inside a removed part go away.
   *Not done yet:* Undo does not bring removed marks back.
 
-### Smart loop v2
+### Changes after you tried 1.4.0 (2026-11-25)
+- ❌ **Smart loop v2 removed** (you: "so terrible… revert it back to the original"). Smart loop is the original again:
+  it moves **A and B a tiny bit** (B at most 0.25 s) so the end flows into the start without a bump, and tells you how far.
+  When A and B come from your marks, the marks move with it. The text below about v2 is kept as history.
+- 🔄 **Mark flags redrawn** (you: the flags looked terrible). *Before:* solid coloured blocks with dark text that covered
+  each other. *Now:* a thin line with a small pin, the name in the mark's colour on a dark rounded label (shortened with "…"
+  when the next mark is close), **A** / **B** as a small green round badge, a soft green band between A and B, and a faint
+  dotted line down through the tracks.
+- ✅ **Close** button (top bar, next to Open): closes the song so the Edit page is empty. If something is not saved it asks
+  first ("Close without saving" / Cancel). The song stays in your library and the file is not touched.
+- Checked: studio check 61 / 61 (new: original Smart loop moves A / B only a tiny bit and the A mark follows; Close asks
+  first, Cancel keeps it, Close empties the page), panels 19 / 19, Edit 14 / 14, unit tests 75.
+
+### Smart loop v2 ❌ (removed 2026-11-25, see above)
 - Press **Smart loop** (left column, or in the Loop tab) after choosing A and B.
 - **What it does:** Tonix looks at **every beat up to 4 bars before and after your A and your B**. For each possible
   start and end, it checks how alike the music sounds around the end and around the start:

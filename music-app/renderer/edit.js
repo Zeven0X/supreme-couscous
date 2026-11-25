@@ -10,7 +10,6 @@ window.TFEdit = (() => {
   const E = {
     s: null, sel: null, zoom: 1, scroll: 0, busy: false, mode: 'both', panel: 'sound', tool: 'select', snap: 'off',
     marks: [], markA: null, markB: null, // your marks on the song; A and B = the part to loop
-    loops: null, loopPick: 0, // Smart loop: the best joins found
     markHist: {}, // the marks at each version, so Undo / Redo bring them back
     follow: false, // when zoomed in, the view follows the playhead (off: it stays where you put it)
     loopOn: false, beats: null, tracks: [], selTrack: 'song', preview: null, stopAt: null, playFrom: 0, rec: null,
@@ -50,7 +49,7 @@ window.TFEdit = (() => {
     stopAll();
     if (E.s) { tf.editClose(E.s.id).catch(() => {}); E.s = null; }
     for (const k of Object.keys(variantTimers)) { clearTimeout(variantTimers[k]); delete variantTimers[k]; }
-    Object.assign(E, { sel: null, zoom: 1, scroll: 0, beats: null, tracks: [], selTrack: 'song', loopOn: false, preview: null, bakes: {}, marks: [], markA: null, markB: null, loops: null, markHist: {} });
+    Object.assign(E, { sel: null, zoom: 1, scroll: 0, beats: null, tracks: [], selTrack: 'song', loopOn: false, preview: null, bakes: {}, marks: [], markA: null, markB: null, markHist: {} });
     TFEditTabs.reset();
     render();
     busy(`Opening "${t.title}"…`);
@@ -65,7 +64,6 @@ window.TFEdit = (() => {
     const at = E.s && E.s.id === st.id ? TFDaw.time() : 0; // another song starts at the beginning
     stopAll();
     E.preview = null;
-    if (!E.s || E.s.id !== st.id || E.s.version !== st.version) E.loops = null; // Smart loop results belong to the old sound
     E.s = { ...st, trackId: st.trackId || keep };
     const b = E.bakes[st.version];
     let restored = false;
@@ -84,6 +82,24 @@ window.TFEdit = (() => {
     E.beats = null;
     tf.editBpm(E.s.id).then((b) => { if (E.s && E.s.id === st.id) { E.beats = b; drawAll(); drawBar(); } }).catch(() => {});
     TFDaw.load(st.url).catch(() => {}); // get the song ready to play
+    render();
+  }
+  // close the song: the Edit page becomes empty (the song stays in your library, the file is not touched)
+  async function closeSong() {
+    if (!E.s || E.busy) return;
+    const t = track();
+    if (unsaved()) {
+      const ok = await confirmModal('Close this song?', `"${t ? t.title : 'This song'}" has changes that are not saved. They will be lost.`, 'Close without saving');
+      if (!ok) return;
+    }
+    stopRec(); stopAll();
+    for (const k of Object.keys(variantTimers)) { clearTimeout(variantTimers[k]); delete variantTimers[k]; }
+    for (const x of E.tracks) { if (x.url) TFDaw.forget(x.url); if (x.playUrl) TFDaw.forget(x.playUrl); }
+    TFDaw.setTracks([]);
+    tf.editClose(E.s.id).catch(() => {});
+    E.s = null;
+    Object.assign(E, { sel: null, zoom: 1, scroll: 0, beats: null, tracks: [], selTrack: 'song', loopOn: false, preview: null, bakes: {}, marks: [], markA: null, markB: null, markHist: {} });
+    TFEditTabs.reset();
     render();
   }
   function pick() {
@@ -264,7 +280,7 @@ window.TFEdit = (() => {
   function syncAB(tell) {
     const a = markById(E.markA), b = markById(E.markB);
     if (a && b) {
-      if (a.t < b.t - 0.05) { E.sel = { a: a.t, b: b.t }; E.loops = null; } else if (tell) toast('A must be before B: choose an earlier mark for A.');
+      if (a.t < b.t - 0.05) { E.sel = { a: a.t, b: b.t }; } else if (tell) toast('A must be before B: choose an earlier mark for A.');
     }
     renderBrowser(); TFEditTabs.refresh(E.panel); drawAll(); drawBar();
   }
@@ -285,37 +301,21 @@ window.TFEdit = (() => {
     if (!markById(E.markA)) E.markA = null;
     if (!markById(E.markB)) E.markB = null;
   }
-  // ---------- Smart loop: the best joins near A and B (whole song area, on the beat) ----------
+  // ---------- Smart loop (the original): A and B move a tiny bit so the end flows into the start ----------
   async function smartLoop() {
     if (!E.s) return;
     if (!E.sel) { toast('Choose the part first: press A and B on two marks (or drag across the song).'); return; }
-    const sid = E.s.id, { a, b } = E.sel;
-    busy('Searching for the best joins…');
-    const r = await guard(() => tf.editSmartLoop2(sid, a, b, { bars: 4 }), 'Smart loop: ');
-    busy(null);
+    const sid = E.s.id, sel = E.sel;
+    const r = await guard(() => tf.editSmartLoop(sid, sel.a, sel.b), 'Smart loop: ');
     if (!r || !E.s || E.s.id !== sid) return;
-    E.loops = r; E.loopPick = 0;
-    renderBrowser(); drawAll();
+    const da = r.a - sel.a, db = r.b - sel.b;
+    E.sel = { a: r.a, b: r.b };
+    const A = markById(E.markA), B = markById(E.markB); // the A and B marks move with it
+    if (A && B) { A.t = r.a; B.t = r.b; }
+    const moved = (n, x) => (Math.abs(x) < 0.0005 ? `${n} stays put` : `${n} moved ${x > 0 ? '+' : '−'}${Math.abs(x).toFixed(3)} s`);
+    toast(`${moved('A', da)}, ${moved('B', db)}, so the end joins the start smoothly.`, { type: 'ok', ms: 5000 });
+    renderBrowser(); TFEditTabs.refresh(E.panel); drawAll(); drawBar();
   }
-  function listenLoop(i) {
-    const L = E.loops && E.loops[i]; if (!L) return;
-    E.loopPick = i; renderBrowser();
-    preview({ type: 'loop', a: L.a, b: L.b, times: 2 }, { from: Math.max(0, L.b - 3), label: `Join ${i + 1} (${L.score}% smooth): the end jumps back to the start` });
-  }
-  function useLoop() {
-    const L = E.loops && E.loops[E.loopPick]; if (!L) return;
-    if (E.preview) stopPreview();
-    const A = markById(E.markA) || addMark(L.a, 'Loop start'), B = markById(E.markB) || addMark(L.b, 'Loop end');
-    A.t = L.a; B.t = L.b; E.markA = A.id; E.markB = B.id;
-    E.marks.sort((x, y) => x.t - y.t);
-    E.sel = { a: L.a, b: L.b };
-    E.loops = null;
-    toast(`Loop set: ${fmt(L.a)} – ${fmt(L.b)} (${L.score}% smooth). Choose how many times below, then Apply.`, { type: 'ok', ms: 5000 });
-    E.panel = 'loop';
-    render();
-  }
-  const barNo = (t) => Math.floor((t - firstBeat()) / (beatLen() * 4) + 1e-6) + 1;
-  const barText = (t) => (beatLen() ? `Bar ${Math.floor((t - firstBeat()) / (beatLen() * 4) + 1e-6) + 1}` : fmt(t));
   function layerChanged(L, rerender = true) { TFDaw.apply(L); if (TFDaw.playing && !TFDaw.previewing) TFDaw.play(TFDaw.time()).catch(() => {}); if (rerender) render(); else drawAll(); }
   function removeLayer(L) { clearTimeout(variantTimers[L.id]); delete variantTimers[L.id]; if (L.playUrl) TFDaw.forget(L.playUrl); E.tracks = E.tracks.filter((t) => t !== L); if (E.selTrack === L.id) E.selTrack = 'song'; TFDaw.setTracks(E.tracks); if (TFDaw.playing && !TFDaw.previewing) TFDaw.play(TFDaw.time()).catch(() => {}); render(); }
 
@@ -495,17 +495,27 @@ window.TFEdit = (() => {
     const mk = (t, txt, col) => { const x = xAt(t) * dpr; g.fillStyle = col; g.beginPath(); g.arc(x, 41 * dpr, 7 * dpr, 0, 7); g.fill(); g.fillStyle = '#0b0d11'; g.font = `bold ${9.5 * dpr}px system-ui`; g.fillText(txt, x - 3 * dpr, 44.5 * dpr); };
     const fromMarks = markById(E.markA) && markById(E.markB);
     if (E.sel) { g.fillStyle = E.loopOn ? 'rgba(63,224,160,.35)' : 'rgba(255,138,61,.28)'; g.fillRect(xAt(E.sel.a) * dpr, 32 * dpr, (xAt(E.sel.b) - xAt(E.sel.a)) * dpr, 3 * dpr); }
-    g.font = `bold ${10.5 * dpr}px system-ui, sans-serif`;
-    for (const m of E.marks) {
-      const x = xAt(m.t) * dpr;
-      if (x < -200 * dpr || x > W) continue;
-      const ab = E.markA === m.id ? 'A · ' : E.markB === m.id ? 'B · ' : '';
-      const label = `${ab}${m.name}`, w = g.measureText(label).width + 12 * dpr;
+    // your marks: a thin line with a small pin, the name in its colour on a dark label (shortened when marks are close)
+    if (fromMarks) { const a = xAt(markById(E.markA).t) * dpr, b = xAt(markById(E.markB).t) * dpr; g.fillStyle = 'rgba(63,224,160,.10)'; g.fillRect(a, 33 * dpr, b - a, H - 33 * dpr); }
+    g.font = `600 ${10.5 * dpr}px system-ui, sans-serif`;
+    const shown = E.marks.map((m) => ({ m, x: xAt(m.t) * dpr })).filter((k) => k.x > -300 * dpr && k.x < W + 2 * dpr).sort((p, q) => p.x - q.x);
+    shown.forEach(({ m, x }, i) => {
+      const ab = E.markA === m.id ? 'A' : E.markB === m.id ? 'B' : '';
       const col = ab ? '#3fe0a0' : m.color;
-      g.fillStyle = col; g.fillRect(x, 33 * dpr, 2 * dpr, H - 33 * dpr);
-      roundRect(g, x, 34 * dpr, w, 15 * dpr, [3 * dpr, 3 * dpr, 3 * dpr, 0]); g.fill();
-      g.fillStyle = '#0b0d11'; g.fillText(label, x + 6 * dpr, 45.5 * dpr);
-    }
+      g.fillStyle = col; g.fillRect(x - 0.5 * dpr, 34 * dpr, 1.5 * dpr, H - 34 * dpr); // the line
+      g.beginPath(); g.moveTo(x - 4 * dpr, 34 * dpr); g.lineTo(x + 4 * dpr, 34 * dpr); g.lineTo(x, 39 * dpr); g.closePath(); g.fill(); // the pin
+      const room = (i + 1 < shown.length ? shown[i + 1].x : W) - x - 8 * dpr; // up to the next mark
+      const badge = ab ? 13 * dpr : 0;
+      let text = m.name;
+      const max = room - badge - 14 * dpr;
+      if (g.measureText(text).width > max) { while (text.length > 1 && g.measureText(`${text}…`).width > max) text = text.slice(0, -1); text = max > 12 * dpr ? `${text}…` : ''; }
+      if (!text && !ab) return;
+      const w = (text ? g.measureText(text).width + 12 * dpr : 6 * dpr) + badge, lx = x + 4 * dpr, ly = 34.5 * dpr, lh = 14 * dpr;
+      g.fillStyle = 'rgba(11,13,17,.9)'; roundRect(g, lx, ly, w, lh, 4 * dpr); g.fill();
+      g.strokeStyle = col; g.lineWidth = dpr; roundRect(g, lx + 0.5 * dpr, ly + 0.5 * dpr, w - dpr, lh - dpr, 4 * dpr); g.stroke();
+      if (ab) { g.fillStyle = '#3fe0a0'; g.beginPath(); g.arc(lx + 8.5 * dpr, ly + lh / 2, 5.5 * dpr, 0, 7); g.fill(); g.fillStyle = '#06120d'; g.font = `800 ${8.5 * dpr}px system-ui, sans-serif`; g.textAlign = 'center'; g.fillText(ab, lx + 8.5 * dpr, ly + lh / 2 + 3 * dpr); g.textAlign = 'left'; g.font = `600 ${10.5 * dpr}px system-ui, sans-serif`; }
+      if (text) { g.fillStyle = col; g.fillText(text, lx + 6 * dpr + badge, ly + 10.5 * dpr); }
+    });
     if (E.sel && !fromMarks) { mk(E.sel.a, 'A', E.loopOn ? '#3fe0a0' : '#ffb27a'); mk(E.sel.b, 'B', E.loopOn ? '#3fe0a0' : '#ffb27a'); }
     TFEditTabs.markers({ mk, tab: E.panel });
     const px = xAt(songTime()) * dpr; g.fillStyle = '#ff5d6c'; g.fillRect(px, 0, 1.5 * dpr, H);
@@ -570,9 +580,10 @@ window.TFEdit = (() => {
       if (t.id === E.selTrack && !E.preview) for (const at of [f.fiAt, f.foAt]) { const x = xAt(at) * dpr; g.fillStyle = '#fff'; g.fillRect(x - 4.5 * dpr, y0 + 1 * dpr, 9 * dpr, 9 * dpr); g.strokeStyle = 'rgba(0,0,0,.5)'; g.strokeRect(x - 4.5 * dpr, y0 + 1 * dpr, 9 * dpr, 9 * dpr); }
       if (t.kind === 'song' && !E.preview) TFEditTabs.overlay(g, { dpr, Wd: W, Hd: top + h, ruler: top, xAt, view: v, duration: dur(), tab: E.panel });
     });
+    g.setLineDash([2 * dpr, 4 * dpr]); g.lineWidth = dpr;
+    for (const m of E.marks) { const x = xAt(m.t) * dpr; if (x < 0 || x > W) continue; g.strokeStyle = `${E.markA === m.id || E.markB === m.id ? '#3fe0a0' : m.color}66`; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+    g.setLineDash([]);
     if (E.sel) { g.fillStyle = E.loopOn ? '#3fe0a0' : '#ff8a3d'; for (const tt of [E.sel.a, E.sel.b]) g.fillRect(xAt(tt) * dpr - dpr / 2, 0, 1.5 * dpr, H); }
-    const L = E.loops && E.loops[E.loopPick];
-    if (L) { g.setLineDash([5 * dpr, 4 * dpr]); g.strokeStyle = '#3fe0a0'; g.lineWidth = 2 * dpr; for (const tt of [L.a, L.b]) { g.beginPath(); g.moveTo(xAt(tt) * dpr, 0); g.lineTo(xAt(tt) * dpr, H); g.stroke(); } g.setLineDash([]); }
     const px = xAt(songTime()) * dpr; g.fillStyle = '#ff5d6c'; g.fillRect(px - dpr / 2, 0, 1.5 * dpr, H);
   }
   function roundRect(g, x, y, w, h, r) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, Math.max(0, w), Math.max(0, h), r); else g.rect(x, y, Math.max(0, w), Math.max(0, h)); }
@@ -635,7 +646,7 @@ window.TFEdit = (() => {
       const { x, y } = pos(e, ruler);
       e.preventDefault();
       if (y >= 31) { // the marks row: drag a mark, or click to put a new one
-        const m = [...E.marks].reverse().find((k) => Math.abs(xAt(k.t) - x) < 8 || (x >= xAt(k.t) && x <= xAt(k.t) + 60 && y >= 33));
+        const m = [...E.marks].reverse().find((k) => Math.abs(xAt(k.t) - x) < 7 || (x >= xAt(k.t) && x <= xAt(k.t) + 70 && y >= 36));
         down = m ? { mark: m, x, moved: false } : { newMark: true, x };
         return;
       }
@@ -659,7 +670,7 @@ window.TFEdit = (() => {
       if (down.own) { down.own.move(t); drawAll(); return; }
       if (down.layer) { down.layer.offset = +Math.max(0, snap(down.off0 + (e.clientX - down.x0) / view().pps)).toFixed(3); drawLanes(); return; }
       if (down.edge) { E.sel[down.edge] = snap(t); if (E.sel.a > E.sel.b) { [E.sel.a, E.sel.b] = [E.sel.b, E.sel.a]; down.edge = down.edge === 'a' ? 'b' : 'a'; } E.markA = E.markB = null; }
-      else if (Math.abs(x - down.x) > 3) { down.moved = true; const s2 = snap(t); E.sel = { a: Math.min(down.start, s2), b: Math.max(down.start, s2) }; E.markA = E.markB = null; E.loops = null; }
+      else if (Math.abs(x - down.x) > 3) { down.moved = true; const s2 = snap(t); E.sel = { a: Math.min(down.start, s2), b: Math.max(down.start, s2) }; E.markA = E.markB = null; }
       drawAll(); drawBar();
     }, { signal });
     window.addEventListener('mouseup', () => {
@@ -734,7 +745,7 @@ window.TFEdit = (() => {
       ib('undo', undo, { disabled: !E.s.canUndo, title: 'Undo (Ctrl+Z)' }), ib('redo', redo, { disabled: !E.s.canRedo, title: 'Redo (Ctrl+Y)' }),
       ib('zout', () => zoomTo(E.zoom / 1.5), { title: 'Zoom out' }), h('span', { class: 'dw-zoom mono', id: 'dw-zoom' }), ib('zin', () => zoomTo(E.zoom * 1.5), { title: 'Zoom in (Ctrl + mouse wheel too)' }),
       ib('follow', () => { E.follow = !E.follow; render(); }, { cls: E.follow ? 'on2' : '', title: E.follow ? 'Follow is on: the view moves with the playhead (click to stop)' : 'Follow is off: the view stays where you put it (click to follow the playhead)' }),
-      ib('folder', pick, { title: 'Edit another song' }), mode,
+      ib('folder', pick, { title: 'Edit another song' }), ib('x', closeSong, { label: 'Close', id: 'dw-close', title: 'Close this song: the Edit page becomes empty (your file is not touched)' }), mode,
       ib('save', save, { label: 'Save', cls: 'on', title: 'Save the edited song (with everything you hear) next to the original file' }));
     const lanesH = E.tracks.reduce((s, x) => s + (x.kind === 'song' ? SONG_H : LAYER_H), 0);
     const arr = h('div', { class: 'dw-arr' },
@@ -789,16 +800,7 @@ window.TFEdit = (() => {
         h('button', { class: 'dw-x', title: 'Remove this mark', onclick: () => removeMark(m) }, TFIcon('x'))));
     }
     box.append(h('div', { class: 'dw-selrow' }, h('span', { class: 'dw-hint' }, 'Part: '), h('b', { id: 'dw-selt', class: 'mono' })));
-    box.append(h('button', { class: 'dw-b t dw-smart', id: 'dw-smart', disabled: !E.sel, onclick: smartLoop, title: 'Find the smoothest joins near A and B (up to 4 bars away), on the beat' }, TFIcon('spark'), h('span', {}, 'Smart loop')));
-    if (E.loops) {
-      box.append(h('div', { class: 'dw-res' },
-        h('div', { class: 'dw-resh' }, `${E.loops.length} best joins (within 4 bars)`),
-        ...E.loops.map((L, i) => h('div', { class: `dw-rr${i === E.loopPick ? ' on' : ''}`, title: `${fmt(L.a)} – ${fmt(L.b)}`, onclick: () => { E.loopPick = i; renderBrowser(); drawAll(); } },
-          h('b', {}, `${L.score}%`), h('span', {}, beatLen() ? `Bar ${barNo(L.a)} → ${barNo(L.b)}` : `${fmt(L.a)} → ${fmt(L.b)}`), h('small', {}, `${(L.b - L.a).toFixed(1)} s`),
-          h('button', { class: 'dw-rplay', title: 'Listen to this join', onclick: (e) => { e.stopPropagation(); listenLoop(i); } }, TFIcon('play')))),
-        h('div', { class: 'dw-resb' }, h('button', { class: 'dw-b', onclick: () => listenLoop(E.loopPick) }, TFIcon('headphones'), h('span', {}, 'Listen')),
-          h('button', { class: 'dw-b on', onclick: useLoop }, TFIcon('check'), h('span', {}, 'Use it')))));
-    }
+    box.append(h('button', { class: 'dw-b t dw-smart', id: 'dw-smart', disabled: !E.sel, onclick: smartLoop, title: 'Move A and B a tiny bit so the end flows into the start without a bump' }, TFIcon('spark'), h('span', {}, 'Smart loop')));
     box.append(h('div', { class: 'dw-bh' }, TFIcon('plus'), 'ADD A TRACK'),
       h('div', { class: 'dw-add' },
         ib('music', () => TFEditTabs.pickSong('Add a song on a new track', (x) => addLayer({ kind: 'track', id: x.id })), { label: 'Song track', title: 'Another song from your library on top' }),
@@ -967,7 +969,7 @@ window.TFEdit = (() => {
     get previewing() { return !!E.preview; }, player, fmt, track,
     draw: () => { drawAll(); drawBar(); }, render, change, preview, stopPreview, busy, timeAt: (x) => timeAt(x),
     seek, xAt: (t) => xAt(t), view: () => view(), playRange, get tracks() { return E.tracks; }, get panel() { return E.panel; },
-    smartLoop, get marks() { return E.marks; }, addMark, setAB, get loops() { return E.loops; }, useLoop, selectTrack,
+    smartLoop, get marks() { return E.marks; }, addMark, setAB, selectTrack,
   };
-  return { open, render, pick, stop, api, get session() { return E.s; } };
+  return { open, render, pick, stop, api, closeSong, get session() { return E.s; } };
 })();

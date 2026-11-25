@@ -143,36 +143,7 @@ test('the whole Edit page as one mix: song effects + volume / pan / mute / solo,
   assert.ok(T.effectChain({ echo: 40 }).includes('aecho=0.8:0.9:290:0.38'));
 });
 
-test('Smart loop v2: finds beat-perfect joins near the marks (chords repeat every 4 bars)', async () => {
-  // 120 BPM kick + 4 chords, one per bar, repeating every 8 s; then a different part after 32 s
-  const f = path.join(tmp, 'loopsong.wav');
-  const chord = "220*(1+0.25*eq(floor(mod(t,8)/2),1)+0.5*eq(floor(mod(t,8)/2),2)+0.3333*eq(floor(mod(t,8)/2),3))";
-  await ff.run(['-y', '-f', 'lavfi', '-i', `aevalsrc='0.6*sin(2*PI*60*t)*exp(-30*mod(t,0.5))+0.3*sin(2*PI*(${chord})*t)*lt(t,32)+0.3*sin(2*PI*700*t)*gte(t,32)':s=22050:d=40`, f]);
-  const x = await T.decodeMono(ff, f, 22050, 0, 40);
-  const grid = { bpm: 120, first: 0 };
-  const res = T.findLoops(x, 22050, 0, 10.3, 17.6, grid);
-  assert.strictEqual(res.length, 3, JSON.stringify(res));
-  const L = res[0].b - res[0].a;
-  assert.ok(Math.abs(L - 8) < 0.04 || Math.abs(L - 16) < 0.04, `best loop ${L.toFixed(3)} s (should be 8 or 16 = whole chord cycles) ${JSON.stringify(res)}`);
-  assert.ok(Math.abs(res[0].a - 10.3) < 8.1 && Math.abs(res[0].b - 17.6) < 8.1, 'stays within 4 bars of the marks');
-  assert.ok(Math.abs(res[0].a * 2 - Math.round(res[0].a * 2)) < 0.03, `A on a beat: ${res[0].a}`);
-  assert.ok(res[0].score >= 85 && res[0].score >= res[2].score, `scores ${res.map((r) => r.score)}`);
-  // a join into the different part sounds wrong: it scores lower than the best
-  const bad = T.findLoops(x, 22050, 0, 26, 36, grid, { bars: 0 })[0];
-  assert.ok(!bad || bad.score < res[0].score - 10, `bad join ${bad && bad.score} vs best ${res[0].score}`);
-});
-
-test('Smart loop v2: two small windows give the same answer; a mark at 0:00 can stay there (found in review)', async () => {
-  const f = path.join(tmp, 'loopsong.wav'); // made by the test above
-  const grid = { bpm: 120, first: 0 };
-  const full = await T.decodeMono(ff, f, 22050, 0, 40);
-  const one = T.findLoops(full, 22050, 0, 2.2, 26.3, grid);
-  const wa = { x: await T.decodeMono(ff, f, 22050, 0, 12.2), t0: 0 }, wb = { x: await T.decodeMono(ff, f, 22050, 16.3, 20), t0: 16.3 };
-  const two = T.findLoopsIn(wa, wb, 22050, 2.2, 26.3, grid, { songDur: 40 });
-  const L = two[0].b - two[0].a;
-  assert.ok(Math.abs(L % 8) < 0.04 || Math.abs((L % 8) - 8) < 0.04, `two windows: ${L.toFixed(3)} s ${JSON.stringify(two)}`);
-  assert.ok(Math.abs(one[0].b - one[0].a - L) < 0.05, `same length as one window: ${JSON.stringify(one)}`);
-  const start = T.findLoops(full, 22050, 0, 0, 8, grid, { songDur: 40 });
-  assert.ok(start.some((r) => r.a < 0.01), `a join can start at 0:00 ${JSON.stringify(start)}`);
-  assert.ok(T.trackTempo(400, 1.5) === 4 && T.trackTempo(25, 0.75) === 0.25, 'speed x match beat stays in range');
+test('speed x match beat stays in range (found in review)', () => {
+  assert.ok(T.trackTempo(400, 1.5) === 4 && T.trackTempo(25, 0.75) === 0.25);
+  assert.strictEqual(T.trackTempo(120, 1), 1.2);
 });

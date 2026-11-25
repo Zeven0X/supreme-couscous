@@ -1,7 +1,7 @@
 {
   "name": "tonix",
   "productName": "Tonix",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Tonix: offline music app with song maps, sound effects, covers and MP3 export.",
   "main": "main.js",
   "private": true,

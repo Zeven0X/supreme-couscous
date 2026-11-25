@@ -1,5 +1,5 @@
 // Edit page (studio layout, design B) check: open, select, cut / undo / redo, live effects, tracks (sound, song, voice),
-// mute / solo, move, marks + Smart loop v2, Sound + Fades per track, Mixer, the small Library bar, the bottom panels,
+// mute / solo, move, marks + Smart loop, Close, Sound + Fades per track, Mixer, the small Library bar, the bottom panels,
 // and Save (the saved file has the speed, fades, effects and tracks you heard).
 const { _electron } = require('playwright'); const fs = require('fs'), path = require('path');
 const SP = process.env.SP; const DATA = SP + '/userdata-daw'; fs.rmSync(DATA, { recursive: true, force: true });
@@ -159,7 +159,7 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   const vBefore = await ev(() => TFEdit.session.version);
   await ev(() => TFEdit.open(TFEdit.session.trackId)); await wait(400);
   ok('opening the same song again keeps your changes', (await ev(() => TFEdit.session.version)) === vBefore && vBefore > 0);
-  // ---- marks (M key, click on the ruler), A / B, Smart loop v2
+  // ---- marks (M key, click on the ruler), A / B, Smart loop (the original)
   await ev(() => TFEdit.api.seek(6)); await w.click('#dw-lanes', { position: { x: 5, y: 5 } }).catch(() => {});
   await ev(() => { TFEdit.api.seek(6); document.activeElement && document.activeElement.blur(); });
   await w.keyboard.press('KeyM'); await wait(150);
@@ -173,15 +173,12 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   ok('A and B on two marks choose the part', selM && Math.abs(selM.a - 6) < 0.05 && Math.abs(selM.b - 18) < 0.15, JSON.stringify(selM));
   await w.locator('.dw-mk').nth(0).locator('.dw-mname').fill('Verse'); await w.locator('.dw-mk').nth(0).locator('.dw-mname').press('Enter');
   ok('a mark can be renamed', await ev(() => TFEdit.api.marks[0].name === 'Verse'));
-  await w.click('#dw-smart'); await w.waitForFunction(() => TFEdit.api.loops, null, { timeout: 60000 });
-  const loops = await ev(() => TFEdit.api.loops);
-  const beat = await ev(() => 60 / (TFDaw && document.getElementById('dw-bpm') ? +document.getElementById('dw-bpm').textContent || 120 : 120));
-  ok('Smart loop gives the 3 best joins with a score', loops.length === 3 && loops.every((L) => L.score > 0 && L.score <= 100), JSON.stringify(loops));
-  ok('…all within 4 bars of the marks', loops.every((L) => Math.abs(L.a - 6) <= 16 * beat + 0.05 && Math.abs(L.b - 18) <= 16 * beat + 0.05), `beat ${beat.toFixed(3)} s`);
+  const before = await ev(() => TFEdit.api.sel);
+  await w.click('#dw-smart'); await w.waitForFunction(() => [...document.querySelectorAll('.toast')].some((t) => /joins the start smoothly/.test(t.textContent)), null, { timeout: 60000 });
+  const after = await ev(() => ({ sel: TFEdit.api.sel, a: TFEdit.api.marks.find((m) => m.name === 'Verse').t }));
+  ok('Smart loop (the original): A and B move only a tiny bit', Math.abs(after.sel.a - before.a) < 0.01 && Math.abs(after.sel.b - before.b) <= 0.26, `${JSON.stringify(before)} → ${JSON.stringify(after.sel)}`);
+  ok('…and the A mark moves with it', Math.abs(after.a - after.sel.a) < 0.001);
   await w.screenshot({ path: SP + '/concepts/daw-5-smartloop.png' });
-  await w.locator('.dw-rr').nth(1).click(); await w.click('.dw-resb .dw-b:has-text("Use it")'); await wait(200);
-  const used = await ev(() => ({ sel: TFEdit.api.sel, a: TFEdit.api.marks.find((m) => m.name === 'Verse').t }));
-  ok('Use it: the part and the A mark move to the join', Math.abs(used.sel.a - loops[1].a) < 0.001 && Math.abs(used.a - loops[1].a) < 0.001 && Math.abs(used.sel.b - loops[1].b) < 0.001, JSON.stringify(used));
   // ---- Sound + Fades of the song (step buttons), Mixer
   await tab('Sound');
   await w.click('.dw-head:has-text("Rainfall")');
@@ -227,6 +224,14 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   ok('the saved song fades in (quiet start, full after 2 s)', rms(0, 0.3) < rms(3, 5) * 0.35, `${rms(0, 0.3).toFixed(3)} vs ${rms(3, 5).toFixed(3)}`);
   ok('after saving, the editor goes on with the saved song (clean)', await ev(() => TFEdit.session && S.byId.get(TFEdit.session.trackId).title === 'Rainfall New' && TFEdit.api.tracks.length === 1 && !Object.keys(TFEdit.api.tracks[0].fx).length));
   await w.screenshot({ path: SP + '/concepts/daw-4-saved.png' });
+  // ---- Close song: asks when there are changes, then the Edit page is empty
+  await ev(() => { TFEdit.api.tracks[0].volume = 90; });
+  await w.click('#dw-close'); await wait(200);
+  ok('Close asks first when something is not saved', await w.isVisible('.modal:has-text("Close this song?")'));
+  await w.click('.modal .btn:has-text("Cancel")'); await wait(150);
+  ok('…Cancel keeps the song open', await ev(() => !!TFEdit.session));
+  await w.click('#dw-close'); await w.click('.modal .btn.danger'); await wait(400);
+  ok('Close: the Edit page is empty, the song is still in the library', await ev(() => !TFEdit.session && !!document.querySelector('.ed-empty') && S.tracks.some((t) => t.title === 'Rainfall New')) && fs.existsSync(path.join(M, 'Rainfall New.mp3')));
   ok('no errors on the page', errs.length === 0, errs.slice(0, 5).join(' | '));
   console.log(`\n${pass} passed, ${fail} failed`);
   await a.close(); process.exit(fail ? 1 : 0);

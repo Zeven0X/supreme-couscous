@@ -124,7 +124,7 @@ window.TFEditTabs = (() => {
     const newLen = dur() + len(sel) * (P.times - 1);
     return h('div', {},
       row(h('b', {}, 'Loop'), note(`A = ${timeText(sel.a)} · B = ${timeText(sel.b)} · the part is ${len(sel).toFixed(2)} s`)),
-      row(btn('✨ Smart loop', () => A().smartLoop(), { cls: 'tb pri', title: 'Search near A and B (up to 4 bars) for the 3 smoothest joins on the beat; they appear on the left' }),
+      row(btn('✨ Smart loop', () => A().smartLoop(), { cls: 'tb pri', title: 'Move A and B a tiny bit so the end flows into the start without a bump' }),
         h('span', { class: 'ed-l' }, 'Play it'),
         btn('−', () => { P.times = Math.max(2, P.times - 1); A().render(); }),
         num(P.times, (v) => { P.times = v; A().render(); }, { min: 2, max: 100, w: 46 }),

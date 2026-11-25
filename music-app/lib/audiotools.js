@@ -83,122 +83,6 @@ function smartLoop(x, rate, A, B, { search = 0.25, win = 0.04 } = {}) {
   return { a: ia / rate, b: best / rate, score: +bestScore.toFixed(3) };
 }
 
-// ---------- Smart loop v2: the best joins near A and B, on the beat ----------
-// A small FFT (radix 2), for the sound "fingerprint" of short moments.
-function fft(re, im) {
-  const n = re.length;
-  for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
-  for (let len = 2; len <= n; len <<= 1) {
-    const ang = (-2 * Math.PI) / len, wr = Math.cos(ang), wi = Math.sin(ang);
-    for (let i = 0; i < n; i += len) {
-      let cr = 1, ci = 0;
-      for (let k = 0; k < len / 2; k++) {
-        const ar = re[i + k], ai = im[i + k], br = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci, bi = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
-        re[i + k] = ar + br; im[i + k] = ai + bi; re[i + k + len / 2] = ar - br; im[i + k + len / 2] = ai - bi;
-        const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
-      }
-    }
-  }
-}
-// Every short moment (23 ms) as 24 bands (low .. high sounds, log loudness) + its loudness.
-function soundPrint(x, rate, hop = 512, size = 2048, bands = 24) {
-  const edges = Array.from({ length: bands + 1 }, (_, i) => Math.round((60 * Math.pow(8000 / 60, i / bands) / rate) * size));
-  const win = Float64Array.from({ length: size }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / size));
-  const frames = [], loud = [];
-  const re = new Float64Array(size), im = new Float64Array(size);
-  for (let i = 0; i + size <= x.length; i += hop) {
-    let e = 0;
-    for (let k = 0; k < size; k++) { const v = x[i + k]; re[k] = v * win[k]; im[k] = 0; e += v * v; }
-    fft(re, im);
-    const f = new Float32Array(bands);
-    for (let b = 0; b < bands; b++) { let s = 0; for (let k = edges[b]; k < Math.max(edges[b] + 1, edges[b + 1]); k++) s += re[k] * re[k] + im[k] * im[k]; f[b] = Math.log(1e-6 + s); }
-    frames.push(f); loud.push(Math.sqrt(e / size));
-  }
-  return { frames, loud, fps: rate / hop };
-}
-// How alike two moments of the song sound (-1 .. 1): the band shapes around them, frame by frame.
-function alike(P, fa, fb, w, mean) {
-  let dot = 0, na = 0, nb = 0;
-  for (let k = -w; k < w; k++) {
-    const A = P.frames[fa + k], B = P.frames[fb + k];
-    if (!A || !B) continue;
-    for (let b = 0; b < A.length; b++) { const p = A[b] - mean[b], q = B[b] - mean[b]; dot += p * q; na += p * p; nb += q * q; }
-  }
-  return dot / (Math.sqrt(na * nb) || 1e-9);
-}
-// segA / segB: { x (mono sound), t0 (its start, song seconds) } around A and around B (the same object when they overlap).
-// A, B: your marks (song seconds). grid: { bpm, first } (beats). songDur: the song's length (so A can stay at 0 / B at the end).
-// Returns up to `top` joins { a, b, score (0-100), beats } at most `bars` bars away from your marks.
-function findLoopsIn(segA, segB, rate, A, B, grid = {}, { bars = 4, top = 3, songDur = Infinity } = {}) {
-  const PA = soundPrint(segA.x, rate), PB = segB === segA ? PA : soundPrint(segB.x, rate);
-  const nb = PA.frames[0] ? PA.frames[0].length : 24;
-  const mean = new Float64Array(nb);
-  const all = PB === PA ? PA.frames : [...PA.frames, ...PB.frames];
-  all.forEach((f) => f.forEach((v, b) => { mean[b] += v / all.length; }));
-  const beat = grid.bpm > 30 ? 60 / grid.bpm : 0.25; // no beat found: every quarter second
-  const first = grid.bpm > 30 ? (grid.first || 0) : 0;
-  const reach = Math.max(1, bars) * 4 * beat;
-  const onGrid = (seg, lo, hi, keep) => {
-    const end = seg.t0 + seg.x.length / rate, out = [];
-    for (let k = Math.ceil((lo - first) / beat); first + k * beat <= hi; k++) { const t = first + k * beat; if (t >= Math.max(0, seg.t0) && t <= Math.min(end, songDur)) out.push(t); }
-    if (keep >= seg.t0 && keep <= end && !out.some((t) => Math.abs(t - keep) < 1e-3)) out.push(keep); // your own mark is always a choice (the very start / end too)
-    return out;
-  };
-  const As = onGrid(segA, A - reach, A + reach, A), Bs = onGrid(segB, B - reach, B + reach, B);
-  const w = Math.max(4, Math.round(Math.min(2 * beat, 1.5) * PA.fps)); // compare about 2 beats each side
-  const frA = (t) => Math.round((t - segA.t0) * PA.fps), frB = (t) => Math.round((t - segB.t0) * PB.fps);
-  const lw = (P, f) => { let s = 0, n = 0; for (let k = -w; k < w; k++) if (P.loud[f + k] !== undefined) { s += P.loud[f + k]; n++; } return n ? s / n : 0; };
-  const alike2 = (fa, fb) => {
-    let dot = 0, na = 0, nbb = 0;
-    for (let k = -w; k < w; k++) {
-      const p = PA.frames[fa + k], q = PB.frames[fb + k];
-      if (!p || !q) continue;
-      for (let b = 0; b < p.length; b++) { const u = p[b] - mean[b], v = q[b] - mean[b]; dot += u * v; na += u * u; nbb += v * v; }
-    }
-    return dot / (Math.sqrt(na * nbb) || 1e-9);
-  };
-  const found = [];
-  for (const a of As) for (const b of Bs) {
-    const L = b - a;
-    if (L < Math.max(beat, 0.5)) continue;
-    const sim = alike2(frA(a), frB(b)); // the sound around B is like the sound around A: the jump back is hidden
-    const la = lw(PA, frA(a)), lb = lw(PB, frB(b));
-    const loud = Math.min(la, lb) / (Math.max(la, lb) || 1e-9); // same loudness at both ends
-    const nBeats = Math.round(L / beat);
-    const onBeat = Math.abs(L / beat - nBeats) < 0.02;
-    const bar = grid.bpm > 30 && onBeat ? (nBeats % 4 === 0 ? 0.06 : nBeats % 2 === 0 ? 0.02 : 0) : 0; // whole bars feel natural
-    const near = (Math.abs(a - A) + Math.abs(b - B)) / (2 * reach || 1); // stay close to your marks
-    found.push({ a, b, beats: nBeats, raw: 0.75 * sim + 0.25 * loud + bar - 0.06 * near });
-  }
-  found.sort((p, q) => q.raw - p.raw);
-  const pick = [];
-  for (const c of found) {
-    if (pick.some((p) => Math.abs(p.a - c.a) < beat * 0.99 && Math.abs(p.b - c.b) < beat * 0.99)) continue; // not nearly the same join twice
-    pick.push(c);
-    if (pick.length >= top) break;
-  }
-  // fine-tune each join to the sample: the waveform at B lines up with the one at A (no click)
-  const search = Math.min(0.03, beat / 8), win = Math.round(0.04 * rate), r = Math.round(search * rate);
-  return pick.map((c) => {
-    const xa = segA.x, xb = segB.x;
-    const ia = zeroCross(xa, Math.max(0, Math.min(xa.length - win - 1, Math.round((c.a - segA.t0) * rate))), Math.round(0.005 * rate));
-    let ea = 0; for (let k = 0; k < win; k++) ea += (xa[ia + k] || 0) ** 2;
-    ea = Math.sqrt(ea) || 1e-9;
-    const ib0 = Math.round((c.b - segB.t0) * rate);
-    let best = ib0, bestScore = -Infinity;
-    for (let ib = Math.max(0, ib0 - r); ib <= Math.min(xb.length - win - 1, ib0 + r); ib++) {
-      let dot = 0, eb = 0;
-      for (let k = 0; k < win; k++) { const p = xa[ia + k] || 0, q = xb[ib + k] || 0; dot += p * q; eb += q * q; }
-      const sc = dot / (ea * (Math.sqrt(eb) || 1e-9)) - (Math.abs(ib - ib0) / (r || 1)) * 0.02;
-      if (sc > bestScore) { bestScore = sc; best = ib; }
-    }
-    const a = ia / rate + segA.t0, b = Math.min(best / rate + segB.t0, songDur);
-    return { a: +a.toFixed(4), b: +b.toFixed(4), beats: c.beats, score: Math.round(100 * clamp(0.5 + 0.5 * c.raw, 0, 1)) };
-  }).filter((j) => j.b - j.a > 0.2);
-}
-// one piece of sound that holds both A and B
-function findLoops(x, rate, t0, A, B, grid = {}, opts = {}) { const seg = { x, t0 }; return findLoopsIn(seg, seg, rate, A, B, grid, opts); }
-
 // ---------- beats ----------
 // A simple beat finder: how much louder each short moment gets (onsets), the tempo that repeats best,
 // then the beat times on that grid. Good enough to snap cuts and match tempos.
@@ -409,7 +293,7 @@ async function makeSound(ff, key, dest) {
 }
 
 module.exports = {
-  soundFilter, fadeFilters, trackTempo, findLoops, findLoopsIn, soundPrint, RATE, TRIM_LEVELS, parseSilence, silences, trimPoints, splitPoints, loudness, sameLoudness, decodeMono,
+  soundFilter, fadeFilters, trackTempo, RATE, TRIM_LEVELS, parseSilence, silences, trimPoints, splitPoints, loudness, sameLoudness, decodeMono,
   smartLoop, zeroCross, beats, snapToBeat, tempoMatch, EFFECTS, effectChain, loopLength, loopGraph, panFilter,
   mixGraph, effectFilters, BLENDS, connectGraph, SOUNDS, makeSound,
 };

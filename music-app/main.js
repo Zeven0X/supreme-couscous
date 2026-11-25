@@ -696,24 +696,6 @@ function registerIpc() {
     const r = T.smartLoop(x, 22050, a - from, b - from);
     return { a: r.a + from, b: r.b + from, score: r.score };
   });
-  // Smart loop v2: the 3 best joins within `bars` bars of your marks, on the beat, fine-tuned to the sample
-  handle('edit-smartloop2', async (sid, A, B, opts = {}) => {
-    const cur = editor.current(editor.get(sid));
-    if (!(Number.isFinite(+A) && Number.isFinite(+B) && B - A >= 0.2)) throw new Error('Choose a start (A) and an end (B) first.');
-    const bars = Number.isFinite(+opts.bars) ? Math.min(8, Math.max(1, Math.round(+opts.bars))) : 4;
-    const g = await bpmOf(cur);
-    const songDur = (await ff.probe(cur)).info.duration;
-    const beat = g.bpm > 30 ? 60 / g.bpm : 0.25;
-    const reach = bars * 4 * beat + 2;
-    // only the sound around A and around B is compared: two small windows (one when they overlap)
-    const win = async (t) => { const from = Math.max(0, t - reach); return { x: await T.decodeMono(ff, cur, 22050, from, t + reach - from), t0: from }; };
-    let segA, segB;
-    if (B - A <= 2 * reach) { const from = Math.max(0, A - reach); segA = segB = { x: await T.decodeMono(ff, cur, 22050, from, B + reach - from), t0: from }; } else { segA = await win(+A); segB = await win(+B); }
-    const first = g.times && g.times.length ? g.times[0] % beat : 0;
-    const res = T.findLoopsIn(segA, segB, 22050, +A, +B, { bpm: g.bpm, first }, { bars, top: 3, songDur });
-    if (!res.length) throw new Error('No good join found here. Try marks a bit further apart.');
-    return res;
-  });
   handle('edit-sounds', () => Object.entries(T.SOUNDS).map(([key, s]) => ({ key, name: s.name })));
   handle('edit-source', async (src) => { // a layer's length, little waveform and web address (for the live player)
     const { file, name } = await sourceFile(src);

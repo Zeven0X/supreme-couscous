@@ -51,7 +51,6 @@ contextBridge.exposeInMainWorld('tf', {
   editBpm: (sid) => call('edit-bpm', sid),
   editMatchBeat: (sid, src) => call('edit-matchbeat', sid, src),
   editVariant: (sid, src, opts) => call('edit-variant', sid, src, opts),
-  editSmartLoop2: (sid, a, b, opts) => call('edit-smartloop2', sid, a, b, opts),
   editSource: (src) => call('edit-source', src),
   editRecording: (bytes) => call('edit-recording', bytes),
   playlistCreate: (name, trackIds) => call('playlist-create', name, trackIds),
