@@ -199,6 +199,18 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   await w.screenshot({ path: SP + '/concepts/daw-6-sound.png' });
   await tab('Mixer');
   ok('Mixer: a strip per track + master', (await w.locator('.dw-strip').count()) === (await ev(() => TFEdit.api.tracks.length)) + 1);
+  // ---- found in review: Apply with Speed on (no double speed-up), marks follow it, Undo brings marks back
+  const m0 = await ev(() => TFEdit.api.marks.map((m) => m.t));
+  const vB = await ev(() => TFEdit.session.version);
+  await tab('Effects');
+  await w.click('.dw-panel .tb.pri:has-text("Apply to the song")'); await w.waitForFunction((v) => TFEdit.session.version === v + 1, vB, { timeout: 90000 }); await wait(6000);
+  ok('Apply with Speed 125%: no double speed-up afterwards', await ev(() => Math.abs(TFDaw.songRate() - TFDaw.fxRate()) < 1e-6 && !TFEdit.api.tracks[0].playUrl && TFEdit.api.tracks[0].speed === 100), JSON.stringify(await ev(() => [TFDaw.songRate(), TFEdit.api.tracks[0].speed])));
+  const m1 = await ev(() => TFEdit.api.marks.map((m) => m.t));
+  ok('marks follow the faster song', m1.length === m0.length && m1.every((t, i) => Math.abs(t - m0[i] / (r2 / 1)) < 0.05), `${m0} → ${m1}`);
+  await w.keyboard.press('Control+z'); await w.waitForFunction((v) => TFEdit.session.version === v, vB, { timeout: 30000 }); await wait(300);
+  const m2 = await ev(() => TFEdit.api.marks.map((m) => m.t));
+  ok('Undo brings the marks back where they were', m2.length === m0.length && m2.every((t, i) => Math.abs(t - m0[i]) < 0.001), `${m2}`);
+  ok('…and the Speed 125% track', await ev(() => TFEdit.api.tracks[0].speed === 125));
   await tab('Effects');
   // Save keep both: one file with everything mixed (slowed → longer)
   await w.selectOption('.dw-mode', 'both');

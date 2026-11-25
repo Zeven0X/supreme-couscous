@@ -64,12 +64,24 @@ bottom was confusing, Speed / Pitch / Volume / Fade in / Fade out were missing, 
   Slow start = squared. They were checked against ffmpeg's own fades.
 - **Save** writes everything: speed, pitch, volume, fades, effects and tracks.
 
+### Fixed after the independent review (14 findings, 2026-11-25)
+- **Apply to the song** with Speed / Pitch changed could play the song twice as fast afterwards. Fixed.
+- **Undo / Redo** now bring your marks (and the A–B part) back to where they were.
+- Marks now also move after **Apply loop**, **Smart connect** and a speed change from **Apply to the song**.
+- Old Smart loop results disappear when the song changes. A track's fade handle no longer sits past the song's end.
+- **Speed x Match beat** is kept between 0.25x and 4x everywhere (live, the timeline and the saved file).
+- The same speed copy asked for twice at once is made only once (before, two jobs could write the same file).
+- Old speed copies are freed from memory. A removed track or another song no longer gets a late copy.
+- **Smart loop** now looks only at the sound around A and around B (faster on long parts), can keep a mark at 0:00
+  or at the very end, and a missing setting no longer breaks it.
+- A fade that fails to schedule falls back to full volume instead of a half fade.
+
 ### Checked
-- **Unit tests:** 75 pass. New: Smart loop v2 on a made-up song with chords repeating every 4 bars finds 3 perfect
+- **Unit tests:** 76 pass (new: Smart loop with two separate windows; a join that starts at 0:00; speed limits). Earlier: Smart loop v2 on a made-up song with chords repeating every 4 bars finds 3 perfect
   8 s and 16 s loops on the beat, in 0.24 s; a join into a different part scores lower.
-- **In the real app (automatic):** studio check 55 / 55 (new: small Library bar, M key mark, ruler-click mark, A/B, rename,
+- **In the real app (automatic):** studio check 59 / 59 (new: no double speed-up after Apply, marks follow it and come back on Undo; small Library bar, M key mark, ruler-click mark, A/B, rename,
   Smart loop 3 results within 4 bars, Use it, Speed +25 plays faster from a copy, fades, Mixer strips, saved file has the
-  speed (29.3 s as expected) and fades in); Edit check 14 / 14; panels check 19 / 19.
+  speed (29.3 s as expected) and fades in); Edit check 14 / 14; panels check 20 / 20 (a mark after B moves with Apply loop).
 - **Not checked:** how it sounds through speakers; a real microphone; Smart loop on many real songs (only the 3 test songs).
 
 ## Version 2 — studio layout with live effects 🔄 (2026-11-24, reworked in version 3)

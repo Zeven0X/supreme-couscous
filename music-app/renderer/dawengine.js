@@ -195,7 +195,7 @@ window.TFDaw = (() => {
         const d = len - Math.max(s, from);
         if (d > 0.005) g.setValueCurveAtTime(curve(x0, 0), startAt, d);
       }
-    } catch (_) { g.value = 1; } // never let a fade stop the music
+    } catch (_) { g.cancelScheduledValues(0); g.setValueAtTime(1, 0); } // never let a fade stop the music
   }
   function stop() {
     gen++; loading = null;

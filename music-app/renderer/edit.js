@@ -11,6 +11,7 @@ window.TFEdit = (() => {
     s: null, sel: null, zoom: 1, scroll: 0, busy: false, mode: 'both', panel: 'sound', tool: 'select', snap: 'off',
     marks: [], markA: null, markB: null, // your marks on the song; A and B = the part to loop
     loops: null, loopPick: 0, // Smart loop: the best joins found
+    markHist: {}, // the marks at each version, so Undo / Redo bring them back
     follow: false, // when zoomed in, the view follows the playhead (off: it stays where you put it)
     loopOn: false, beats: null, tracks: [], selTrack: 'song', preview: null, stopAt: null, playFrom: 0, rec: null,
     tok: 0, // goes up when something is stopped, so slow work that finishes later knows it is not wanted any more
@@ -48,7 +49,8 @@ window.TFEdit = (() => {
     stopRec(); // a recording for the other song is dropped
     stopAll();
     if (E.s) { tf.editClose(E.s.id).catch(() => {}); E.s = null; }
-    Object.assign(E, { sel: null, zoom: 1, scroll: 0, beats: null, tracks: [], selTrack: 'song', loopOn: false, preview: null, bakes: {}, marks: [], markA: null, markB: null, loops: null });
+    for (const k of Object.keys(variantTimers)) { clearTimeout(variantTimers[k]); delete variantTimers[k]; }
+    Object.assign(E, { sel: null, zoom: 1, scroll: 0, beats: null, tracks: [], selTrack: 'song', loopOn: false, preview: null, bakes: {}, marks: [], markA: null, markB: null, loops: null, markHist: {} });
     TFEditTabs.reset();
     render();
     busy(`Opening "${t.title}"…`);
@@ -63,14 +65,17 @@ window.TFEdit = (() => {
     const at = E.s && E.s.id === st.id ? TFDaw.time() : 0; // another song starts at the beginning
     stopAll();
     E.preview = null;
+    if (!E.s || E.s.id !== st.id || E.s.version !== st.version) E.loops = null; // Smart loop results belong to the old sound
     E.s = { ...st, trackId: st.trackId || keep };
     const b = E.bakes[st.version];
-    if (b && !mixPending()) { E.tracks = copyTracks(b.snap); E.selTrack = 'song'; b.restored = true; } // Undo after "Apply to the song": the tracks come back
+    let restored = false;
+    if (b && !mixPending()) { E.tracks = copyTracks(b.snap); E.selTrack = 'song'; b.restored = true; restored = true; } // Undo after "Apply to the song": the tracks come back
     for (const x of Object.values(E.bakes)) if (x.after === st.version && x.restored) { x.restored = false; cleanTracks(); } // Redo: mixed in again
     const oldUrl = song().url;
     if (oldUrl && oldUrl !== st.url) TFDaw.forget(oldUrl); // free the memory of the old working copy
     Object.assign(song(), { url: st.url, peaks: st.peaks, duration: st.duration });
-    if (soundOn(song())) { song().playUrl = null; song().stretch = 1; updateVariant(song()); } // the new copy at your speed / pitch
+    if (soundOn(song())) { if (song().playUrl) TFDaw.forget(song().playUrl); song().playUrl = null; song().stretch = 1; updateVariant(song()); } // the new copy at your speed / pitch
+    if (restored) for (const L of layers()) if (soundOn(L) || L.matchBeat) updateVariant(L);
     for (const m of E.marks) m.t = Math.min(m.t, st.duration);
     TFDaw.setTracks(E.tracks);
     TFDaw.seek(Math.min(at || 0, st.duration));
@@ -106,17 +111,25 @@ window.TFEdit = (() => {
     if (!E.s || E.busy) return null;
     stopAll();
     const sid = E.s.id, v = E.s.version;
+    E.markHist[v] = snapMarks(); // how the marks are now, for Undo / Redo
     busy(msg);
     const st = await guard(fn, 'Edit: ');
     busy(null);
     if (!st || !E.s || E.s.id !== sid) return null; // another song was opened meanwhile
     if (!history) for (const k of Object.keys(E.bakes)) if (+k >= v) delete E.bakes[k]; // a new change: older Redo steps are gone
-    if (shift) moveMarks(shift);
+    if (history && E.markHist[st.version]) restoreMarks(E.markHist[st.version]);
+    else if (shift) moveMarks(shift);
     show(st);
     return st;
   }
-  const copyTracks = (list) => list.map((t) => ({ ...t, fx: { ...t.fx }, nodes: null }));
-  function cleanTracks() { const s = song(); Object.assign(s, { fx: {}, volume: 100, pan: 0, mute: false, solo: false, ...SOUND0, playUrl: null, stretch: 1 }); E.tracks = [s]; E.selTrack = 'song'; TFDaw.setTracks(E.tracks); TFDaw.fxChanged(s); }
+  const copyTracks = (list) => list.map((t) => ({ ...t, fx: { ...t.fx }, nodes: null, making: false, want: null }));
+  const snapMarks = () => ({ marks: E.marks.map((m) => ({ ...m })), a: E.markA, b: E.markB, sel: E.sel ? { ...E.sel } : null });
+  function restoreMarks(h) { E.marks = h.marks.map((m) => ({ ...m })); E.markA = h.a; E.markB = h.b; E.sel = h.sel ? { ...h.sel } : null; }
+  function cleanTracks() {
+    const s = song();
+    clearTimeout(variantTimers[s.id]); delete variantTimers[s.id];
+    if (s.playUrl) TFDaw.forget(s.playUrl);
+    Object.assign(s, { fx: {}, volume: 100, pan: 0, mute: false, solo: false, ...SOUND0, playUrl: null, stretch: 1, want: null, making: false }); E.tracks = [s]; E.selTrack = 'song'; TFDaw.setTracks(E.tracks); TFDaw.fxChanged(s); }
   const needSel = () => { if (!E.sel) { toast('Select a part first: drag across the song.'); return false; } return true; };
   const cut = () => { if (!needSel()) return; const { a, b } = E.sel; E.sel = null; E.loopOn = false; return change(() => tf.editApply(E.s.id, { type: 'cut', a, b }), 'Cutting…', false, { cut: [a, b] }); };
   const keep = () => { if (!needSel()) return; const { a, b } = E.sel; E.sel = null; E.loopOn = false; return change(() => tf.editApply(E.s.id, { type: 'keep', a, b }), 'Keeping the selected part…', false, { keep: [a, b] }); };
@@ -140,8 +153,9 @@ window.TFEdit = (() => {
   }
   async function bake() { // "Apply to the song": the tracks become one working copy (Undo takes it back)
     if (!mixPending()) { toast('Nothing to apply: no effects, volume change or layers.'); return null; }
-    const v = E.s.version, snap = copyTracks(E.tracks);
-    const st = await change(() => tf.editDo(E.s.id, mixOp()), 'Mixing the tracks into the song…');
+    const v = E.s.version, snap = copyTracks(E.tracks), s0 = song();
+    const rate = TFFxMath.params(fxOf(s0)).rate * Math.min(4, Math.max(0.25, s0.speed / 100)); // the mixed song is this much faster
+    const st = await change(() => tf.editDo(E.s.id, mixOp()), 'Mixing the tracks into the song…', false, Math.abs(rate - 1) > 1e-6 ? { scale: 1 / rate } : null);
     if (st) { E.bakes[v] = { snap, after: st.version, restored: false }; cleanTracks(); render(); }
     return st;
   }
@@ -205,16 +219,20 @@ window.TFEdit = (() => {
   function soundChanged(T) { clearTimeout(variantTimers[T.id]); variantTimers[T.id] = setTimeout(() => updateVariant(T), 350); renderHeads(); drawAll(); }
   async function updateVariant(T) {
     if (!E.s) return;
+    if (!E.tracks.includes(T)) return; // removed meanwhile
     const sid = E.s.id, mt = T.kind === 'layer' && T.matchBeat ? (T.matchTempo || 1) : 1;
-    const tempo = (mt * T.speed) / 100, pitch = T.pitch / 100;
-    const want = `${tempo}|${pitch}|${T.natural}|${T.kind === 'song' ? E.s.version : ''}`;
+    const tempo = Math.min(4, Math.max(0.25, (mt * T.speed) / 100)), pitch = T.pitch / 100;
+    const wantOf = () => `${Math.min(4, Math.max(0.25, ((T.kind === 'layer' && T.matchBeat ? (T.matchTempo || 1) : 1) * T.speed) / 100))}|${T.pitch / 100}|${T.natural}|${T.kind === 'song' && E.s ? E.s.version : ''}`;
+    const want = wantOf();
     T.want = want;
-    if (Math.abs(tempo - 1) < 1e-4 && Math.abs(pitch - 1) < 1e-4) { T.playUrl = null; T.stretch = 1; T.making = false; status(); restart(); return; }
+    const use = (url, st) => { if (T.playUrl && T.playUrl !== url) TFDaw.forget(T.playUrl); T.playUrl = url; T.stretch = st; };
+    if (Math.abs(tempo - 1) < 1e-4 && Math.abs(pitch - 1) < 1e-4) { use(null, 1); T.making = false; status(); restart(); return; }
     T.making = true; status();
     const r = await guard(() => tf.editVariant(sid, T.kind === 'song' ? null : T.src, { tempo, pitch, natural: T.natural }), 'Sound: ');
-    if (!E.s || E.s.id !== sid || T.want !== want) return; // changed again meanwhile
+    const stale = () => !E.s || E.s.id !== sid || T.want !== want || wantOf() !== want || !E.tracks.includes(T);
+    if (stale()) return; // changed again, removed, or another song meanwhile
+    if (r && r.url) { await TFDaw.load(r.url).catch(() => {}); if (stale()) { TFDaw.forget(r.url); return; } use(r.url, r.tempo || tempo); }
     T.making = false;
-    if (r && r.url) { await TFDaw.load(r.url).catch(() => {}); if (T.want !== want) return; T.playUrl = r.url; T.stretch = tempo; }
     status();
     restart();
   }
@@ -251,12 +269,18 @@ window.TFEdit = (() => {
     renderBrowser(); TFEditTabs.refresh(E.panel); drawAll(); drawBar();
   }
   // after a cut / keep: marks move with the music (marks in a removed part go away)
-  function moveMarks({ cut, keep }) {
+  function moveMarks({ cut, keep, loop, connect, scale }) {
     const out = [];
-    for (const m of E.marks) {
-      if (cut) { if (m.t < cut[0]) out.push(m); else if (m.t > cut[1]) { m.t = +(m.t - (cut[1] - cut[0])).toFixed(3); out.push(m); } }
-      if (keep) { if (m.t >= keep[0] && m.t <= keep[1]) { m.t = +(m.t - keep[0]).toFixed(3); out.push(m); } }
-    }
+    const sh = (t) => {
+      if (cut) return t < cut[0] ? t : t > cut[1] ? t - (cut[1] - cut[0]) : null;
+      if (keep) return t >= keep[0] && t <= keep[1] ? t - keep[0] : null;
+      if (loop) return t > loop[1] ? t + (loop[1] - loop[0]) * (loop[2] - 1) : t; // after B: later by the repeats
+      if (connect) return t <= connect[0] ? t : connect[2] === 'end' ? null : t + connect[1]; // after the piece goes in
+      if (scale) return t * scale; // the song got faster / slower
+      return t;
+    };
+    for (const m of E.marks) { const t = sh(m.t); if (t !== null && t !== undefined) { m.t = +t.toFixed(3); out.push(m); } }
+    if (E.sel && (loop || connect || scale)) { const a = sh(E.sel.a), b = sh(E.sel.b); E.sel = a !== null && b !== null && b > a ? { a, b } : null; }
     E.marks = out;
     if (!markById(E.markA)) E.markA = null;
     if (!markById(E.markB)) E.markB = null;
@@ -293,7 +317,7 @@ window.TFEdit = (() => {
   const barNo = (t) => Math.floor((t - firstBeat()) / (beatLen() * 4) + 1e-6) + 1;
   const barText = (t) => (beatLen() ? `Bar ${Math.floor((t - firstBeat()) / (beatLen() * 4) + 1e-6) + 1}` : fmt(t));
   function layerChanged(L, rerender = true) { TFDaw.apply(L); if (TFDaw.playing && !TFDaw.previewing) TFDaw.play(TFDaw.time()).catch(() => {}); if (rerender) render(); else drawAll(); }
-  function removeLayer(L) { E.tracks = E.tracks.filter((t) => t !== L); if (E.selTrack === L.id) E.selTrack = 'song'; TFDaw.setTracks(E.tracks); if (TFDaw.playing && !TFDaw.previewing) TFDaw.play(TFDaw.time()).catch(() => {}); render(); }
+  function removeLayer(L) { clearTimeout(variantTimers[L.id]); delete variantTimers[L.id]; if (L.playUrl) TFDaw.forget(L.playUrl); E.tracks = E.tracks.filter((t) => t !== L); if (E.selTrack === L.id) E.selTrack = 'song'; TFDaw.setTracks(E.tracks); if (TFDaw.playing && !TFDaw.previewing) TFDaw.play(TFDaw.time()).catch(() => {}); render(); }
 
   // stop the recording (a recorder that has not started yet is just dropped)
   function stopRec() { const r = E.rec; if (!r) return; if (r.state === 'inactive') E.rec = null; else r.stop(); }
@@ -488,7 +512,7 @@ window.TFEdit = (() => {
   }
   function laneTops() { let y = 0; return E.tracks.map((t) => { const top = y; y += t.kind === 'song' ? SONG_H : LAYER_H; return top; }); }
   // a track's start and end on the song's timeline (song seconds)
-  function span(t) { if (t.kind === 'song') return [0, dur()]; const c = clips(t); return c.length ? [c[0][0], c[c.length - 1][1]] : [t.offset, t.offset]; }
+  function span(t) { if (t.kind === 'song') return [0, dur()]; const c = clips(t).filter(([a]) => a < dur()); return c.length ? [c[0][0], Math.min(dur(), c[c.length - 1][1])] : [t.offset, t.offset]; }
   // the fade handles (white squares): where they are, in song seconds
   function fadeSpots(t) {
     const [a, b] = span(t), r = TFDaw.songRate();

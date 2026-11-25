@@ -161,3 +161,18 @@ test('Smart loop v2: finds beat-perfect joins near the marks (chords repeat ever
   const bad = T.findLoops(x, 22050, 0, 26, 36, grid, { bars: 0 })[0];
   assert.ok(!bad || bad.score < res[0].score - 10, `bad join ${bad && bad.score} vs best ${res[0].score}`);
 });
+
+test('Smart loop v2: two small windows give the same answer; a mark at 0:00 can stay there (found in review)', async () => {
+  const f = path.join(tmp, 'loopsong.wav'); // made by the test above
+  const grid = { bpm: 120, first: 0 };
+  const full = await T.decodeMono(ff, f, 22050, 0, 40);
+  const one = T.findLoops(full, 22050, 0, 2.2, 26.3, grid);
+  const wa = { x: await T.decodeMono(ff, f, 22050, 0, 12.2), t0: 0 }, wb = { x: await T.decodeMono(ff, f, 22050, 16.3, 20), t0: 16.3 };
+  const two = T.findLoopsIn(wa, wb, 22050, 2.2, 26.3, grid, { songDur: 40 });
+  const L = two[0].b - two[0].a;
+  assert.ok(Math.abs(L % 8) < 0.04 || Math.abs((L % 8) - 8) < 0.04, `two windows: ${L.toFixed(3)} s ${JSON.stringify(two)}`);
+  assert.ok(Math.abs(one[0].b - one[0].a - L) < 0.05, `same length as one window: ${JSON.stringify(one)}`);
+  const start = T.findLoops(full, 22050, 0, 0, 8, grid, { songDur: 40 });
+  assert.ok(start.some((r) => r.a < 0.01), `a join can start at 0:00 ${JSON.stringify(start)}`);
+  assert.ok(T.trackTempo(400, 1.5) === 4 && T.trackTempo(25, 0.75) === 0.25, 'speed x match beat stays in range');
+});

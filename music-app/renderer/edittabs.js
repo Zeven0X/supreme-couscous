@@ -132,7 +132,7 @@ window.TFEditTabs = (() => {
         h('span', { class: 'ed-l' }, 'times'),
         note(`New length: ${fmtTime(newLen)} (now ${fmtTime(dur())})`, 'ok')),
       row(btn('▶ Listen to the join', () => { const s = A().sel; if (s) A().preview({ type: 'loop', a: s.a, b: s.b, times: 2 }, { from: Math.max(0, s.b - 2.5), label: 'Loop join' }); }, { title: 'Plays the moment where B jumps back to A' }),
-        btn('✓ Apply loop', () => { const s = A().sel; if (s) A().change(() => tf.editDo(sid(), { type: 'loop', a: s.a, b: s.b, times: P.times }), 'Making the loop…'); }, { cls: 'tb pri' })));
+        btn('✓ Apply loop', () => { const s = A().sel; if (s) A().change(() => tf.editDo(sid(), { type: 'loop', a: s.a, b: s.b, times: P.times }), 'Making the loop…', false, { loop: [s.a, s.b, P.times] }); }, { cls: 'tb pri' })));
   }
 
   // ================= pickers (used by the track buttons on the Edit page) =================
@@ -194,7 +194,7 @@ window.TFEditTabs = (() => {
         seg([['continue', 'Then the song goes on'], ['end', 'The song ends there']], C.after, (v) => { C.after = v; A().render(); }),
         h('label', { class: 'ed-check' }, (() => { const c = h('input', { type: 'checkbox', checked: C.snap }); c.addEventListener('change', () => { C.snap = c.checked; }); return c; })(), 'Land on the beat')),
       row(btn('▶ Preview', () => A().preview(op(), { from: Math.max(0, at - 3), label: 'Smart connect' }), { disabled: !ok }),
-        btn('✓ Connect', () => A().change(() => tf.editDo(sid(), op()), 'Connecting…'), { cls: 'tb pri', disabled: !ok })));
+        btn('✓ Connect', () => A().change(() => tf.editDo(sid(), op()), 'Connecting…', false, { connect: [at, C.piece.b - C.piece.a, C.after] }), { cls: 'tb pri', disabled: !ok })));
   }
 
   // ================= song track: drawing + mouse =================

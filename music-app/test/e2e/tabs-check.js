@@ -70,7 +70,10 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   const newLenText = await w.textContent('.dw-panel .ed-note.ok');
   await w.screenshot({ path: SP + '/concepts/tab-loop.png' });
   const dBefore = await dur();
+  await ev(() => TFEdit.api.addMark(20));
   await w.click('.dw-panel .tb.pri:has-text("Apply loop")'); await waitVersion(3);
+  const mk = await ev(() => TFEdit.api.marks.find((m) => m.t > 19).t);
+  ok('a mark after B moves with the loop (found in review)', Math.abs(mk - (20 + 2 * (sel.b - sel.a))) < 0.01, `${mk.toFixed(3)} vs ${(20 + 2 * (sel.b - sel.a)).toFixed(3)}`);
   ok('Loop × 3 adds 2 × the part', Math.abs((await dur()) - dBefore - 2 * (sel.b - sel.a)) < 0.1, `${newLenText}`);
   // ---- Tracks (layers)
   const nTracks = (n) => w.waitForFunction((x) => TFEdit.api.tracks.length === x, n, { timeout: 60000 });

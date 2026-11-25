@@ -126,31 +126,47 @@ function alike(P, fa, fb, w, mean) {
   }
   return dot / (Math.sqrt(na * nb) || 1e-9);
 }
-// x: mono sound from `t0` seconds into the song. A, B: your marks (song seconds). grid: { bpm, first } (beats).
-// Returns up to `top` joins { a, b, score (0-100), beats } with A..B at most `bars` bars away from your marks.
-function findLoops(x, rate, t0, A, B, grid = {}, { bars = 4, top = 3 } = {}) {
-  const P = soundPrint(x, rate);
-  const nb = P.frames[0] ? P.frames[0].length : 24;
+// segA / segB: { x (mono sound), t0 (its start, song seconds) } around A and around B (the same object when they overlap).
+// A, B: your marks (song seconds). grid: { bpm, first } (beats). songDur: the song's length (so A can stay at 0 / B at the end).
+// Returns up to `top` joins { a, b, score (0-100), beats } at most `bars` bars away from your marks.
+function findLoopsIn(segA, segB, rate, A, B, grid = {}, { bars = 4, top = 3, songDur = Infinity } = {}) {
+  const PA = soundPrint(segA.x, rate), PB = segB === segA ? PA : soundPrint(segB.x, rate);
+  const nb = PA.frames[0] ? PA.frames[0].length : 24;
   const mean = new Float64Array(nb);
-  P.frames.forEach((f) => f.forEach((v, b) => { mean[b] += v / P.frames.length; }));
+  const all = PB === PA ? PA.frames : [...PA.frames, ...PB.frames];
+  all.forEach((f) => f.forEach((v, b) => { mean[b] += v / all.length; }));
   const beat = grid.bpm > 30 ? 60 / grid.bpm : 0.25; // no beat found: every quarter second
   const first = grid.bpm > 30 ? (grid.first || 0) : 0;
-  const reach = bars * 4 * beat;
-  const end = t0 + x.length / rate;
-  const onGrid = (lo, hi) => { const out = []; for (let k = Math.ceil((lo - first) / beat); first + k * beat <= hi; k++) { const t = first + k * beat; if (t >= t0 + 0.6 && t <= end - 0.6) out.push(t); } return out; };
-  const As = onGrid(A - reach, A + reach), Bs = onGrid(B - reach, B + reach);
-  const w = Math.max(4, Math.round(Math.min(2 * beat, 1.5) * P.fps)); // compare about 2 beats each side
-  const fr = (t) => Math.round((t - t0) * P.fps);
-  const lw = (f) => { let s = 0, n = 0; for (let k = -w; k < w; k++) if (P.loud[f + k] !== undefined) { s += P.loud[f + k]; n++; } return n ? s / n : 0; };
+  const reach = Math.max(1, bars) * 4 * beat;
+  const onGrid = (seg, lo, hi, keep) => {
+    const end = seg.t0 + seg.x.length / rate, out = [];
+    for (let k = Math.ceil((lo - first) / beat); first + k * beat <= hi; k++) { const t = first + k * beat; if (t >= Math.max(0, seg.t0) && t <= Math.min(end, songDur)) out.push(t); }
+    if (keep >= seg.t0 && keep <= end && !out.some((t) => Math.abs(t - keep) < 1e-3)) out.push(keep); // your own mark is always a choice (the very start / end too)
+    return out;
+  };
+  const As = onGrid(segA, A - reach, A + reach, A), Bs = onGrid(segB, B - reach, B + reach, B);
+  const w = Math.max(4, Math.round(Math.min(2 * beat, 1.5) * PA.fps)); // compare about 2 beats each side
+  const frA = (t) => Math.round((t - segA.t0) * PA.fps), frB = (t) => Math.round((t - segB.t0) * PB.fps);
+  const lw = (P, f) => { let s = 0, n = 0; for (let k = -w; k < w; k++) if (P.loud[f + k] !== undefined) { s += P.loud[f + k]; n++; } return n ? s / n : 0; };
+  const alike2 = (fa, fb) => {
+    let dot = 0, na = 0, nbb = 0;
+    for (let k = -w; k < w; k++) {
+      const p = PA.frames[fa + k], q = PB.frames[fb + k];
+      if (!p || !q) continue;
+      for (let b = 0; b < p.length; b++) { const u = p[b] - mean[b], v = q[b] - mean[b]; dot += u * v; na += u * u; nbb += v * v; }
+    }
+    return dot / (Math.sqrt(na * nbb) || 1e-9);
+  };
   const found = [];
   for (const a of As) for (const b of Bs) {
     const L = b - a;
     if (L < Math.max(beat, 0.5)) continue;
-    const sim = alike(P, fr(a), fr(b), w, mean); // the sound around B is like the sound around A: the jump back is hidden
-    const la = lw(fr(a)), lb = lw(fr(b));
+    const sim = alike2(frA(a), frB(b)); // the sound around B is like the sound around A: the jump back is hidden
+    const la = lw(PA, frA(a)), lb = lw(PB, frB(b));
     const loud = Math.min(la, lb) / (Math.max(la, lb) || 1e-9); // same loudness at both ends
     const nBeats = Math.round(L / beat);
-    const bar = grid.bpm > 30 ? (nBeats % 4 === 0 ? 0.06 : nBeats % 2 === 0 ? 0.02 : 0) : 0; // whole bars feel natural
+    const onBeat = Math.abs(L / beat - nBeats) < 0.02;
+    const bar = grid.bpm > 30 && onBeat ? (nBeats % 4 === 0 ? 0.06 : nBeats % 2 === 0 ? 0.02 : 0) : 0; // whole bars feel natural
     const near = (Math.abs(a - A) + Math.abs(b - B)) / (2 * reach || 1); // stay close to your marks
     found.push({ a, b, beats: nBeats, raw: 0.75 * sim + 0.25 * loud + bar - 0.06 * near });
   }
@@ -161,12 +177,27 @@ function findLoops(x, rate, t0, A, B, grid = {}, { bars = 4, top = 3 } = {}) {
     pick.push(c);
     if (pick.length >= top) break;
   }
-  // fine-tune each join to the sample: the waveform at B lines up with A (no click)
+  // fine-tune each join to the sample: the waveform at B lines up with the one at A (no click)
+  const search = Math.min(0.03, beat / 8), win = Math.round(0.04 * rate), r = Math.round(search * rate);
   return pick.map((c) => {
-    const r = smartLoop(x, rate, c.a - t0, c.b - t0, { search: Math.min(0.03, beat / 8) });
-    return { a: +(r.a + t0).toFixed(4), b: +(r.b + t0).toFixed(4), beats: c.beats, score: Math.round(100 * clamp(0.5 + 0.5 * c.raw, 0, 1)) };
-  });
+    const xa = segA.x, xb = segB.x;
+    const ia = zeroCross(xa, Math.max(0, Math.min(xa.length - win - 1, Math.round((c.a - segA.t0) * rate))), Math.round(0.005 * rate));
+    let ea = 0; for (let k = 0; k < win; k++) ea += (xa[ia + k] || 0) ** 2;
+    ea = Math.sqrt(ea) || 1e-9;
+    const ib0 = Math.round((c.b - segB.t0) * rate);
+    let best = ib0, bestScore = -Infinity;
+    for (let ib = Math.max(0, ib0 - r); ib <= Math.min(xb.length - win - 1, ib0 + r); ib++) {
+      let dot = 0, eb = 0;
+      for (let k = 0; k < win; k++) { const p = xa[ia + k] || 0, q = xb[ib + k] || 0; dot += p * q; eb += q * q; }
+      const sc = dot / (ea * (Math.sqrt(eb) || 1e-9)) - (Math.abs(ib - ib0) / (r || 1)) * 0.02;
+      if (sc > bestScore) { bestScore = sc; best = ib; }
+    }
+    const a = ia / rate + segA.t0, b = Math.min(best / rate + segB.t0, songDur);
+    return { a: +a.toFixed(4), b: +b.toFixed(4), beats: c.beats, score: Math.round(100 * clamp(0.5 + 0.5 * c.raw, 0, 1)) };
+  }).filter((j) => j.b - j.a > 0.2);
 }
+// one piece of sound that holds both A and B
+function findLoops(x, rate, t0, A, B, grid = {}, opts = {}) { const seg = { x, t0 }; return findLoopsIn(seg, seg, rate, A, B, grid, opts); }
 
 // ---------- beats ----------
 // A simple beat finder: how much louder each short moment gets (onsets), the tempo that repeats best,
@@ -271,8 +302,10 @@ function panFilter(p) {
 // (part, tempo, repeat, its effects, volume, left/right, auto-quiet). Layer start times are in song time;
 // when the song's own effects change its speed (Slowed / Nightcore), the layers move with it.
 // Sound (speed / pitch, studio quality) and fades of one track. speed / pitch in %, fades in output seconds.
+const TEMPO_LIMITS = [0.25, 4];
+const trackTempo = (speed = 100, extra = 1) => clamp((speed / 100) * extra, TEMPO_LIMITS[0], TEMPO_LIMITS[1]); // Match beat x Speed, kept in range
 function soundFilter({ speed = 100, pitch = 100, natural = true } = {}, extraTempo = 1) {
-  const tempo = (speed / 100) * extraTempo, p = pitch / 100;
+  const tempo = trackTempo(speed, extraTempo), p = pitch / 100;
   if (Math.abs(tempo - 1) < 1e-4 && Math.abs(p - 1) < 1e-4) return [];
   return [`rubberband=tempo=${tempo.toFixed(5)}:pitch=${p.toFixed(5)}:formant=${natural === false ? 'shifted' : 'preserved'}:pitchq=quality:channels=together`];
 }
@@ -285,7 +318,7 @@ function fadeFilters({ fadeIn = 0, fadeOut = 0, fadeShape = 'lin' } = {}, len) {
   return out;
 }
 function mixGraph(layers, songDur, { songVolume = 100, songPan = 0, songMute = false, songSolo = false, songFx = {}, songSound = {}, songFade = {} } = {}) {
-  const songSpeed = (songSound.speed ?? 100) / 100;
+  const songSpeed = trackTempo(songSound.speed ?? 100);
   const rate = FXM.params(songFx).rate * songSpeed; // song seconds per real second
   const outDur = songDur / rate;
   const solo = songSolo || layers.some((L) => L.solo && !L.mute); // any solo: only solo tracks are heard
@@ -294,7 +327,7 @@ function mixGraph(layers, songDur, { songVolume = 100, songPan = 0, songMute = f
   for (const L of live) {
     const chain = [`aresample=${RATE}`, `aformat=sample_rates=${RATE}:channel_layouts=stereo`];
     if (L.to > L.from) chain.push(`atrim=${f4(L.from || 0)}:${f4(L.to)}`, 'asetpts=N/SR/TB');
-    const tempo = (L.tempo || 1) * ((L.speed ?? 100) / 100); // Match beat x the track's own speed
+    const tempo = trackTempo(L.speed ?? 100, L.tempo || 1); // Match beat x the track's own speed
     chain.push(...soundFilter(L, L.tempo || 1));
     const len = ((L.to || 0) - (L.from || 0)) / tempo;
     const start = (L.offset || 0) / rate;
@@ -376,7 +409,7 @@ async function makeSound(ff, key, dest) {
 }
 
 module.exports = {
-  soundFilter, fadeFilters, findLoops, soundPrint, RATE, TRIM_LEVELS, parseSilence, silences, trimPoints, splitPoints, loudness, sameLoudness, decodeMono,
+  soundFilter, fadeFilters, trackTempo, findLoops, findLoopsIn, soundPrint, RATE, TRIM_LEVELS, parseSilence, silences, trimPoints, splitPoints, loudness, sameLoudness, decodeMono,
   smartLoop, zeroCross, beats, snapToBeat, tempoMatch, EFFECTS, effectChain, loopLength, loopGraph, panFilter,
   mixGraph, effectFilters, BLENDS, connectGraph, SOUNDS, makeSound,
 };

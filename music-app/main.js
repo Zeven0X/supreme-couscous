@@ -700,14 +700,17 @@ function registerIpc() {
   handle('edit-smartloop2', async (sid, A, B, opts = {}) => {
     const cur = editor.current(editor.get(sid));
     if (!(Number.isFinite(+A) && Number.isFinite(+B) && B - A >= 0.2)) throw new Error('Choose a start (A) and an end (B) first.');
-    const bars = Math.min(8, Math.max(0, Math.round(+opts.bars ?? 4)));
+    const bars = Number.isFinite(+opts.bars) ? Math.min(8, Math.max(1, Math.round(+opts.bars))) : 4;
     const g = await bpmOf(cur);
+    const songDur = (await ff.probe(cur)).info.duration;
     const beat = g.bpm > 30 ? 60 / g.bpm : 0.25;
     const reach = bars * 4 * beat + 2;
-    const from = Math.max(0, A - reach), len = B + reach - from;
-    const x = await T.decodeMono(ff, cur, 22050, from, len);
+    // only the sound around A and around B is compared: two small windows (one when they overlap)
+    const win = async (t) => { const from = Math.max(0, t - reach); return { x: await T.decodeMono(ff, cur, 22050, from, t + reach - from), t0: from }; };
+    let segA, segB;
+    if (B - A <= 2 * reach) { const from = Math.max(0, A - reach); segA = segB = { x: await T.decodeMono(ff, cur, 22050, from, B + reach - from), t0: from }; } else { segA = await win(+A); segB = await win(+B); }
     const first = g.times && g.times.length ? g.times[0] % beat : 0;
-    const res = T.findLoops(x, 22050, from, +A, +B, { bpm: g.bpm, first }, { bars, top: 3 });
+    const res = T.findLoopsIn(segA, segB, 22050, +A, +B, { bpm: g.bpm, first }, { bars, top: 3, songDur });
     if (!res.length) throw new Error('No good join found here. Try marks a bit further apart.');
     return res;
   });
@@ -733,19 +736,24 @@ function registerIpc() {
   });
   // Sound for the live player: a copy of the song (src = null) or a track at another speed / pitch.
   // tempo = Match beat x speed. Made once per setting (kept in the stretch folder until Tonix restarts).
+  const variantJobs = new Map();
+  let variantN = 0;
   handle('edit-variant', async (sid, src, opts = {}) => {
     const file = src ? (await sourceFile(src)).file : editor.current(editor.get(sid));
     const tempo = Math.min(4, Math.max(0.25, +opts.tempo || 1)), pitch = Math.min(4, Math.max(0.25, +opts.pitch || 1)), natural = opts.natural !== false;
-    if (Math.abs(tempo - 1) < 1e-4 && Math.abs(pitch - 1) < 1e-4) return { url: null };
+    if (Math.abs(tempo - 1) < 1e-4 && Math.abs(pitch - 1) < 1e-4) return { url: null, tempo: 1 };
     const st = fs.statSync(file);
     const name = `${crypto.createHash('sha1').update(`${file}|${st.size}|${st.mtimeMs}|${tempo}|${pitch}|${natural}`).digest('hex').slice(0, 20)}.flac`;
     const dest = path.join(stretchDir(), name);
     if (!fs.existsSync(dest)) {
-      const tmp = `${dest}.part.flac`;
-      await ff.run(['-y', '-i', file, '-map', '0:a:0', '-af', `aresample=44100,${ff.rubberband({ tempo, pitch, natural })}`, '-ac', '2', '-c:a', 'flac', tmp]);
-      fs.renameSync(tmp, dest);
+      if (!variantJobs.has(dest)) { // the same copy asked for twice at once: one job, both wait for it
+        const tmp = `${dest}.${process.pid}-${++variantN}.part.flac`;
+        variantJobs.set(dest, ff.run(['-y', '-i', file, '-map', '0:a:0', '-af', `aresample=44100,${ff.rubberband({ tempo, pitch, natural })}`, '-ac', '2', '-c:a', 'flac', tmp])
+          .then(() => fs.renameSync(tmp, dest)).catch((e) => { fs.rmSync(tmp, { force: true }); throw e; }).finally(() => variantJobs.delete(dest)));
+      }
+      await variantJobs.get(dest);
     }
-    return { url: `${baseUrl}/editsrc/stretch/${name}` };
+    return { url: `${baseUrl}/editsrc/stretch/${name}`, tempo };
   });
   // tempo + beat times of the song being edited (bar | beat clock, snapping)
   handle('edit-bpm', async (sid) => { const b = await bpmOf(editor.current(editor.get(sid))); return { bpm: b.bpm, times: b.times }; });

@@ -2,7 +2,7 @@
 
 ## Quick facts
 - Offline music app for Windows. Built with Electron (a way to make desktop apps with web code) + ffmpeg (the sound engine).
-- Folder: `music-app\`. Name: **Tonix** (renamed from "Tune Forge" 2026-11-23). Version 1.3.0 (studio-style Edit page).
+- Folder: `music-app\`. Name: **Tonix** (renamed from "Tune Forge" 2026-11-23). Version 1.4.0 (Edit page design B).
 - Updates: Claude installs them on the user's PC. Old installer goes to `Documents\Tonix\Old versions` (not built yet).
 
 ## How to run
