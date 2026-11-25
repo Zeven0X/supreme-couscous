@@ -602,6 +602,15 @@ function registerIpc() {
     }
     return bpmCache.get(k);
   }
+  // a track's Sound + Fades from the Edit page, checked and kept inside the app's limits
+  function cleanSound(x = {}) {
+    const lim = (k, v, d) => { const [lo, hi] = ff.LIMITS[k] || [0, 1e9]; const n = +v; return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
+    return {
+      speed: lim('speed', x.speed ?? 100, 100), pitch: lim('pitch', x.pitch ?? 100, 100), natural: x.natural !== false,
+      fadeIn: Math.max(0, Math.min(600, +x.fadeIn || 0)), fadeOut: Math.max(0, Math.min(600, +x.fadeOut || 0)),
+      fadeShape: ['lin', 'smooth', 'slow'].includes(x.fadeShape) ? x.fadeShape : 'lin',
+    };
+  }
   async function resolveOp(sid, op) {
     const s = editor.get(sid), cur = editor.current(s);
     const dur = (await ff.probe(cur)).info.duration;
@@ -629,13 +638,14 @@ function registerIpc() {
           const { file } = await sourceFile(L.src);
           inputs.push(file);
           const tempo = L.matchBeat && song && song.bpm ? T.tempoMatch(song.bpm, (await bpmOf(file)).bpm) : 1;
-          layers.push({ ...L, tempo });
+          layers.push({ ...L, ...cleanSound(L), tempo });
         }
         const sg = op.song || {};
         const songFx = sg.fx && typeof sg.fx === 'object' ? sg.fx : {};
         if (op.type === 'layers' && !layers.length) throw new Error('Add a layer first.');
-        const opts = { songVolume: Number.isFinite(+sg.volume) ? +sg.volume : (op.songVolume ?? 100), songPan: +sg.pan || 0, songMute: !!sg.mute, songSolo: !!sg.solo, songFx };
-        const what = [Object.keys(songFx).length ? `effects: ${Object.keys(songFx).join(', ')}` : '', layers.length ? `${layers.filter((L) => !L.mute).length} layer(s)` : ''].filter(Boolean).join(' + ');
+        const ss = cleanSound(sg);
+        const opts = { songVolume: Number.isFinite(+sg.volume) ? +sg.volume : (op.songVolume ?? 100), songPan: +sg.pan || 0, songMute: !!sg.mute, songSolo: !!sg.solo, songFx, songSound: ss, songFade: ss };
+        const what = [Object.keys(songFx).length ? `effects: ${Object.keys(songFx).join(', ')}` : '', ss.speed !== 100 || ss.pitch !== 100 ? 'speed / pitch' : '', ss.fadeIn || ss.fadeOut ? 'fades' : '', layers.length ? `${layers.filter((L) => !L.mute).length} layer(s)` : ''].filter(Boolean).join(' + ');
         return { type: 'graph', graph: T.mixGraph(layers, dur, opts), inputs, label: `Mixed (${what || 'volume'})` };
       }
       case 'connect': {
@@ -686,6 +696,21 @@ function registerIpc() {
     const r = T.smartLoop(x, 22050, a - from, b - from);
     return { a: r.a + from, b: r.b + from, score: r.score };
   });
+  // Smart loop v2: the 3 best joins within `bars` bars of your marks, on the beat, fine-tuned to the sample
+  handle('edit-smartloop2', async (sid, A, B, opts = {}) => {
+    const cur = editor.current(editor.get(sid));
+    if (!(Number.isFinite(+A) && Number.isFinite(+B) && B - A >= 0.2)) throw new Error('Choose a start (A) and an end (B) first.');
+    const bars = Math.min(8, Math.max(0, Math.round(+opts.bars ?? 4)));
+    const g = await bpmOf(cur);
+    const beat = g.bpm > 30 ? 60 / g.bpm : 0.25;
+    const reach = bars * 4 * beat + 2;
+    const from = Math.max(0, A - reach), len = B + reach - from;
+    const x = await T.decodeMono(ff, cur, 22050, from, len);
+    const first = g.times && g.times.length ? g.times[0] % beat : 0;
+    const res = T.findLoops(x, 22050, from, +A, +B, { bpm: g.bpm, first }, { bars, top: 3 });
+    if (!res.length) throw new Error('No good join found here. Try marks a bit further apart.');
+    return res;
+  });
   handle('edit-sounds', () => Object.entries(T.SOUNDS).map(([key, s]) => ({ key, name: s.name })));
   handle('edit-source', async (src) => { // a layer's length, little waveform and web address (for the live player)
     const { file, name } = await sourceFile(src);
@@ -705,6 +730,22 @@ function registerIpc() {
     const dest = path.join(stretchDir(), name);
     if (!fs.existsSync(dest)) await ff.run(['-y', '-i', file, '-map', '0:a:0', '-af', `aresample=44100,rubberband=tempo=${tempo.toFixed(5)}:pitchq=quality:channels=together`, '-ac', '2', '-c:a', 'flac', dest]);
     return { tempo, url: `${baseUrl}/editsrc/stretch/${name}`, songBpm: song.bpm, layerBpm: layer.bpm };
+  });
+  // Sound for the live player: a copy of the song (src = null) or a track at another speed / pitch.
+  // tempo = Match beat x speed. Made once per setting (kept in the stretch folder until Tonix restarts).
+  handle('edit-variant', async (sid, src, opts = {}) => {
+    const file = src ? (await sourceFile(src)).file : editor.current(editor.get(sid));
+    const tempo = Math.min(4, Math.max(0.25, +opts.tempo || 1)), pitch = Math.min(4, Math.max(0.25, +opts.pitch || 1)), natural = opts.natural !== false;
+    if (Math.abs(tempo - 1) < 1e-4 && Math.abs(pitch - 1) < 1e-4) return { url: null };
+    const st = fs.statSync(file);
+    const name = `${crypto.createHash('sha1').update(`${file}|${st.size}|${st.mtimeMs}|${tempo}|${pitch}|${natural}`).digest('hex').slice(0, 20)}.flac`;
+    const dest = path.join(stretchDir(), name);
+    if (!fs.existsSync(dest)) {
+      const tmp = `${dest}.part.flac`;
+      await ff.run(['-y', '-i', file, '-map', '0:a:0', '-af', `aresample=44100,${ff.rubberband({ tempo, pitch, natural })}`, '-ac', '2', '-c:a', 'flac', tmp]);
+      fs.renameSync(tmp, dest);
+    }
+    return { url: `${baseUrl}/editsrc/stretch/${name}` };
   });
   // tempo + beat times of the song being edited (bar | beat clock, snapping)
   handle('edit-bpm', async (sid) => { const b = await bpmOf(editor.current(editor.get(sid))); return { bpm: b.bpm, times: b.times }; });

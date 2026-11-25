@@ -23,7 +23,7 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   await w.mouse.move(box.x + box.width * 0.25, box.y + box.height / 2); await w.mouse.down(); await w.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2, { steps: 6 }); await w.mouse.up(); await wait(200);
   const selText = await w.textContent('#dw-selt');
   ok('drag selects a part', /–/.test(selText), selText);
-  await w.locator('.dw-edit').screenshot({ path: SP + '/concepts/edit-wave.png' });
+  await w.locator('.dw-arr').screenshot({ path: SP + '/concepts/edit-wave.png' });
   await w.screenshot({ path: SP + '/concepts/edit-page.png' });
   await w.keyboard.press('Delete'); await w.waitForFunction((d) => TFEdit.session && TFEdit.session.duration < d - 5, dur0, { timeout: 20000 });
   const dur1 = await ev(() => TFEdit.session.duration);
@@ -32,7 +32,7 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   ok('Ctrl+Z undoes', true);
   await w.keyboard.press('Control+y'); await w.waitForFunction((d) => Math.abs(TFEdit.session.duration - d) < 0.1, dur1);
   ok('Ctrl+Y redoes', true);
-  await w.click('.dw-tools .dw-b:has-text("+")'); await w.click('.dw-tools .dw-b:has-text("+")'); await wait(100);
+  await w.click('button[title^="Zoom in"]'); await w.click('button[title^="Zoom in"]'); await wait(100);
   ok('zoom in', (await w.textContent('#dw-zoom')) === '225%');
   // Save: keep both
   await w.selectOption('.dw-mode', 'both'); await w.click('.dw-b:has-text("Save")');

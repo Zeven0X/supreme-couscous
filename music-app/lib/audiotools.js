@@ -83,6 +83,91 @@ function smartLoop(x, rate, A, B, { search = 0.25, win = 0.04 } = {}) {
   return { a: ia / rate, b: best / rate, score: +bestScore.toFixed(3) };
 }
 
+// ---------- Smart loop v2: the best joins near A and B, on the beat ----------
+// A small FFT (radix 2), for the sound "fingerprint" of short moments.
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const ar = re[i + k], ai = im[i + k], br = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci, bi = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
+        re[i + k] = ar + br; im[i + k] = ai + bi; re[i + k + len / 2] = ar - br; im[i + k + len / 2] = ai - bi;
+        const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+      }
+    }
+  }
+}
+// Every short moment (23 ms) as 24 bands (low .. high sounds, log loudness) + its loudness.
+function soundPrint(x, rate, hop = 512, size = 2048, bands = 24) {
+  const edges = Array.from({ length: bands + 1 }, (_, i) => Math.round((60 * Math.pow(8000 / 60, i / bands) / rate) * size));
+  const win = Float64Array.from({ length: size }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / size));
+  const frames = [], loud = [];
+  const re = new Float64Array(size), im = new Float64Array(size);
+  for (let i = 0; i + size <= x.length; i += hop) {
+    let e = 0;
+    for (let k = 0; k < size; k++) { const v = x[i + k]; re[k] = v * win[k]; im[k] = 0; e += v * v; }
+    fft(re, im);
+    const f = new Float32Array(bands);
+    for (let b = 0; b < bands; b++) { let s = 0; for (let k = edges[b]; k < Math.max(edges[b] + 1, edges[b + 1]); k++) s += re[k] * re[k] + im[k] * im[k]; f[b] = Math.log(1e-6 + s); }
+    frames.push(f); loud.push(Math.sqrt(e / size));
+  }
+  return { frames, loud, fps: rate / hop };
+}
+// How alike two moments of the song sound (-1 .. 1): the band shapes around them, frame by frame.
+function alike(P, fa, fb, w, mean) {
+  let dot = 0, na = 0, nb = 0;
+  for (let k = -w; k < w; k++) {
+    const A = P.frames[fa + k], B = P.frames[fb + k];
+    if (!A || !B) continue;
+    for (let b = 0; b < A.length; b++) { const p = A[b] - mean[b], q = B[b] - mean[b]; dot += p * q; na += p * p; nb += q * q; }
+  }
+  return dot / (Math.sqrt(na * nb) || 1e-9);
+}
+// x: mono sound from `t0` seconds into the song. A, B: your marks (song seconds). grid: { bpm, first } (beats).
+// Returns up to `top` joins { a, b, score (0-100), beats } with A..B at most `bars` bars away from your marks.
+function findLoops(x, rate, t0, A, B, grid = {}, { bars = 4, top = 3 } = {}) {
+  const P = soundPrint(x, rate);
+  const nb = P.frames[0] ? P.frames[0].length : 24;
+  const mean = new Float64Array(nb);
+  P.frames.forEach((f) => f.forEach((v, b) => { mean[b] += v / P.frames.length; }));
+  const beat = grid.bpm > 30 ? 60 / grid.bpm : 0.25; // no beat found: every quarter second
+  const first = grid.bpm > 30 ? (grid.first || 0) : 0;
+  const reach = bars * 4 * beat;
+  const end = t0 + x.length / rate;
+  const onGrid = (lo, hi) => { const out = []; for (let k = Math.ceil((lo - first) / beat); first + k * beat <= hi; k++) { const t = first + k * beat; if (t >= t0 + 0.6 && t <= end - 0.6) out.push(t); } return out; };
+  const As = onGrid(A - reach, A + reach), Bs = onGrid(B - reach, B + reach);
+  const w = Math.max(4, Math.round(Math.min(2 * beat, 1.5) * P.fps)); // compare about 2 beats each side
+  const fr = (t) => Math.round((t - t0) * P.fps);
+  const lw = (f) => { let s = 0, n = 0; for (let k = -w; k < w; k++) if (P.loud[f + k] !== undefined) { s += P.loud[f + k]; n++; } return n ? s / n : 0; };
+  const found = [];
+  for (const a of As) for (const b of Bs) {
+    const L = b - a;
+    if (L < Math.max(beat, 0.5)) continue;
+    const sim = alike(P, fr(a), fr(b), w, mean); // the sound around B is like the sound around A: the jump back is hidden
+    const la = lw(fr(a)), lb = lw(fr(b));
+    const loud = Math.min(la, lb) / (Math.max(la, lb) || 1e-9); // same loudness at both ends
+    const nBeats = Math.round(L / beat);
+    const bar = grid.bpm > 30 ? (nBeats % 4 === 0 ? 0.06 : nBeats % 2 === 0 ? 0.02 : 0) : 0; // whole bars feel natural
+    const near = (Math.abs(a - A) + Math.abs(b - B)) / (2 * reach || 1); // stay close to your marks
+    found.push({ a, b, beats: nBeats, raw: 0.75 * sim + 0.25 * loud + bar - 0.06 * near });
+  }
+  found.sort((p, q) => q.raw - p.raw);
+  const pick = [];
+  for (const c of found) {
+    if (pick.some((p) => Math.abs(p.a - c.a) < beat * 0.99 && Math.abs(p.b - c.b) < beat * 0.99)) continue; // not nearly the same join twice
+    pick.push(c);
+    if (pick.length >= top) break;
+  }
+  // fine-tune each join to the sample: the waveform at B lines up with A (no click)
+  return pick.map((c) => {
+    const r = smartLoop(x, rate, c.a - t0, c.b - t0, { search: Math.min(0.03, beat / 8) });
+    return { a: +(r.a + t0).toFixed(4), b: +(r.b + t0).toFixed(4), beats: c.beats, score: Math.round(100 * clamp(0.5 + 0.5 * c.raw, 0, 1)) };
+  });
+}
+
 // ---------- beats ----------
 // A simple beat finder: how much louder each short moment gets (onsets), the tempo that repeats best,
 // then the beat times on that grid. Good enough to snap cuts and match tempos.
@@ -185,8 +270,23 @@ function panFilter(p) {
 // The whole Edit page as one recipe: the song track (its effects, volume, left/right, mute) + every layer
 // (part, tempo, repeat, its effects, volume, left/right, auto-quiet). Layer start times are in song time;
 // when the song's own effects change its speed (Slowed / Nightcore), the layers move with it.
-function mixGraph(layers, songDur, { songVolume = 100, songPan = 0, songMute = false, songSolo = false, songFx = {} } = {}) {
-  const rate = FXM.params(songFx).rate;
+// Sound (speed / pitch, studio quality) and fades of one track. speed / pitch in %, fades in output seconds.
+function soundFilter({ speed = 100, pitch = 100, natural = true } = {}, extraTempo = 1) {
+  const tempo = (speed / 100) * extraTempo, p = pitch / 100;
+  if (Math.abs(tempo - 1) < 1e-4 && Math.abs(p - 1) < 1e-4) return [];
+  return [`rubberband=tempo=${tempo.toFixed(5)}:pitch=${p.toFixed(5)}:formant=${natural === false ? 'shifted' : 'preserved'}:pitchq=quality:channels=together`];
+}
+function fadeFilters({ fadeIn = 0, fadeOut = 0, fadeShape = 'lin' } = {}, len) {
+  const curve = FXM.FADE_SHAPES[fadeShape] || 'tri';
+  const fi = clamp(+fadeIn || 0, 0, len), fo = clamp(+fadeOut || 0, 0, Math.max(0, len - fi));
+  const out = [];
+  if (fi > 0.001) out.push(`afade=t=in:st=0:d=${f4(fi)}:curve=${curve}`);
+  if (fo > 0.001) out.push(`afade=t=out:st=${f4(len - fo)}:d=${f4(fo)}:curve=${curve}`);
+  return out;
+}
+function mixGraph(layers, songDur, { songVolume = 100, songPan = 0, songMute = false, songSolo = false, songFx = {}, songSound = {}, songFade = {} } = {}) {
+  const songSpeed = (songSound.speed ?? 100) / 100;
+  const rate = FXM.params(songFx).rate * songSpeed; // song seconds per real second
   const outDur = songDur / rate;
   const solo = songSolo || layers.some((L) => L.solo && !L.mute); // any solo: only solo tracks are heard
   const live = layers.map((L, i) => ({ ...L, input: i + 1 })).filter((L) => !L.mute && (!solo || L.solo));
@@ -194,13 +294,15 @@ function mixGraph(layers, songDur, { songVolume = 100, songPan = 0, songMute = f
   for (const L of live) {
     const chain = [`aresample=${RATE}`, `aformat=sample_rates=${RATE}:channel_layouts=stereo`];
     if (L.to > L.from) chain.push(`atrim=${f4(L.from || 0)}:${f4(L.to)}`, 'asetpts=N/SR/TB');
-    if (L.tempo && Math.abs(L.tempo - 1) > 1e-4) chain.push(`rubberband=tempo=${L.tempo.toFixed(5)}:pitchq=quality:channels=together`);
-    const len = ((L.to || 0) - (L.from || 0)) / (L.tempo || 1);
+    const tempo = (L.tempo || 1) * ((L.speed ?? 100) / 100); // Match beat x the track's own speed
+    chain.push(...soundFilter(L, L.tempo || 1));
+    const len = ((L.to || 0) - (L.from || 0)) / tempo;
     const start = (L.offset || 0) / rate;
     const reps = L.repeat === 0 && len > 0 ? Math.ceil(Math.max(0, outDur - start) / len) : (L.repeat || 1);
     if (reps > 1 && len > 0) chain.push(`aloop=loop=${Math.min(999, reps - 1)}:size=${Math.round(len * RATE)}:start=0`);
     if (L.repeat === 0) chain.push(`atrim=0:${f4(Math.max(0.01, outDur - start))}`);
     chain.push(...effectFilters(L.fx, { noRate: true }));
+    chain.push(...fadeFilters(L, Math.min(L.repeat === 0 ? outDur - start : len * reps, Math.max(0.01, outDur - start)))); // fades at the track's start and end
     chain.push(`volume=${((L.volume ?? 100) / 100).toFixed(4)}`, panFilter(L.pan));
     const ms = Math.round(start * 1000);
     if (ms > 0) chain.push(`adelay=${ms}|${ms}`);
@@ -209,7 +311,7 @@ function mixGraph(layers, songDur, { songVolume = 100, songPan = 0, songMute = f
     outs.push(`[${tag}]`);
   }
   const vol = songMute || (solo && !songSolo) ? 0 : songVolume;
-  const song = [`aresample=${RATE}`, `aformat=sample_rates=${RATE}:channel_layouts=stereo`, ...effectFilters(songFx), `volume=${(vol / 100).toFixed(4)}`];
+  const song = [`aresample=${RATE}`, `aformat=sample_rates=${RATE}:channel_layouts=stereo`, ...soundFilter(songSound), ...effectFilters(songFx), ...fadeFilters(songFade, outDur), `volume=${(vol / 100).toFixed(4)}`];
   if (+songPan) song.push(panFilter(songPan));
   g.unshift(`[0:a]${song.join(',')}[song]`);
   let songTag = '[song]';
@@ -274,7 +376,7 @@ async function makeSound(ff, key, dest) {
 }
 
 module.exports = {
-  RATE, TRIM_LEVELS, parseSilence, silences, trimPoints, splitPoints, loudness, sameLoudness, decodeMono,
+  soundFilter, fadeFilters, findLoops, soundPrint, RATE, TRIM_LEVELS, parseSilence, silences, trimPoints, splitPoints, loudness, sameLoudness, decodeMono,
   smartLoop, zeroCross, beats, snapToBeat, tempoMatch, EFFECTS, effectChain, loopLength, loopGraph, panFilter,
   mixGraph, effectFilters, BLENDS, connectGraph, SOUNDS, makeSound,
 };

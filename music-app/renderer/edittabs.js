@@ -22,7 +22,10 @@ window.TFEditTabs = (() => {
     i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { go(); i.blur(); } });
     return i;
   };
-  const btn = (label, onclick, { cls = 'tb', title = '', disabled = false } = {}) => h('button', { class: cls, title, disabled, onclick }, label);
+  // a leading symbol becomes a drawn icon (▶ play, ✓ check, …)
+  const ICON_OF = { '▶': 'play', '✓': 'check', '🔍': 'search', '🔊': 'loudness', '💾': 'save', '✨': 'spark' };
+  const label = (text) => { const m = /^(▶|✓|🔍|🔊|💾|✨)\s*/u.exec(text); return m && window.TFIcon ? [window.TFIcon(ICON_OF[m[1]]), text.slice(m[0].length)] : [text]; };
+  const btn = (text, onclick, { cls = 'tb', title = '', disabled = false } = {}) => h('button', { class: cls, title, disabled, onclick }, ...label(text));
   const row = (...kids) => h('div', { class: 'ed-row' }, ...kids);
   const note = (text, cls = '') => h('div', { class: `ed-note ${cls}` }, text);
   const timeText = (t) => A().fmt(t);
@@ -50,7 +53,7 @@ window.TFEditTabs = (() => {
         seg([['veryquiet', 'Very quiet', 'Only near-total silence'], ['quiet', 'Quiet', 'Silence and soft hiss'], ['bitquiet', 'A bit quiet', 'Also quiet intros / endings']], P.level, (v) => { P.level = v; trimFind(); })),
       row(note(text, has ? 'ok' : '')),
       row(btn('▶ Listen to the result', () => A().preview({ type: 'trim', head: r.head, tail: r.tail }, { from: 0, label: 'Trimmed' }), { disabled: !has }),
-        btn('✓ Confirm: remove them', () => A().change(() => tf.editDo(sid(), { type: 'trim', head: r.head, tail: r.tail }), 'Trimming…'), { cls: 'tb pri', disabled: !has })));
+        btn('✓ Confirm: remove them', () => A().change(() => tf.editDo(sid(), { type: 'trim', head: r.head, tail: r.tail }), 'Trimming…', false, { keep: [r.head, r.tail] }), { cls: 'tb pri', disabled: !has })));
   }
 
   // ================= Split =================
@@ -115,22 +118,13 @@ window.TFEditTabs = (() => {
     const P = T.loop, sel = A().sel;
     if (!sel) {
       return h('div', {}, row(h('b', {}, 'Loop'), note('Repeat a part of the song.')),
-        row(note('1. Drag across the song track to select the part to repeat: its start is A, its end is B.', 'big')));
+        row(note('Choose the part to repeat: press A and B on two of your marks (on the left), or drag across the song track.', 'big')));
     }
     const len = (x) => x.b - x.a;
     const newLen = dur() + len(sel) * (P.times - 1);
     return h('div', {},
       row(h('b', {}, 'Loop'), note(`A = ${timeText(sel.a)} · B = ${timeText(sel.b)} · the part is ${len(sel).toFixed(2)} s`)),
-      row(btn('✨ Smart loop', async () => {
-        const sel = A().sel; if (!sel) return;
-        const r = await guard(() => tf.editSmartLoop(sid(), sel.a, sel.b), 'Smart loop: ');
-        if (!r) return;
-        const da = r.a - sel.a, db = r.b - sel.b;
-        A().sel = { a: r.a, b: r.b };
-        const moved = (n, x) => (Math.abs(x) < 0.0005 ? `${n} stays put` : `${n} moved ${x > 0 ? '+' : '−'}${Math.abs(x).toFixed(3)} s`);
-        toast(`${moved('A', da)}, ${moved('B', db)}, so the end joins the start smoothly.`, { type: 'ok', ms: 5000 });
-        A().render();
-      }, { cls: 'tb pri', title: 'Move A and B a tiny bit so the end flows into the start without a bump' }),
+      row(btn('✨ Smart loop', () => A().smartLoop(), { cls: 'tb pri', title: 'Search near A and B (up to 4 bars) for the 3 smoothest joins on the beat; they appear on the left' }),
         h('span', { class: 'ed-l' }, 'Play it'),
         btn('−', () => { P.times = Math.max(2, P.times - 1); A().render(); }),
         num(P.times, (v) => { P.times = v; A().render(); }, { min: 2, max: 100, w: 46 }),

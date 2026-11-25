@@ -38,12 +38,14 @@ window.TFDaw = (() => {
     return buffers.get(url);
   }
   const songTrack = () => tracks.find((t) => t.kind === 'song');
-  const songRate = () => TFFxMath.params((songTrack() || {}).fx).rate;
+  const fxRate = () => TFFxMath.params((songTrack() || {}).fx).rate; // Slowed / Nightcore
+  // song seconds per real second: the speed effects x the song's own Speed (its copy plays `stretch` x faster)
+  const songRate = () => fxRate() * (((songTrack() || {}).playUrl && songTrack().stretch) || 1);
 
   // ---------- one track's sound chain: [sources] -> effects -> volume -> left/right -> meter -> (auto-quiet) -> master
   function buildChain(t) {
     const c = audio();
-    const n = { input: c.createGain(), vol: c.createGain(), meter: c.createAnalyser(), duck: c.createGain(), fx: [] };
+    const n = { input: c.createGain(), fade: c.createGain(), vol: c.createGain(), meter: c.createAnalyser(), duck: c.createGain(), fx: [] };
     // mono sources become stereo first (like the saved file), so 8D / 1D / left-right work on them too
     n.input.channelCount = 2; n.input.channelCountMode = 'explicit'; n.input.channelInterpretation = 'speakers';
     // left / right exactly like the saved file: turn one side down (no folding of the other side in)
@@ -60,7 +62,7 @@ window.TFDaw = (() => {
       if (e.k === 'oned') last = matrix(last, e.mix, n.fx);
       if (e.room) last = taps(last, e.room, n.fx); // reverb taps after the effect, like the saved file (Slowed's room, 8D's small room)
     }
-    last.connect(n.vol);
+    last.connect(n.fade); n.fade.connect(n.vol); // effects -> fades -> volume (like the saved file)
     n.vol.connect(n.split); n.merge.connect(n.meter).connect(n.duck).connect(master);
     t.nodes = n;
     apply(t);
@@ -110,7 +112,7 @@ window.TFDaw = (() => {
   }
   function teardown(t) {
     if (!t.nodes) return;
-    for (const n of [t.nodes.input, ...t.nodes.fx, t.nodes.vol, t.nodes.split, t.nodes.gL, t.nodes.gR, t.nodes.merge, t.nodes.meter, t.nodes.duck]) { try { n.disconnect(); } catch (_) { /* gone */ } if (n.stop) try { n.stop(); } catch (_) { /* not started */ } }
+    for (const n of [t.nodes.input, ...t.nodes.fx, t.nodes.fade, t.nodes.vol, t.nodes.split, t.nodes.gL, t.nodes.gR, t.nodes.merge, t.nodes.meter, t.nodes.duck]) { try { n.disconnect(); } catch (_) { /* gone */ } if (n.stop) try { n.stop(); } catch (_) { /* not started */ } }
     t.nodes = null;
   }
 
@@ -140,9 +142,11 @@ window.TFDaw = (() => {
       if (!buf) continue;
       if (!t.nodes) buildChain(t);
       if (t.kind === 'song') {
-        if (from >= buf.duration) continue;
-        const src = c.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate;
-        src.connect(t.nodes.input); src.start(c0, from);
+        const st = (t.playUrl && t.stretch) || 1; // the Speed copy: song second s is at s / st in it
+        if (from / st >= buf.duration) continue;
+        const src = c.createBufferSource(); src.buffer = buf; src.playbackRate.value = fxRate();
+        src.connect(t.nodes.input); src.start(c0, from / st);
+        fades(t, c0, from / rate, duration() / rate);
         src.onended = () => { if (playing === p && time() >= duration() - 0.05) { stop(); pos = duration(); listeners.end.forEach((f) => f()); } };
         p.sources.push(src);
         continue;
@@ -155,6 +159,8 @@ window.TFDaw = (() => {
       const startReal = (t.offset || 0) / rate;
       const reps = t.repeat === 0 ? Math.ceil(Math.max(0, songDurReal - startReal) / lenReal) : Math.max(1, t.repeat || 1);
       const fromReal = from / rate;
+      const total = Math.min(t.repeat === 0 ? songDurReal - startReal : lenReal * reps, songDurReal - startReal);
+      fades(t, c0 + Math.max(0, startReal - fromReal), Math.max(0, fromReal - startReal), total);
       for (let k = 0; k < Math.min(reps, 999); k++) {
         const segStart = startReal + k * lenReal;
         let segEnd = segStart + lenReal;
@@ -170,6 +176,26 @@ window.TFDaw = (() => {
     }
     playing = p;
     duckLoop();
+  }
+  // Fade in / out on a track's own timeline (real seconds 0..len), playing from `from` at audio time `at`.
+  // The same curves as the saved file (renderer/fxmath.js fadeGain = ffmpeg afade).
+  function fades(t, at, from, len) {
+    const g = t.nodes.fade.gain;
+    g.cancelScheduledValues(0);
+    const fi = Math.min(Math.max(0, +t.fadeIn || 0), len), fo = Math.min(Math.max(0, +t.fadeOut || 0), Math.max(0, len - fi));
+    const f = (x) => TFFxMath.fadeGain(t.fadeShape, x);
+    const curve = (x0, x1) => Float32Array.from({ length: 64 }, (_, i) => Math.max(1e-4, f(x0 + ((x1 - x0) * i) / 63)));
+    const now = fi > 0 && from < fi ? f(from / fi) : fo > 0 && from > len - fo ? f((len - from) / fo) : 1;
+    try {
+      g.setValueAtTime(Math.max(1e-4, now), Math.max(0, at - 0.01));
+      if (fi > 0.001 && from < fi) g.setValueCurveAtTime(curve(from / fi, 1), at, fi - from);
+      const s = len - fo;
+      if (fo > 0.001 && from < len) {
+        const startAt = at + Math.max(0, s - from) + (fi > 0.001 && from < fi ? 0.0005 : 0), x0 = from > s ? (len - from) / fo : 1;
+        const d = len - Math.max(s, from);
+        if (d > 0.005) g.setValueCurveAtTime(curve(x0, 0), startAt, d);
+      }
+    } catch (_) { g.value = 1; } // never let a fade stop the music
   }
   function stop() {
     gen++; loading = null;
@@ -229,7 +255,7 @@ window.TFDaw = (() => {
   return {
     load, play, pause, stop, seek, time, duration, setTracks, apply, fxChanged, meters, forget, playPreview, stopPreview,
     get playing() { return !!playing || !!preview; }, get previewing() { return !!preview; }, get previewDuration() { return preview ? preview.duration : 0; },
-    onEnd: (f) => listeners.end.push(f), songRate,
+    onEnd: (f) => listeners.end.push(f), songRate, fxRate,
     latency: () => (ctx ? (ctx.outputLatency || 0) + (ctx.baseLatency || 0) : 0), // how late the sound reaches the speakers
   };
 })();

@@ -25,7 +25,16 @@
     }
     return p;
   }
-  const api = { ORDER, RATE_FX, params };
+  // Fades: the same curves as ffmpeg's afade (checked: tri = straight, hsin = smooth, qua = slow start).
+  // x = how far into the fade (fade in) or how much is left (fade out), 0..1 -> loudness 0..1.
+  const FADE_SHAPES = { lin: 'tri', smooth: 'hsin', slow: 'qua' };
+  function fadeGain(shape, x) {
+    x = clamp(x, 0, 1);
+    if (shape === 'smooth') return (1 - Math.cos(Math.PI * x)) / 2;
+    if (shape === 'slow') return x * x;
+    return x;
+  }
+  const api = { ORDER, RATE_FX, params, FADE_SHAPES, fadeGain };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TFFxMath = api;
 })(typeof window !== 'undefined' ? window : globalThis);

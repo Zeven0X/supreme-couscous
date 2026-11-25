@@ -142,3 +142,22 @@ test('the whole Edit page as one mix: song effects + volume / pan / mute / solo,
   // the shared numbers make the same filters as before
   assert.ok(T.effectChain({ echo: 40 }).includes('aecho=0.8:0.9:290:0.38'));
 });
+
+test('Smart loop v2: finds beat-perfect joins near the marks (chords repeat every 4 bars)', async () => {
+  // 120 BPM kick + 4 chords, one per bar, repeating every 8 s; then a different part after 32 s
+  const f = path.join(tmp, 'loopsong.wav');
+  const chord = "220*(1+0.25*eq(floor(mod(t,8)/2),1)+0.5*eq(floor(mod(t,8)/2),2)+0.3333*eq(floor(mod(t,8)/2),3))";
+  await ff.run(['-y', '-f', 'lavfi', '-i', `aevalsrc='0.6*sin(2*PI*60*t)*exp(-30*mod(t,0.5))+0.3*sin(2*PI*(${chord})*t)*lt(t,32)+0.3*sin(2*PI*700*t)*gte(t,32)':s=22050:d=40`, f]);
+  const x = await T.decodeMono(ff, f, 22050, 0, 40);
+  const grid = { bpm: 120, first: 0 };
+  const res = T.findLoops(x, 22050, 0, 10.3, 17.6, grid);
+  assert.strictEqual(res.length, 3, JSON.stringify(res));
+  const L = res[0].b - res[0].a;
+  assert.ok(Math.abs(L - 8) < 0.04 || Math.abs(L - 16) < 0.04, `best loop ${L.toFixed(3)} s (should be 8 or 16 = whole chord cycles) ${JSON.stringify(res)}`);
+  assert.ok(Math.abs(res[0].a - 10.3) < 8.1 && Math.abs(res[0].b - 17.6) < 8.1, 'stays within 4 bars of the marks');
+  assert.ok(Math.abs(res[0].a * 2 - Math.round(res[0].a * 2)) < 0.03, `A on a beat: ${res[0].a}`);
+  assert.ok(res[0].score >= 85 && res[0].score >= res[2].score, `scores ${res.map((r) => r.score)}`);
+  // a join into the different part sounds wrong: it scores lower than the best
+  const bad = T.findLoops(x, 22050, 0, 26, 36, grid, { bars: 0 })[0];
+  assert.ok(!bad || bad.score < res[0].score - 10, `bad join ${bad && bad.score} vs best ${res[0].score}`);
+});

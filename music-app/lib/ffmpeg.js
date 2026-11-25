@@ -321,7 +321,7 @@ async function exportCombined({ items, dest, tags, coverPath, bitrate = 320, for
 
 module.exports = {
   AUDIO_EXT, VIDEO_EXT, LIMITS, DEFAULT_FX, FORMATS, formatOf,
-  resolveFfmpeg, isSupported, extOf, normalizeFx, buildFilter, renderPitched,
+  resolveFfmpeg, isSupported, extOf, normalizeFx, buildFilter, renderPitched, rubberband,
   parseFfmetadata, parseInfo, pickTags,
   run, stopAll, imageInput, probe, toMp3, extractCover, imageToJpg, peaks, exportOne, exportCombined, tagArgs, coverOutArgs,
 };
