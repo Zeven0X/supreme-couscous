@@ -2,7 +2,7 @@
 
 ## Quick facts
 - Offline music app for Windows. Built with Electron (a way to make desktop apps with web code) + ffmpeg (the sound engine).
-- Folder: `music-app\`. Name: **Tonix** (renamed from "Tune Forge" 2026-11-23). Version 1.4.1 (Edit page design B, original Smart loop).
+- Folder: `music-app\`. Name: **Tonix** (renamed from "Tune Forge" 2026-11-23). Version 1.5.0 (big bug hunt 2).
 - Updates: Claude installs them on the user's PC. Old installer goes to `Documents\Tonix\Old versions` (not built yet).
 
 ## How to run
@@ -10,7 +10,7 @@
 - Developers: `cd music-app`, `npm install`, `npm start`. Tests: `npm test`.
 
 ## Where we stopped
-- 2026-11-25: **Edit page design B** is built: marks + A/B, Smart loop v2 (3 best joins), Sound + Fades for every track, Mixer, drawn icons, small Library bar. Then (1.4.1): original Smart loop back, cleaner mark flags, Close button. Next: you try 1.4.1.
+- 2026-11-26: **Big bug hunt 2** done: about 75 bugs fixed across the whole app (see Bug fixes page), version 1.5.0. Next: you try 1.5.0 and tell me anything that still feels wrong.
 
 ## Pages
 1. [Map](docs/map.md): songs connected by paths with chances, played by luck.
@@ -19,6 +19,7 @@
 4. [Saving songs](docs/saving.md): the save window, Fill from name, file types.
 5. [Library](docs/library.md): Clear all music, Playlists, smart shuffle, saving a playlist, stars 1–10, information inside saved files, smart playlists (genre + stars).
 6. [Sound editor](docs/sound-editor.md): studio layout design B (marks, Smart loop, Sound + Fades per track, live effects, Mixer, Close), Trim, Split, Loop, Smart connect. All built.
+7. [Bug fixes](docs/bug-fixes.md): every bug found in the big bug hunts, in simple words.
 
 ## Top bar buttons
 | Button | Status |
@@ -29,6 +30,7 @@
 | ⚙ Settings | ✅ Working (9 sections) |
 
 ## Recent changes
+- 2026-11-26: **Big bug hunt 2**: 4 testers checked every part of Tonix; about 75 bugs fixed (the most important: saving over a song's own file deleted it, a second Tonix start wiped the Edit history, Replace could lose your edit, Sound changes lost on quick song changes). Full list on the Bug fixes page.
 - 2026-11-25: after you tried 1.4.0: **Smart loop back to the original** (v2 removed), **mark flags redrawn** (thin line, pin, dark label, A / B badges), new **Close** button on the Edit page (asks first if not saved).
 - 2026-11-25: **Edit page design B** (you chose it from 3 designs): one top bar with drawn icons and labels, **marks** on the song (M key / click the ruler, rename, drag, A and B choose the part), **Smart loop v2** (searches every beat up to 4 bars around A and B, compares the sound, gives the 3 best joins with a score to listen to and use), **Sound** (speed, pitch, natural voice, volume with −25…+25 buttons) and **Fades** (in / out, 3 shapes, drag squares on the track) for every track, a **Mixer** tab, zoom that stays put (Follow switch), and the Library player as a small bar while editing.
 - 2026-11-24: **Edit page v2, studio layout** like Ardour: transport bar with clocks (time, bar | beat, tempo), tool bar (Select, Cut out, Keep only, Move, Snap to beat / bar), selected-track strip (effect chain, fader, meter), one row per track (song, other songs, built-in sounds, your voice) with M / S / volume / left-right, live effect knobs, Loop A–B, Rec voice. Save mixes what you hear. Fixed: auto-quiet voice cut the saved song short; Play-then-Pause race.
