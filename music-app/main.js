@@ -104,6 +104,7 @@ function safeName(name, fallback = 'Untitled') {
 }
 // A free name: "Song.mp3" -> "Song (2).mp3". Folders have no extension ("Vol. 2" stays "Vol. 2 (2)").
 const reservedNames = new Set(); // names just handed out (the file may not be written yet)
+const releaseName = (p) => { if (p) reservedNames.delete(String(p).toLowerCase()); }; // a save failed: the name is free again
 function uniquePath(p, isDir = false) {
   const free = (c) => !fs.existsSync(c) && !reservedNames.has(c.toLowerCase());
   const take = (c) => { reservedNames.add(c.toLowerCase()); setTimeout(() => reservedNames.delete(c.toLowerCase()), 10 * 60 * 1000); return c; };
@@ -237,6 +238,11 @@ async function chooseDir(defaultName) {
 }
 
 function activeMark(t) { return t.mark && (!Number.isFinite(t.markUntil) || lib.playClock < t.markUntil) ? t.mark : ''; }
+// the saved file uses the song's volume, but never louder than the volume limit you hear (Settings)
+const fxForSave = (t) => ({ ...t.fx, volume: Math.min(t.fx.volume, Number.isFinite(+lib.settings.volumeLimit) ? +lib.settings.volumeLimit : t.fx.volume) });
+// a new song made from another one: its information, but not its shuffle mark / play count
+function songTags(t) { const { mark, plays, ...rest } = tagsOf(t); return rest; }
+const missingFile = (t) => !t.mediaPath || !fs.existsSync(t.mediaPath);
 function tagsOf(t) {
   return { title: t.title, artist: t.artist, album: t.album, date: t.date, genre: t.genre, label: t.label, track: t.track,
     stars: t.stars || '', mark: activeMark(t), plays: t.plays || '' };
@@ -245,6 +251,7 @@ function tagsOf(t) {
 async function exportTrack(id, opts = {}) {
   const t = lib.byId(id);
   if (!t) throw new Error('Song not found');
+  if (missingFile(t)) throw new Error(`The file of "${t.title}" is gone (moved or deleted), so it can't be saved. Upload it again.`);
   if (opts.tags) lib.update(id, opts.tags);
   if (opts.coverImage) await setCoverFromImage(t, opts.coverImage);
   const format = ff.formatOf(opts.format || lib.settings.format);
@@ -257,11 +264,13 @@ async function exportTrack(id, opts = {}) {
   if (!dest) return { canceled: true };
   log('info', `Saving "${t.title}" (speed ${t.fx.speed}%, pitch ${t.fx.pitch}%, volume ${t.fx.volume}%, fade in ${t.fx.fadeIn}s, fade out ${t.fx.fadeOut}s)...`);
   const started = Date.now();
-  await ff.exportOne({
-    src: t.mediaPath, dest, fx: t.fx, duration: t.duration, tags: tagsOf(t), coverPath: lib.coverPath(t),
-    format, bitrate,
-    onProgress: (p) => send('export-progress', { p, label: t.title }),
-  });
+  try {
+    await ff.exportOne({
+      src: t.mediaPath, dest, fx: fxForSave(t), duration: t.duration, tags: tagsOf(t), coverPath: lib.coverPath(t),
+      format, bitrate,
+      onProgress: (p) => send('export-progress', { p, label: t.title }),
+    });
+  } catch (e) { releaseName(dest); throw e; }
   send('export-progress', { p: 1, label: t.title });
   lib.setSettings({ format, bitrate, ...(opts.dir ? { exportDir: opts.dir } : {}) }); // saved fine: remembered for next time
   log('ok', `Saved ${dest} in ${((Date.now() - started) / 1000).toFixed(1)} s`);
@@ -269,8 +278,11 @@ async function exportTrack(id, opts = {}) {
 }
 
 async function exportMany(ids, opts) {
-  const tracks = ids.map((id) => lib.byId(id)).filter(Boolean);
-  if (!tracks.length) throw new Error('No songs selected');
+  const all = ids.map((id) => lib.byId(id)).filter(Boolean);
+  if (!all.length) throw new Error('No songs selected');
+  const skipped = all.filter(missingFile).map((t) => t.title); // a moved / deleted file is skipped, the others are saved
+  const tracks = all.filter((t) => !missingFile(t));
+  if (!tracks.length) throw new Error('The files of these songs are gone (moved or deleted). Upload them again.');
   const title = opts.title || 'My Album';
   // The cover: a picture the user picked, or the cover of one of the songs.
   let coverPath = null;
@@ -302,29 +314,31 @@ async function exportMany(ids, opts) {
       for (let i = 0; i < tracks.length; i++) {
         const t = tracks[i];
         const dest = uniquePath(path.join(dir, `${safeName(fileName(t))}.${format}`));
-        await ff.exportOne({
-          src: t.mediaPath, dest, fx: t.fx, duration: t.duration, bitrate, format, tags: tagsOf(t), coverPath: lib.coverPath(t),
-          onProgress: (p) => send('export-progress', { p: (i + p) / tracks.length, label: `${t.title} (${i + 1} of ${tracks.length})` }),
-        });
+        try {
+          await ff.exportOne({
+            src: t.mediaPath, dest, fx: fxForSave(t), duration: t.duration, bitrate, format, tags: tagsOf(t), coverPath: lib.coverPath(t),
+            onProgress: (p) => send('export-progress', { p: (i + p) / tracks.length, label: `${t.title} (${i + 1} of ${tracks.length})` }),
+          });
+        } catch (e) { releaseName(dest); skipped.push(t.title); log('warn', `Save: "${t.title}" skipped: ${e.message}`); }
       }
       send('export-progress', { p: 1, label: 'Saved separately' });
       remember();
-      log('ok', `Saved ${tracks.length} songs to ${dir}`);
-      return { path: dir };
+      log('ok', `Saved ${tracks.length - skipped.length} songs to ${dir}`);
+      return { path: dir, skipped };
     }
     if (opts.mode === 'single') {
       const dest = opts.dir ? uniquePath(path.join(opts.dir, `${baseName}.${format}`)) : await chooseDest(baseName, format);
       if (!dest) return { canceled: true };
       log('info', `Joining ${tracks.length} songs into one ${format.toUpperCase()}...`);
       await ff.exportCombined({
-        items: tracks.map((t) => ({ src: t.mediaPath, fx: t.fx, duration: t.duration, title: t.title })),
+        items: tracks.map((t) => ({ src: t.mediaPath, fx: fxForSave(t), duration: t.duration, title: t.title })),
         dest, tags: { ...albumTags, title, artist: opts.artist }, coverPath, bitrate, format, tmpDir: os.tmpdir(),
         onProgress: (p) => send('export-progress', { p, label: title }),
       });
       send('export-progress', { p: 1, label: title });
       remember();
       log('ok', `Saved ${dest}`);
-      return { path: dest };
+      return { path: dest, skipped };
     }
     const dir = opts.dir ? uniquePath(path.join(opts.dir, baseName), true) : await chooseDir(baseName);
     if (!dir) return { canceled: true };
@@ -334,18 +348,20 @@ async function exportMany(ids, opts) {
     for (let i = 0; i < tracks.length; i++) {
       const t = tracks[i];
       const dest = path.join(dir, `${String(i + 1).padStart(pad, '0')} - ${safeName(t.title)}.${format}`);
-      await ff.exportOne({
-        src: t.mediaPath, dest, fx: t.fx, duration: t.duration, bitrate, format,
-        tags: { ...tagsOf(t), ...Object.fromEntries(Object.entries(albumTags).filter(([, v]) => v)), track: `${i + 1}/${tracks.length}` },
-        coverPath: coverPath || lib.coverPath(t),
-        onProgress: (p) => send('export-progress', { p: (i + p) / tracks.length, label: `${title}: ${t.title}` }),
-      });
+      try {
+        await ff.exportOne({
+          src: t.mediaPath, dest, fx: fxForSave(t), duration: t.duration, bitrate, format,
+          tags: { ...tagsOf(t), ...Object.fromEntries(Object.entries(albumTags).filter(([, v]) => v)), track: `${i + 1}/${tracks.length}` },
+          coverPath: coverPath || lib.coverPath(t),
+          onProgress: (p) => send('export-progress', { p: (i + p) / tracks.length, label: `${title}: ${t.title}` }),
+        });
+      } catch (e) { skipped.push(t.title); log('warn', `Save: "${t.title}" skipped: ${e.message}`); }
     }
     if (coverPath) fs.copyFileSync(coverPath, path.join(dir, 'cover.jpg'));
     send('export-progress', { p: 1, label: title });
     remember();
     log('ok', `Saved album to ${dir}`);
-    return { path: dir };
+    return { path: dir, skipped };
   } finally {
     if (tmpCover) fs.rmSync(tmpCover, { force: true });
   }
@@ -768,7 +784,7 @@ function registerIpc() {
       const id = lib.newId();
       let cover = null;
       if (t.cover) { try { fs.copyFileSync(lib.coverPath(t), path.join(lib.coverDir, `${id}.jpg`)); cover = `${id}.jpg`; } catch (_) { /* no picture */ } }
-      out.push(trackForUi(lib.add({ ...tagsOf(t), id, title, track: `${i + 1}/${parts.length}`, srcPath: dest, mediaPath: dest, converted: false, duration: info.duration, cover, isVideo: false })));
+      out.push(trackForUi(lib.add({ ...songTags(t), id, title, track: `${i + 1}/${parts.length}`, srcPath: dest, mediaPath: dest, converted: false, duration: info.duration, cover, isVideo: false })));
     }
     send('export-progress', { p: 1, label: 'Split' });
     log('ok', `Split "${t.title}" into ${out.length} songs in ${dir}`);
@@ -779,6 +795,8 @@ function registerIpc() {
     const s = editor.get(sid);
     const t = lib.byId(s.trackId);
     if (!t) throw new Error('This song is not in the library any more.');
+    let note = '';
+    if (mode === 'replace' && t.isVideo) { mode = 'both'; note = 'Videos are never replaced: the edited song was saved next to the video.'; } // (found in the bug hunt)
     const ext = path.extname(t.srcPath).slice(1).toLowerCase();
     const format = ff.FORMATS[ext] ? ext : 'mp3'; // videos and other types are saved as MP3
     const cover = ff.FORMATS[format].cover && lib.coverPath(t) && fs.existsSync(lib.coverPath(t)) ? lib.coverPath(t) : null;
@@ -790,7 +808,7 @@ function registerIpc() {
     const copyCover = (to) => { if (!t.cover) return null; const name = `${to}.jpg`; try { fs.copyFileSync(lib.coverPath(t), path.join(lib.coverDir, name)); return name; } catch (_) { return null; } };
     const fresh = (title) => {
       const id = lib.newId();
-      return lib.add({ ...tagsOf(t), id, title, srcPath: r.dest, mediaPath: r.dest, converted: false, duration: info.duration, cover: copyCover(id), fx: { ...t.fx }, stars: t.stars || null, isVideo: false });
+      return lib.add({ ...songTags(t), id, title, srcPath: r.dest, mediaPath: r.dest, converted: false, duration: info.duration, cover: copyCover(id), fx: { ...t.fx }, stars: t.stars || null, isVideo: false });
     };
     let changed = [], added = null;
     if (mode === 'both') added = fresh(`${t.title} New`);
@@ -806,7 +824,7 @@ function registerIpc() {
       changed = [t];
     }
     log('ok', `Edit saved: ${r.dest}${r.old && r.old !== t.srcPath ? ` (original now: ${path.basename(r.old)})` : ''}${mode === 'replace' ? ' (original moved to the Recycle Bin)' : ''}`);
-    return { dest: r.dest, changed: changed.map(trackForUi), added: added ? trackForUi(added) : null };
+    return { dest: r.dest, changed: changed.map(trackForUi), added: added ? trackForUi(added) : null, note };
   }
   // The same edit on many songs: each song is opened, trimmed and / or given effects, saved in one of the
   // 3 ways, and closed. A song that can't be done is skipped with the reason; the others go on.
@@ -916,7 +934,11 @@ function registerIpc() {
   });
   handle('map-asset-url', () => `${baseUrl}/mapasset/`);
   handle('settings', (patch) => ({ ...lib.setSettings(patch), exportDir: exportDir() }));
-  handle('show-item', (p) => { if (fs.existsSync(p) && fs.statSync(p).isDirectory()) shell.openPath(p); else shell.showItemInFolder(p); return true; });
+  handle('show-item', async (p) => {
+    if (!p || !fs.existsSync(p)) { await dialog.showMessageBox(win, { type: 'info', message: 'This file was moved or deleted.', detail: String(p || ''), buttons: ['OK'] }); return false; }
+    if (fs.statSync(p).isDirectory()) shell.openPath(p); else shell.showItemInFolder(p);
+    return true;
+  });
   handle('open-path', (p) => { // folders only (the library folder, the save folder, …): never runs a program
     if (!p || !fs.existsSync(p) || !fs.statSync(p).isDirectory()) throw new Error('That folder is not there any more.');
     return shell.openPath(p);
@@ -957,10 +979,12 @@ async function createWindow() {
   await win.loadURL(`${baseUrl}/app/index.html`);
 }
 
-if (!app.requestSingleInstanceLock()) app.quit(); // Tonix is already open: show that one instead (below)
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.exit(0); // Tonix is already open: show that one instead (below) and touch nothing here (found in the bug hunt)
 app.on('second-instance', () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.focus(); } });
 
 app.whenReady().then(async () => {
+  if (!gotLock) return; // a second start: never set up anything (it would clear the open Edit session's files)
   try {
     Menu.setApplicationMenu(null);
     lib = new Library(path.join(app.getPath('userData'), 'library'));

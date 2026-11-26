@@ -193,7 +193,7 @@ window.TFEdit = (() => {
     for (const x of [...r.changed, ...(r.added ? [r.added] : [])]) upsertTrack(x);
     renderGrid();
     TFPlaylists.render();
-    toast(`Saved: ${r.dest}`, { type: 'ok', action: () => tf.showItem(r.dest), actionLabel: 'Show', ms: 8000 });
+    toast(`Saved: ${r.dest}${r.note ? ` · ${r.note}` : ''}`, { type: 'ok', action: () => tf.showItem(r.dest), actionLabel: 'Show', ms: 8000 });
     const next = r.added ? r.added.id : E.s.trackId; // go on with the saved song
     tf.editClose(E.s.id).catch(() => {});
     E.s = null;
@@ -946,7 +946,7 @@ window.TFEdit = (() => {
     if (S.view !== 'edit' || !E.s || document.querySelector('.modal-back')) return; // a window is open: the keys are for it
     const slider = e.target.matches && e.target.matches('input[type=range], button');
     if (e.target.closest('input, textarea, select') && !(slider && e.code === 'Space')) return; // typing; Space on a slider still plays
-    const k = `${e.ctrlKey ? 'Ctrl+' : ''}${e.shiftKey ? 'Shift+' : ''}${e.code}`;
+    const k = `${e.ctrlKey ? 'Ctrl+' : ''}${e.altKey ? 'Alt+' : ''}${e.shiftKey ? 'Shift+' : ''}${e.code}`;
     const nothing = () => {}; // the Library player's keys do nothing here
     const run = {
       Space: playPause, Delete: cut, 'Ctrl+KeyZ': undo, 'Ctrl+KeyY': redo, 'Ctrl+Shift+KeyZ': redo, Home: () => seek(0), End: () => seek(dur()),
@@ -954,7 +954,10 @@ window.TFEdit = (() => {
       KeyL: () => { if (E.sel) { E.loopOn = !E.loopOn; drawAll(); drawBar(); } }, KeyM: () => addMark(songTime()),
       Escape: () => { if (E.preview) stopPreview(); else { E.sel = null; E.loopOn = false; drawAll(); drawBar(); } },
     }[k];
-    if (run) { e.preventDefault(); e.stopImmediatePropagation(); run(); }
+    if (run) { e.preventDefault(); e.stopImmediatePropagation(); run(); return; }
+    // every other plain key (with or without Shift / Alt) belongs to the Library player: on the Edit page it does nothing
+    // (Ctrl keys like Ctrl+1..4 and Ctrl+F still work, so do F1 and ? for the cheat sheet) (found in the bug hunt)
+    if (!e.ctrlKey && !e.metaKey && !/^F\d+$/.test(e.code) && k !== 'Shift+Slash' && e.code !== 'Tab' && e.code !== 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); }
   }, true);
 
   // leaving the page or playing in the main player: everything here goes quiet, the microphone too

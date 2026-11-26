@@ -22,6 +22,7 @@
 
   // Every unlocked path gets the same share.
   function evenSplit(paths) {
+    if (paths.length && free(paths) <= 0 && paths.some((p) => !p.locked)) paths.forEach((p) => { p.locked = false; }); // a new path never gets 0 % because of locks
     const open = paths.filter((p) => !p.locked);
     share(free(paths), open.map(() => 1)).forEach((c, i) => { open[i].chance = c; });
     return paths;
@@ -29,6 +30,7 @@
 
   // Unlocked paths grow or shrink together (keeping their sizes relative to each other) so all add to 100.
   function fillTo100(paths) {
+    if (paths.length && paths.every((p) => p.locked) && paths.reduce((a, p) => a + p.chance, 0) !== 100) paths.forEach((p) => { p.locked = false; }); // (found in the bug hunt)
     const open = paths.filter((p) => !p.locked);
     share(free(paths), open.map((p) => Math.max(0, p.chance))).forEach((c, i) => { open[i].chance = c; });
     return paths;
@@ -50,7 +52,8 @@
   // Pick a path by luck. rnd is a number from 0 to <1.
   function pick(paths, rnd = Math.random()) {
     const total = paths.reduce((a, p) => a + Math.max(0, p.chance), 0);
-    if (!paths.length || total <= 0) return null;
+    if (!paths.length) return null;
+    if (total <= 0) return paths[Math.min(paths.length - 1, Math.floor(rnd * paths.length))]; // all 0 %: every path the same chance
     let r = rnd * total;
     for (const p of paths) { r -= Math.max(0, p.chance); if (r < 0) return p; }
     return paths[paths.length - 1];

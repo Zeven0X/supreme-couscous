@@ -97,21 +97,20 @@
     return out;
   }
   // Which other action already uses this combo where `id` works too? (null = free)
-  function clash(id, combo, custom = {}) {
+  // every action that already uses this key where it would also work (there can be more than one: found in the bug hunt)
+  function clashes(id, combo, custom = {}) {
     const me = ACTIONS.find((a) => a.id === id);
     const keys = current(custom);
-    for (const a of ACTIONS) {
-      if (a.id === id || a.fixed || !overlap(a.scope, me.scope)) continue;
-      if (keys[a.id].includes(combo)) return a;
-    }
-    return null;
+    return ACTIONS.filter((a) => a.id !== id && !a.fixed && overlap(a.scope, me.scope) && keys[a.id].includes(combo));
   }
+  function clash(id, combo, custom = {}) { return clashes(id, combo, custom)[0] || null; }
   // Keys that should not be taken: they belong to typing or to Windows itself.
   function refuse(combo) {
     if (/^(Shift\+)?(Key[A-Z]|Digit\d)$/.test(combo) && combo.startsWith('Shift')) return 'Shift + a letter types a capital letter. Add Ctrl or Alt.';
     if (['Alt+F4', 'Ctrl+Alt+Delete', 'Alt+Tab', 'Ctrl+Escape'].includes(combo)) return 'Windows uses these keys.';
     if (['Ctrl+KeyC', 'Ctrl+KeyV', 'Ctrl+KeyX'].includes(combo)) return 'These are copy / paste / cut. Pick other keys.';
     if (combo === 'Escape' || combo === 'Tab' || combo === 'Shift+Tab') return 'Esc and Tab must stay free.';
+    if (/^Digit[1-9]$/.test(combo)) return 'The number keys 1–9 choose the next path while a map plays. Add Ctrl or Alt.';
     return null;
   }
   // Give `id` the combo (replacing its first key). mode: 'swap' gives the other action our old key,
@@ -119,13 +118,12 @@
   function assign(id, combo, custom = {}, mode = 'steal') {
     const next = JSON.parse(JSON.stringify(custom));
     const keys = current(custom);
-    const other = clash(id, combo, custom);
     const old = keys[id][0];
-    if (other) {
+    clashes(id, combo, custom).forEach((other, i) => {
       const rest = keys[other.id].filter((k) => k !== combo);
-      if (mode === 'swap' && old && !rest.includes(old)) rest.unshift(old);
+      if (mode === 'swap' && i === 0 && old && !rest.includes(old)) rest.unshift(old);
       next[other.id] = rest;
-    }
+    });
     next[id] = [combo, ...keys[id].slice(1).filter((k) => k !== combo)];
     return next;
   }
@@ -149,7 +147,7 @@
     return null;
   }
 
-  const api = { ACTIONS, GROUPS, fromEvent, isModifier, label, current, clash, refuse, assign, resetOne, match };
+  const api = { ACTIONS, GROUPS, fromEvent, isModifier, label, current, clash, clashes, refuse, assign, resetOne, match };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TFKeys = api;
 })(typeof window !== 'undefined' ? window : globalThis);

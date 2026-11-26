@@ -19,7 +19,7 @@
 
   function parseName(name) {
     let s = clean(name).replace(/^\d{1,3}\s*[.\-–—)]\s+/, ''); // "01 - " / "01. " track numbers
-    const m = s.match(/^(.+?)\s+[-–—~]\s+(.+)$/) || s.match(/^([^-]+?)-([^-]+)$/); // "Artist - Title" (or "Artist-Title")
+    const m = s.match(/^(.+?)\s+[-–—~]\s+(.+)$/) || (/\s/.test(s) ? null : s.match(/^([^-]+?)-([^-]+)$/)); // "Artist - Title" (or "Artist-Title" with no spaces)
     if (!m) return { artist: '', title: s };
     return { artist: m[1].trim(), title: clean(m[2]) };
   }

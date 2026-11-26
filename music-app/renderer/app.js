@@ -300,7 +300,7 @@ function playTrack(id) {
 function nextSong() {
   if (window.TFMap && window.TFMap.playing) { window.TFMap.onEnded(); return; }
   const n = upNext()[0];
-  if (n) loadTrack(n.id, { autoplay: true }); else toast('This is the last song.', { ms: 1500 });
+  if (n) loadTrack(n.id, { autoplay: true }); else if (S.currentId) toast('This is the last song.', { ms: 1500 });
 }
 function prevSong() {
   if (audio.currentTime > 3 || (window.TFMap && window.TFMap.playing)) { seek(0); return; }
@@ -430,7 +430,16 @@ function nudge(f, d) {
   if (!fx) return;
   setFx(f.key, fx[f.key] + d);
 }
-let saveFxTimer = null;
+// a Sound change goes to the library at once (main writes the file a moment later, and on quit), so switching songs or
+// closing Tonix right after a change never loses it (found in the bug hunt)
+const fxSending = new Map(); // song id -> latest fx waiting to be sent (one message per song per frame)
+function saveFx(t) {
+  if (!t) return;
+  const first = !fxSending.has(t.id);
+  fxSending.set(t.id, { ...t.fx });
+  if (!first) return;
+  queueMicrotask(() => { const fx = fxSending.get(t.id); fxSending.delete(t.id); tf.updateTrack(t.id, { fx }).catch((e) => addLog('error', e.message)); });
+}
 function setFx(key, value, { fromSlider = false } = {}) {
   const target = editFx();
   if (!target) return;
@@ -442,10 +451,7 @@ function setFx(key, value, { fromSlider = false } = {}) {
   renderFx(fromSlider ? key : null);
   drawWave();
   if (editTarget()) { editTarget().save(); return; } // a map song: saved with the map, the library song is not touched
-  const t = cur();
-  clearTimeout(saveFxTimer);
-  const id = t.id, fx = { ...t.fx };
-  saveFxTimer = setTimeout(() => tf.updateTrack(id, { fx }).catch((e) => addLog('error', e.message)), 250);
+  saveFx(cur());
 }
 function setNatural(on) {
   const target = editFx();
@@ -454,10 +460,7 @@ function setNatural(on) {
   applyFx();
   renderFx();
   if (editTarget()) { editTarget().save(); return; }
-  const t = cur();
-  clearTimeout(saveFxTimer);
-  const id = t.id, fx = { ...t.fx };
-  saveFxTimer = setTimeout(() => tf.updateTrack(id, { fx }).catch((e) => addLog('error', e.message)), 250);
+  saveFx(cur());
 }
 // Pitch card: is the clean studio copy playing yet?
 function renderStudio() {
@@ -860,7 +863,8 @@ async function sameLoudness(ids, where, apply, note = '') {
   for (const id of Object.keys(r.volumes)) if (r.volumes[id] > limit) { r.volumes[id] = limit; capped++; }
   const undo = await apply(r.volumes);
   const n = Object.keys(r.volumes).length;
-  toast(`${n} songs now sound equally loud${r.silent.length ? ` (${r.silent.length} silent song${r.silent.length === 1 ? '' : 's'} left alone)` : ''}.${capped ? ` ${capped} very quiet song${capped === 1 ? '' : 's'} stopped at your volume limit (${limit}%).` : ''}`, { type: 'ok', action: () => undo && undo(), actionLabel: 'Undo', ms: 15000 });
+  const miss = (r.missing || []).length;
+  toast(`${n} songs now sound equally loud${r.silent.length ? ` (${r.silent.length} silent song${r.silent.length === 1 ? '' : 's'} left alone)` : ''}${miss ? ` (${miss} song${miss === 1 ? '' : 's'} skipped: the file is missing)` : ''}.${capped ? ` ${capped} very quiet song${capped === 1 ? '' : 's'} stopped at your volume limit (${limit}%).` : ''}`, { type: 'ok', action: () => undo && undo(), actionLabel: 'Undo', ms: 15000 });
 }
 // for the Library and playlists: the songs' own Volume
 async function setSongVolumes(volumes) {
@@ -897,7 +901,7 @@ async function forgetTracks(ids) {
   for (const id of ids) {
     S.byId.delete(id);
     S.tabs = S.tabs.filter((x) => x !== id);
-    if (S.currentId === id) { audio.pause(); audio.removeAttribute('src'); audio.load(); S.currentId = null; S.peaks = null; }
+    if (S.currentId === id) { for (const d of decks) d.el.pause(); audio.removeAttribute('src'); audio.load(); S.currentId = null; S.peaks = null; }
   }
   S.tracks = S.tracks.filter((t) => !ids.includes(t.id));
   S.queue = S.queue.filter((id) => !ids.includes(id));
@@ -924,7 +928,11 @@ function modal(build) {
     const box = h('div', { class: 'modal' });
     back.append(box);
     const close = (v) => { back.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); };
-    const onKey = (e) => { if (e.key === 'Escape' && back === $('#modal-root').lastElementChild) { e.stopPropagation(); close(undefined); } }; // only the top window
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || back !== $('#modal-root').lastElementChild) return; // only the top window
+      if (e.target && e.target.matches && e.target.matches('.map-rename')) return; // a rename box handles its own Esc (found in the bug hunt)
+      e.stopPropagation(); close(undefined);
+    };
     document.addEventListener('keydown', onKey, true);
     back.addEventListener('mousedown', (e) => { if (e.target === back) close(undefined); });
     build(box, close);
@@ -1102,7 +1110,8 @@ async function openAlbumModal(idsIn, { playlist = null } = {}) {
     box.classList.add('save-win');
     const first = S.byId.get(ids[0]);
     const inp = (v) => h('input', { value: v || '', spellcheck: 'false' });
-    const f = { title: inp(playlist ? playlist.name : (first.album || 'My Album')), artist: inp(playlist ? '' : first.artist), date: inp(first.date), genre: inp(first.genre), label: inp(first.label) };
+    const shared = (k) => { const v = (first[k] || '').trim(); return ids.every((id) => ((S.byId.get(id) || {})[k] || '').trim() === v) ? v : ''; }; // one value for all songs, or empty (each keeps its own)
+    const f = { title: inp(playlist ? playlist.name : (first.album || 'My Album')), artist: inp(playlist ? '' : first.artist), date: inp(shared('date')), genre: inp(shared('genre')), label: inp(shared('label')) };
     const field = (k, label) => h('label', { class: 'field' }, label, f[k]);
     const art = h('div', { class: 'cover-pick', title: 'Click to choose a picture' });
     const warn = h('div', { class: 'warn-text' });
@@ -1184,6 +1193,7 @@ async function openAlbumModal(idsIn, { playlist = null } = {}) {
       const r = await guard(() => tf.exportMany(ids, opts), 'Save: ');
       if (r && r.path) Object.assign(S.settings, { ...(S.settings.askWhereToSave ? {} : { exportDir: dir }), bitrate: kbps, albumFormat: type.id, albumMode: mode }); // remembered for next time
       await afterSave(r);
+      if (r && r.skipped && r.skipped.length) toast(`${r.skipped.length} song${r.skipped.length === 1 ? ' was' : 's were'} skipped (the file is gone or could not be saved): ${r.skipped.slice(0, 4).join(', ')}${r.skipped.length > 4 ? ', …' : ''}`, { type: 'error', ms: 10000 });
     };
     const row = (label, ...kids) => [h('span', { class: 'sv-l' }, label), h('div', { class: 'sv-r' }, ...kids)];
     box.append(

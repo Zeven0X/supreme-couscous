@@ -91,7 +91,8 @@ function unescapeMeta(v) { return v.replace(/\\(.)/g, '$1'); }
 function parseFfmetadata(text) {
   const tags = {};
   for (const line of text.split(/\r?\n/)) {
-    if (!line || line.startsWith(';') || line.startsWith('[')) continue;
+    if (line.startsWith('[')) break; // [CHAPTER] / [STREAM] parts follow: their titles are not the song's title
+    if (!line || line.startsWith(';')) continue;
     const m = line.match(/^((?:[^=\\]|\\.)+)=(.*)$/);
     if (m) tags[unescapeMeta(m[1]).toLowerCase()] = unescapeMeta(m[2]).trim();
   }
@@ -129,7 +130,14 @@ function pickTags(tags, filePath) {
   };
   // Tonix's own information, written into files Tonix saved (see tagArgs)
   const cm = String(get('comment', 'icmt')).match(/Tonix:\s*(.*)$/); // M4A / WAV: "Tonix: stars=7; shuffle=black; plays=12"
-  if (cm) for (const part of cm[1].split(';')) { const [k, v] = part.split('=').map((x) => x.trim()); if (k && v) tags[`tonix_${k}`] = v; }
+  if (cm) {
+    for (const part of cm[1].split(/(?<!\\);/)) {
+      const i = part.search(/(?<!\\)=/);
+      if (i < 1) continue;
+      const k = part.slice(0, i).trim(), v = part.slice(i + 1).trim().replace(/\\([\\;=])/g, '$1');
+      if (k && v) tags[`tonix_${k}`] = v;
+    }
+  }
   out.label = get('label', 'publisher', 'organization', 'tpub', 'tonix_label', 'copyright');
   const stars = parseInt(get('tonix_stars'), 10);
   if (stars >= 1 && stars <= 10) out.stars = stars;
@@ -246,8 +254,8 @@ function tagArgs(tags = {}, format = 'mp3') {
   const args = [];
   for (const [k, key] of Object.entries(map)) if (tags[k]) args.push('-metadata', `${key}=${tags[k]}`);
   if (FORMATS[format] && FORMATS[format].infoInComment) {
-    const parts = [[format === 'm4a' ? 'label' : '', tags.label], ['stars', tags.stars], ['shuffle', tags.mark], ['plays', tags.plays]] // M4A has no label field
-      .filter(([k, v]) => k && v).map(([k, v]) => `${k}=${String(v).replace(/[;=]/g, ' ')}`);
+    const parts = [[['m4a', 'wav'].includes(format) ? 'label' : '', tags.label], ['stars', tags.stars], ['shuffle', tags.mark], ['plays', tags.plays]] // M4A / WAV have no label field
+      .filter(([k, v]) => k && v).map(([k, v]) => `${k}=${String(v).replace(/[\\;=]/g, (c) => `\\${c}`)}`); // \; \= \\ keep those characters
     if (parts.length) args.push('-metadata', `comment=Tonix: ${parts.join('; ')}`);
   } else for (const [k, key] of Object.entries(own)) if (tags[k]) args.push('-metadata', `${key}=${tags[k]}`);
   return args;

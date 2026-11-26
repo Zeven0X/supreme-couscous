@@ -47,7 +47,8 @@
     if ($('.modal-back')) return; // a window is open: it handles its own keys
     const combo = TFKeys.fromEvent(e);
     const t = e.target;
-    const typing = t.closest && t.closest('input, textarea, select') && !['range', 'checkbox', 'color', 'radio'].includes(t.type);
+    // a slider with the focus keeps its own arrow keys (they move it, not the song) (found in the bug hunt)
+    const typing = t.closest && t.closest('input, textarea, select') && (!['range', 'checkbox', 'color', 'radio'].includes(t.type) || (t.type === 'range' && /^(Arrow|Home$|End$|Page)/.test(e.code)));
     if (combo === 'Escape') {
       if (typing) { t.blur(); return; }
       if (S.view === 'map' && map() && map().escape()) e.preventDefault();

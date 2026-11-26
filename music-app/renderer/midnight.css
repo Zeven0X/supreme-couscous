@@ -945,3 +945,11 @@ input.dw-vfader[type=range] { margin: 0; width: 22px; height: 100%; background: 
 input.dw-vfader[type=range]::-webkit-slider-runnable-track { width: 6px; height: 100%; border-radius: 3px; background: linear-gradient(to top, var(--c) var(--pct, 50%), rgba(255, 255, 255, .1) var(--pct, 50%)); }
 input.dw-vfader[type=range]::-webkit-slider-thumb { width: 22px; height: 11px; margin: 0 0 0 -8px; border-radius: 3px; background: #e6eaf2; box-shadow: 0 1px 5px rgba(0, 0, 0, .6); }
 .dw-ctl input[type=range], .dw-trk input[type=range], .dw-hrow input[type=range], .dw-mpan { margin: 0; }
+/* notices sit in the middle above the player, not over the Sound panel (found in the bug hunt) */
+#toasts { left: 50%; right: auto; transform: translateX(-50%); bottom: 124px; align-items: center; }
+body.on-edit #toasts { bottom: 60px; }
+/* small windows: the whole Sound panel fits (Natural voice was hidden at 1280 x 800) */
+@media (max-height: 860px) { #fx-cards { gap: 5px; } .fx-btns, .fx-btns button { height: 22px; } .fx input[type=range] { height: 14px; margin: 0 0 2px; } .fx-opt { min-height: 20px; } }
+/* map: the hint never hides under the map-name card; the toolbar wraps with Big text (found in the bug hunt) */
+#view-map #map-hint { top: 62px; max-width: calc(100% - 40px); overflow: hidden; text-overflow: ellipsis; }
+#map-toolbar { flex-wrap: wrap; row-gap: 6px; }

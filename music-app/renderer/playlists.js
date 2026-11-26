@@ -58,7 +58,7 @@ window.TFPlaylists = (() => {
     return modal((box, close) => {
       box.style.width = 'min(440px, 94vw)';
       const inp = h('input', { value, placeholder: 'Playlist name', spellcheck: 'false', autofocus: true, maxlength: 120 });
-      const ok = () => close(inp.value.trim() || 'New playlist');
+      const ok = () => close(inp.value.trim() || value || 'New playlist'); // blank: keep the old name
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ok(); } });
       box.append(h('h2', {}, title), h('label', { class: 'field' }, 'Name', inp),
         h('div', { class: 'foot' }, h('span'), h('button', { class: 'btn', onclick: () => close(undefined) }, 'Cancel'), h('button', { class: 'btn primary', onclick: ok }, okLabel)));
@@ -117,7 +117,7 @@ window.TFPlaylists = (() => {
     const item = (p) => {
       const row = h('div', { class: `pl-item${p.id === P.openId ? ' on' : ''}${p.id === S.playlistId ? ' playing' : ''}${p.smart ? ' smart' : ''}`, 'data-id': p.id, onclick: () => { P.openId = p.id; render(); } },
         h('div', { class: 'pl-mini' }, plCover(p)),
-        h('div', { class: 'pl-item-t' }, h('b', {}, p.name), h('span', {}, `${p.trackIds.length} song${p.trackIds.length === 1 ? '' : 's'}`)));
+        h('div', { class: 'pl-item-t', title: p.name }, h('b', {}, p.name), h('span', {}, `${p.trackIds.length} song${p.trackIds.length === 1 ? '' : 's'}`)));
       if (!p.smart) dropTarget(row, p);
       return row;
     };
@@ -146,7 +146,7 @@ window.TFPlaylists = (() => {
       if (r) { replace(r); render(); }
     });
     if (p.smart) return smartDetail(p, list, art);
-    const title = h('h2', { class: 'pl-title', title: 'Click to rename' }, p.name);
+    const title = h('h2', { class: 'pl-title', title: `${p.name}\nClick to rename` }, p.name);
     title.addEventListener('click', async () => { const n = await askName('Rename playlist', p.name, 'Rename'); if (n !== undefined) save(p, { name: n }); });
     const head = h('div', { class: 'pl-head' }, art,
       h('div', { class: 'pl-info' },
@@ -202,7 +202,7 @@ window.TFPlaylists = (() => {
     art.replaceWith(h('div', { class: 'pl-art' }, plCover(p)));
     const head = h('div', { class: 'pl-head' }, h('div', { class: 'pl-art' }, plCover(p)),
       h('div', { class: 'pl-info' },
-        h('div', { class: 'pl-kind' }, 'Made by Tonix'), h('h2', { class: 'pl-title smart' }, p.name),
+        h('div', { class: 'pl-kind' }, 'Made by Tonix'), h('h2', { class: 'pl-title smart', title: p.name }, p.name),
         h('div', { class: 'pl-meta' }, `${list.length} song${list.length === 1 ? '' : 's'} · ${fmtTime(totalTime(p))} · ${p.genre} songs with exactly ${p.stars}⭐`),
         h('div', { class: 'pl-btns' },
           h('button', { class: 'tb pri', onclick: () => play(p), html: `${ICONS.play}<span>Play</span>` }),
@@ -264,7 +264,7 @@ window.TFPlaylists = (() => {
     const bar = $('#pl-dropbar');
     bar.innerHTML = '';
     bar.append(h('span', { class: 'pl-drop-l' }, `Drop ${ids.length === 1 ? 'the song' : `${ids.length} songs`} on a playlist:`));
-    for (const p of P.list) { const b = h('div', { class: 'pl-chip' }, h('div', { class: 'pl-mini' }, plCover(p)), p.name); dropTarget(b, p); bar.append(b); }
+    for (const p of P.list) { const b = h('div', { class: 'pl-chip', title: p.name }, h('div', { class: 'pl-mini' }, plCover(p)), p.name); dropTarget(b, p); bar.append(b); }
     const nb = h('div', { class: 'pl-chip new' }, '+ New playlist');
     nb.addEventListener('dragover', (e) => { e.preventDefault(); nb.classList.add('drop-on'); });
     nb.addEventListener('dragleave', () => nb.classList.remove('drop-on'));

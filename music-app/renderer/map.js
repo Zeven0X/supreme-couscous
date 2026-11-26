@@ -45,6 +45,12 @@
       tf.mapSave(M.map).catch((e) => toast(`Map not saved: ${e.message}`, { type: 'error' }));
     }, 400);
   }
+  // closing Tonix right after a change: the change and where the song is are saved at once (found in the bug hunt)
+  window.addEventListener('beforeunload', () => {
+    if (!M.map) return;
+    if (M.play && M.map.progress && S.currentId) M.map.progress = { ...M.map.progress, time: audio.currentTime || 0 };
+    if (M.saveTimer || M.play) { clearTimeout(M.saveTimer); remember(); tf.mapSave(M.map).catch(() => {}); }
+  });
   function undoRedo(dir) {
     clearTimeout(M.saveTimer);
     remember(); // a change still waiting to be saved counts too
@@ -347,6 +353,7 @@
     const alone = sibs.length < 2;
     box.querySelector('.pp-title').textContent = p.from === p.to ? `${stopName(p.from)} ↻ repeats` : `${stopName(p.from)} → ${stopName(p.to)}`;
     if (document.activeElement !== q('chance')) q('chance').value = p.chance;
+    const nm = box.querySelector('.pp-name'); if (nm && document.activeElement !== nm) nm.value = p.name || ''; // (found in the bug hunt)
     q('slider').value = p.chance;
     q('slider').style.setProperty('--pct', `${p.chance}%`);
     q('slider').style.setProperty('--c', p.color && p.color !== '#e3923a' ? p.color : 'var(--accent)');
@@ -426,8 +433,8 @@
           if (editing === m.id) {
             nameEl = h('input', { class: 'map-rename', value: m.name, maxlength: '60', spellcheck: 'false' });
             const done = async (keep) => { if (editing !== m.id) return; editing = null; const v = nameEl.value.trim(); if (keep && v && v !== m.name) await change(m.id, (x) => { x.name = v; }); draw(); };
-            nameEl.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); });
-            nameEl.addEventListener('blur', () => done(true));
+            nameEl.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') { e.preventDefault(); done(false); } });
+            nameEl.addEventListener('blur', () => { if (nameEl.isConnected) done(true); }); // the window closing never saves a half-typed name
             nameEl.addEventListener('click', (e) => e.stopPropagation());
             setTimeout(() => { nameEl.focus(); nameEl.select(); }, 0);
           } else nameEl = h('div', { class: 'map-n' }, m.name);
@@ -1052,6 +1059,7 @@
     lock: () => {
       const p = M.map.paths.find((x) => x.id === M.selPath);
       if (!p) { toast('Click a path first, then press L to lock it.'); return; }
+      if (!p.locked && pathsFrom(p.from).length < 2) { toast('A song\'s only path is always 100 %: nothing to lock.', { ms: 2200 }); return; }
       remember();
       p.locked = !p.locked;
       render();
