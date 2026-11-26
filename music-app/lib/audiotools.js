@@ -99,15 +99,19 @@ function beats(x, rate) {
   }
   const fps = rate / hop;
   if (env.length < fps * 4) return { bpm: 0, times: [] };
-  let bestLag = 0, bestVal = -Infinity;
+  let bestLag = 0, bestVal = -Infinity, bestRaw = 0;
   for (let bpm = 60; bpm <= 180; bpm += 0.5) {
     const lag = (60 / bpm) * fps;
     let s = 0;
     for (let i = 0; i + lag * 2 < env.length; i++) s += env[i] * (env[Math.round(i + lag)] + 0.5 * env[Math.round(i + lag * 2)]);
     s /= env.length;
+    const raw = s;
     s *= Math.exp(-0.5 * (Math.log2(bpm / 120) / 0.9) ** 2); // half / double tempo look alike: prefer the usual range
-    if (s > bestVal) { bestVal = s; bestLag = lag; }
+    if (s > bestVal) { bestVal = s; bestLag = lag; bestRaw = raw; }
   }
+  // no real beat (a held tone, rain, talking): no made-up tempo (found in the bug hunt)
+  const mean = env.reduce((a, v) => a + v, 0) / env.length;
+  if (mean < 0.02 || bestRaw / (1.5 * mean * mean) < 1.6) return { bpm: 0, times: [] };
   const bpm = Math.round((60 / (bestLag / fps)) * 10) / 10;
   let bestPhase = 0, bestSum = -Infinity;
   for (let ph = 0; ph < bestLag; ph++) {

@@ -897,6 +897,7 @@ async function clearAll() {
 async function forgetTracks(ids) {
   if (await guard(() => tf.removeTracks(ids)) === undefined) return;
   if (ids.includes(S.currentId)) { if (window.TFMap) window.TFMap.stopPlay(); S.playStop = null; S.playFx = null; setEdit(null); }
+  if (window.TFEdit) window.TFEdit.forget(ids); // the song open on the Edit page was removed: it closes there too
   TFPlaylists.onTracksRemoved(ids);
   for (const id of ids) {
     S.byId.delete(id);

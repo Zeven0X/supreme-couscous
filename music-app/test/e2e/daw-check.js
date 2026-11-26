@@ -232,6 +232,38 @@ let pass = 0, fail = 0; const ok = (n, c, x = '') => { if (c) { pass++; console.
   ok('…Cancel keeps the song open', await ev(() => !!TFEdit.session));
   await w.click('#dw-close'); await w.click('.modal .btn.danger'); await wait(400);
   ok('Close: the Edit page is empty, the song is still in the library', await ev(() => !TFEdit.session && !!document.querySelector('.ed-empty') && S.tracks.some((t) => t.title === 'Rainfall New')) && fs.existsSync(path.join(M, 'Rainfall New.mp3')));
+  // ---- found in the big bug hunt (2026-11-26)
+  await ev(() => TFEdit.open(S.tracks.find((t) => t.title === 'Golden Hour').id));
+  await w.waitForFunction(() => TFEdit.session && S.byId.get(TFEdit.session.trackId).title === 'Golden Hour', null, { timeout: 20000 }); await wait(400);
+  await ev(() => TFEdit.api.seek(20));
+  await w.click('.dw-add button:has-text("Built-in sound")'); await w.click('.pl-pick-row:has-text("Rain")'); await w.waitForFunction(() => TFEdit.api.tracks.length === 2, null, { timeout: 30000 });
+  ok('a track added at 0:20', await ev(() => Math.abs(TFEdit.api.tracks[1].offset - 20) < 0.05));
+  await ev(() => { TFEdit.api.sel = { a: 2, b: 12 }; });
+  await w.keyboard.press('Delete'); await w.waitForFunction(() => TFEdit.session.version === 1, null, { timeout: 30000 }); await wait(300);
+  ok('Cut moves the added track with the music (20 → 10 s)', await ev(() => Math.abs(TFEdit.api.tracks[1].offset - 10) < 0.05), String(await ev(() => TFEdit.api.tracks[1].offset)));
+  await w.keyboard.press('Control+z'); await w.waitForFunction(() => TFEdit.session.version === 0, null, { timeout: 30000 }); await wait(300);
+  ok('…and Undo puts it back at 0:20', await ev(() => Math.abs(TFEdit.api.tracks[1].offset - 20) < 0.05));
+  // Loop A–B: the jump back is on time (no gap, never far past B)
+  await w.click('.dw-head:has-text("Rain") .dw-ms.m'); await wait(100);
+  await ev(() => { TFEdit.api.sel = { a: 4, b: 6 }; TFEdit.api.seek(4.5); });
+  await w.keyboard.press('KeyL'); await wait(100);
+  await w.keyboard.press('Space');
+  const seen = await ev(() => new Promise((res) => { const out = []; const t0 = performance.now(); (function f() { out.push(TFDaw.time()); if (performance.now() - t0 < 5500) requestAnimationFrame(f); else res(out); })(); }));
+  await w.keyboard.press('Space');
+  const maxT = Math.max(...seen), jumps = seen.filter((t, i) => i && t < seen[i - 1] - 1).length;
+  ok('Loop A–B jumps back on time (never past B, at least 2 jumps)', maxT < 6.05 && jumps >= 2, `max ${maxT.toFixed(3)}, ${jumps} jumps`);
+  await w.keyboard.press('KeyL');
+  // 1280 x 800: an added track's settings are all there
+  await w.setViewportSize({ width: 1280, height: 800 }); await wait(300);
+  await w.click('.dw-head:has-text("Rain")'); await tab('Sound');
+  ok('at 1280 px the TRACK settings are visible (Repeat, Match beat, Auto-quiet)', await w.isVisible('.dw-trk .dw-chip:has-text("Match beat")') && await w.isVisible('.dw-trk .dw-sel'));
+  const saveBox = await w.locator('.dw-savebtn').boundingBox(), barBox = await w.locator('.dw-transport').boundingBox();
+  ok('…and the Save button fits', saveBox && barBox && saveBox.x + saveBox.width <= barBox.x + barBox.width + 1, JSON.stringify([saveBox, barBox]));
+  await w.setViewportSize({ width: 1440, height: 900 }); await wait(200);
+  // the open song removed from the library: the Edit page closes it
+  await ev(() => forgetTracks([TFEdit.session.trackId]));
+  await wait(400);
+  ok('removing the open song closes it on the Edit page', await ev(() => !TFEdit.session));
   ok('no errors on the page', errs.length === 0, errs.slice(0, 5).join(' | '));
   console.log(`\n${pass} passed, ${fail} failed`);
   await a.close(); process.exit(fail ? 1 : 0);

@@ -42,7 +42,7 @@ class Studio {
   // Stop the unfinished job of a group (a newer request in that group replaces it).
   cancel(group, exceptKey) {
     const g = this.groups.get(group);
-    if (g && g.key !== exceptKey && g.proc) { g.cancelled = true; try { g.proc.kill(); } catch (_) { /* gone */ } }
+    if (g && g.key !== exceptKey && g.proc) { g.cancelled = true; this.jobs.delete(g.key); try { g.proc.kill(); } catch (_) { /* gone */ } } // (found in the bug hunt)
     if (g && g.key !== exceptKey) this.groups.delete(group);
   }
 
@@ -62,7 +62,7 @@ class Studio {
     if (group) this.cancel(group, key);
     if (fs.existsSync(dest)) { if (whole) this.touch(dest); return Promise.resolve(result); }
     if (this.jobs.has(key)) return this.jobs.get(key);
-    const tmp = dest.replace(/\.flac$/, '.tmp.flac');
+    const tmp = dest.replace(/\.flac$/, `.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.flac`);
     const g = group ? { key, proc: null } : null;
     if (g) this.groups.set(group, g);
     const t0 = Date.now();

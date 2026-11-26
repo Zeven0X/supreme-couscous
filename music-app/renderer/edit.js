@@ -85,10 +85,12 @@ window.TFEdit = (() => {
     render();
   }
   // close the song: the Edit page becomes empty (the song stays in your library, the file is not touched)
-  async function closeSong() {
-    if (!E.s || E.busy) return;
+  // a removed song: called by the Library (no question, it is gone)
+  function forget(ids) { if (E.s && ids.includes(E.s.trackId)) { E.busy = false; closeSong(true); } }
+  async function closeSong(force = false) {
+    if (!E.s || (E.busy && !force)) return;
     const t = track();
-    if (unsaved()) {
+    if (!force && unsaved()) {
       const ok = await confirmModal('Close this song?', `"${t ? t.title : 'This song'}" has changes that are not saved. They will be lost.`, 'Close without saving');
       if (!ok) return;
     }
@@ -122,33 +124,35 @@ window.TFEdit = (() => {
   }
 
   // ---------- changes to the song's shape (new working copy) ----------
-  function busy(msg) { E.busy = !!msg; const b = el('ed-busy'); if (b) { b.hidden = !msg; b.textContent = msg || ''; } }
-  async function change(fn, msg, history = false, shift = null) {
+  function busy(msg) { E.busy = !!msg; E.busyMsg = msg || ''; const b = el('ed-busy'); if (b) { b.hidden = !msg; b.textContent = msg || ''; } }
+  async function change(fn, msg, history = false, shift = null, before = null) {
     if (!E.s || E.busy) return null;
     stopAll();
-    const sid = E.s.id, v = E.s.version;
-    E.markHist[v] = snapMarks(); // how the marks are now, for Undo / Redo
+    const sid = E.s.id, v = E.s.version, oldDur = E.s.duration;
+    E.markHist[v] = snapMarks(); // how the marks are now (and where the tracks start), for Undo / Redo
     busy(msg);
     const st = await guard(fn, 'Edit: ');
     busy(null);
     if (!st || !E.s || E.s.id !== sid) return null; // another song was opened meanwhile
     if (!history) for (const k of Object.keys(E.bakes)) if (+k >= v) delete E.bakes[k]; // a new change: older Redo steps are gone
     if (history && E.markHist[st.version]) restoreMarks(E.markHist[st.version]);
-    else if (shift) moveMarks(shift);
+    else if (shift) moveMarks({ ...shift, diff: st.duration - oldDur });
+    if (shift && shift.clearSel) { E.sel = null; E.loopOn = false; E.markA = E.markB = null; }
+    if (before) before();
     show(st);
     return st;
   }
   const copyTracks = (list) => list.map((t) => ({ ...t, fx: { ...t.fx }, nodes: null, making: false, want: null }));
-  const snapMarks = () => ({ marks: E.marks.map((m) => ({ ...m })), a: E.markA, b: E.markB, sel: E.sel ? { ...E.sel } : null });
-  function restoreMarks(h) { E.marks = h.marks.map((m) => ({ ...m })); E.markA = h.a; E.markB = h.b; E.sel = h.sel ? { ...h.sel } : null; }
+  const snapMarks = () => ({ marks: E.marks.map((m) => ({ ...m })), a: E.markA, b: E.markB, sel: E.sel ? { ...E.sel } : null, offs: Object.fromEntries(layers().map((L) => [L.id, L.offset])) });
+  function restoreMarks(h) { E.marks = h.marks.map((m) => ({ ...m })); E.markA = h.a; E.markB = h.b; E.sel = h.sel ? { ...h.sel } : null; for (const L of layers()) if (h.offs && h.offs[L.id] !== undefined) L.offset = h.offs[L.id]; }
   function cleanTracks() {
     const s = song();
     clearTimeout(variantTimers[s.id]); delete variantTimers[s.id];
     if (s.playUrl) TFDaw.forget(s.playUrl);
     Object.assign(s, { fx: {}, volume: 100, pan: 0, mute: false, solo: false, ...SOUND0, playUrl: null, stretch: 1, want: null, making: false }); E.tracks = [s]; E.selTrack = 'song'; TFDaw.setTracks(E.tracks); TFDaw.fxChanged(s); }
   const needSel = () => { if (!E.sel) { toast('Select a part first: drag across the song.'); return false; } return true; };
-  const cut = () => { if (!needSel()) return; const { a, b } = E.sel; E.sel = null; E.loopOn = false; return change(() => tf.editApply(E.s.id, { type: 'cut', a, b }), 'Cutting…', false, { cut: [a, b] }); };
-  const keep = () => { if (!needSel()) return; const { a, b } = E.sel; E.sel = null; E.loopOn = false; return change(() => tf.editApply(E.s.id, { type: 'keep', a, b }), 'Keeping the selected part…', false, { keep: [a, b] }); };
+  const cut = () => { if (E.busy || !needSel()) return; const { a, b } = E.sel; return change(() => tf.editApply(E.s.id, { type: 'cut', a, b }), 'Cutting…', false, { cut: [a, b], clearSel: true }); };
+  const keep = () => { if (E.busy || !needSel()) return; const { a, b } = E.sel; return change(() => tf.editApply(E.s.id, { type: 'keep', a, b }), 'Keeping the selected part…', false, { keep: [a, b], clearSel: true }); };
   const undo = () => E.s && E.s.canUndo && change(() => tf.editUndo(E.s.id), 'Undo…', true);
   const redo = () => E.s && E.s.canRedo && change(() => tf.editRedo(E.s.id), 'Redo…', true);
 
@@ -171,8 +175,8 @@ window.TFEdit = (() => {
     if (!mixPending()) { toast('Nothing to apply: no effects, volume change or layers.'); return null; }
     const v = E.s.version, snap = copyTracks(E.tracks), s0 = song();
     const rate = TFFxMath.params(fxOf(s0)).rate * Math.min(4, Math.max(0.25, s0.speed / 100)); // the mixed song is this much faster
-    const st = await change(() => tf.editDo(E.s.id, mixOp()), 'Mixing the tracks into the song…', false, Math.abs(rate - 1) > 1e-6 ? { scale: 1 / rate } : null);
-    if (st) { E.bakes[v] = { snap, after: st.version, restored: false }; cleanTracks(); render(); }
+    const st = await change(() => tf.editDo(E.s.id, mixOp()), 'Mixing the tracks into the song…', false, Math.abs(rate - 1) > 1e-6 ? { scale: 1 / rate } : null, cleanTracks); // clean first: no copy of the mixed song at the old speed
+    if (st) { E.bakes[v] = { snap, after: st.version, restored: false }; render(); }
     return st;
   }
   async function save() {
@@ -207,7 +211,7 @@ window.TFEdit = (() => {
     if (!info || !E.s || E.s.id !== sid) return; // another song was opened meanwhile
     const L = {
       id: `L${nextLayer}`, kind: 'layer', src, name: extra.name || info.name, color: COLORS[(nextLayer - 1) % COLORS.length], url: info.url, peaks: info.peaks, duration: info.duration,
-      offset: +songTime().toFixed(2), from: 0, to: +info.duration.toFixed(3), volume: 70, pan: 0, mute: false, solo: false, repeat: 1, matchBeat: false, duck: false, fx: {}, ...SOUND0, ...extra,
+      offset: songTime() >= dur() - 0.5 ? 0 : +songTime().toFixed(2), from: 0, to: +info.duration.toFixed(3), volume: 70, pan: 0, mute: false, solo: false, repeat: 1, matchBeat: false, duck: false, fx: {}, ...SOUND0, ...extra,
     };
     nextLayer++;
     E.tracks.push(L);
@@ -264,7 +268,7 @@ window.TFEdit = (() => {
     t = +Math.max(0, Math.min(dur(), snap(t))).toFixed(3);
     const near = E.marks.find((m) => Math.abs(m.t - t) < 0.05);
     if (near) return near;
-    const m = { id: nextMark, t, name: name || `Mark ${E.marks.length + 1}`, color: MARK_COLORS[(nextMark - 1) % MARK_COLORS.length] };
+    const m = { id: nextMark, t, name: name || `Mark ${nextMark}`, color: MARK_COLORS[(nextMark - 1) % MARK_COLORS.length] };
     nextMark++;
     E.marks.push(m);
     E.marks.sort((x, y) => x.t - y.t);
@@ -280,22 +284,28 @@ window.TFEdit = (() => {
   function syncAB(tell) {
     const a = markById(E.markA), b = markById(E.markB);
     if (a && b) {
-      if (a.t < b.t - 0.05) { E.sel = { a: a.t, b: b.t }; } else if (tell) toast('A must be before B: choose an earlier mark for A.');
+      if (a.t < b.t - 0.05) { E.sel = { a: a.t, b: b.t }; } else { E.sel = null; if (tell) toast('A must be before B: choose an earlier mark for A.'); }
     }
     renderBrowser(); TFEditTabs.refresh(E.panel); drawAll(); drawBar();
   }
   // after a cut / keep: marks move with the music (marks in a removed part go away)
-  function moveMarks({ cut, keep, loop, connect, scale }) {
+  function moveMarks({ cut, keep, loop, connect, scale, diff = 0 }) {
     const out = [];
     const sh = (t) => {
-      if (cut) return t < cut[0] ? t : t > cut[1] ? t - (cut[1] - cut[0]) : null;
+      if (cut) return t <= cut[0] ? t : t >= cut[1] ? t - (cut[1] - cut[0]) : null; // marks right at A / B stay (found in the bug hunt)
       if (keep) return t >= keep[0] && t <= keep[1] ? t - keep[0] : null;
-      if (loop) return t > loop[1] ? t + (loop[1] - loop[0]) * (loop[2] - 1) : t; // after B: later by the repeats
-      if (connect) return t <= connect[0] ? t : connect[2] === 'end' ? null : t + connect[1]; // after the piece goes in
+      if (loop) return t > loop[1] ? t + diff : t; // after B: later by what the loop added
+      if (connect) return t <= connect[0] ? t : connect[2] === 'end' ? null : t + diff; // after the piece: later by what was really added (blends, beat)
       if (scale) return t * scale; // the song got faster / slower
       return t;
     };
     for (const m of E.marks) { const t = sh(m.t); if (t !== null && t !== undefined) { m.t = +t.toFixed(3); out.push(m); } }
+    // the added tracks move with the music too (a track that started in a removed part starts at the cut)
+    for (const L of layers()) {
+      let t = sh(L.offset);
+      if (t === null || t === undefined) t = cut ? cut[0] : keep ? 0 : L.offset;
+      L.offset = +Math.max(0, t).toFixed(3);
+    }
     if (E.sel && (loop || connect || scale)) { const a = sh(E.sel.a), b = sh(E.sel.b); E.sel = a !== null && b !== null && b > a ? { a, b } : null; }
     E.marks = out;
     if (!markById(E.markA)) E.markA = null;
@@ -305,9 +315,9 @@ window.TFEdit = (() => {
   async function smartLoop() {
     if (!E.s) return;
     if (!E.sel) { toast('Choose the part first: press A and B on two marks (or drag across the song).'); return; }
-    const sid = E.s.id, sel = E.sel;
+    const sid = E.s.id, ver = E.s.version, sel = E.sel;
     const r = await guard(() => tf.editSmartLoop(sid, sel.a, sel.b), 'Smart loop: ');
-    if (!r || !E.s || E.s.id !== sid) return;
+    if (!r || !E.s || E.s.id !== sid || E.s.version !== ver) return;
     const da = r.a - sel.a, db = r.b - sel.b;
     E.sel = { a: r.a, b: r.b };
     const A = markById(E.markA), B = markById(E.markB); // the A and B marks move with it
@@ -378,13 +388,14 @@ window.TFEdit = (() => {
   const seek = (t) => { E.stopAt = null; TFDaw.seek(Math.max(0, Math.min(dur(), t))); drawAll(); drawBar(); };
   TFDaw.onEnd(() => { if (E.preview && !TFDaw.previewing) { TFDaw.forget(E.preview.url); E.preview = null; render(); } drawBar(); });
   (function tick() {
+    TFDaw.setLoop(E.s && E.loopOn && E.sel && !E.preview ? E.sel : null); // seamless Loop A–B
     if (E.s && E.preview && !TFDaw.previewing && !E.busy) { E.preview = null; render(); } // the preview was stopped elsewhere
     if (E.s && TFDaw.playing) {
       const t = TFDaw.time();
       if (!E.preview) {
         if (E.stopAt !== null && t >= E.stopAt) { TFDaw.pause(); TFDaw.seek(E.stopAt); E.stopAt = null; }
         else if (t >= dur() && !(E.loopOn && E.sel)) { TFDaw.pause(); TFDaw.seek(dur()); } // the end (even if the song itself stopped early)
-        else if (E.loopOn && E.sel && t >= E.sel.b) TFDaw.play(E.sel.a).catch(() => {}); // Loop A–B
+        else if (E.loopOn && E.sel && t >= E.sel.b + 0.15) TFDaw.play(E.sel.a).catch(() => {}); // Loop A–B (the engine jumps back on time; this only catches a late start)
         follow(t);
       }
       drawAll(); drawBar(); drawMeters();
@@ -745,21 +756,21 @@ window.TFEdit = (() => {
       ib('undo', undo, { disabled: !E.s.canUndo, title: 'Undo (Ctrl+Z)' }), ib('redo', redo, { disabled: !E.s.canRedo, title: 'Redo (Ctrl+Y)' }),
       ib('zout', () => zoomTo(E.zoom / 1.5), { title: 'Zoom out' }), h('span', { class: 'dw-zoom mono', id: 'dw-zoom' }), ib('zin', () => zoomTo(E.zoom * 1.5), { title: 'Zoom in (Ctrl + mouse wheel too)' }),
       ib('follow', () => { E.follow = !E.follow; render(); }, { cls: E.follow ? 'on2' : '', title: E.follow ? 'Follow is on: the view moves with the playhead (click to stop)' : 'Follow is off: the view stays where you put it (click to follow the playhead)' }),
-      ib('folder', pick, { title: 'Edit another song' }), ib('x', closeSong, { label: 'Close', id: 'dw-close', title: 'Close this song: the Edit page becomes empty (your file is not touched)' }), mode,
-      ib('save', save, { label: 'Save', cls: 'on', title: 'Save the edited song (with everything you hear) next to the original file' }));
+      ib('folder', pick, { title: 'Edit another song' }), ib('x', () => closeSong(), { label: 'Close', id: 'dw-close', title: 'Close this song: the Edit page becomes empty (your file is not touched)' }), mode,
+      ib('save', save, { label: 'Save', cls: 'on dw-savebtn', title: 'Save the edited song (with everything you hear) next to the original file' }));
     const lanesH = E.tracks.reduce((s, x) => s + (x.kind === 'song' ? SONG_H : LAYER_H), 0);
     const arr = h('div', { class: 'dw-arr' },
       h('div', { class: 'dw-corner' }, h('span', { class: 'dw-hint' }, 'Overview')), h('canvas', { id: 'dw-over', class: 'dw-over', title: 'The whole song: click or drag to look at another part' }),
       h('div', { class: 'dw-corner dw-rh3' }, h('span', {}, 'Time'), h('span', {}, 'Bars'), h('span', {}, 'Marks · click to add')), h('canvas', { id: 'dw-ruler', class: 'dw-ruler', title: 'Top: click to jump, drag to select · Bottom row: click to put a mark, drag a mark to move it, double-click to rename' }),
       h('div', { class: 'dw-scroll', id: 'dw-scroll' },
         h('div', { class: 'dw-rows', style: { height: `${lanesH}px` } }, h('div', { class: 'dw-heads', id: 'dw-heads' }), h('canvas', { id: 'dw-lanes', class: `dw-lanes tool-${E.tool}`, style: { height: `${lanesH}px` } }))),
-      h('div', { id: 'ed-busy', class: 'ed-busy', hidden: !E.busy }));
+    );
     const bot = h('div', { class: 'dw-bot' },
       h('div', { class: 'dw-btabs' }, ...TABS.map(([k, l, i]) => ib(i, () => { if (E.preview) stopPreview(); E.panel = k; render(); }, { label: l, cls: E.panel === k ? 'on' : '' }))),
       h('div', { class: 'dw-panel', id: 'dw-panel' }));
     root.append(...[transport, h('div', { class: 'dw-mid' }, h('div', { class: 'dw-browser', id: 'dw-browser' }), arr),
       E.preview ? h('div', { class: 'ed-preview' }, TFIcon('headphones'), h('b', {}, E.preview.label), h('span', {}, 'You are hearing how it would sound. Nothing is changed yet.'), h('span', { class: 'grow' }), h('button', { class: 'tb', onclick: stopPreview }, 'Stop preview')) : null,
-      bot].filter(Boolean));
+      bot, h('div', { id: 'ed-busy', class: 'ed-busy dw-busy', hidden: !E.busy }, E.busyMsg || '')].filter(Boolean)); // covers the whole page while Tonix works
     renderHeads(); renderBrowser(); renderPanel(); status();
     wire();
     requestAnimationFrame(() => { clampScroll(); drawAll(); drawBar(); });
@@ -889,8 +900,9 @@ window.TFEdit = (() => {
   // ---------- bottom panel: Mixer (every track side by side) ----------
   function mixerPanel() {
     const strip = (T) => {
-      const fader = h('input', { type: 'range', class: 'dw-vfader', min: 0, max: 200, value: Math.min(200, T.volume), title: `Volume ${T.volume}%`, style: { '--c': T.color } });
-      const fill = () => fader.style.setProperty('--pct', `${(Math.min(200, T.volume) / 200) * 100}%`);
+      const vmax = Math.min(400, ((S.limits && S.limits.volume) || [0, 400])[1]);
+      const fader = h('input', { type: 'range', class: 'dw-vfader', min: 0, max: vmax, value: Math.min(vmax, T.volume), title: `Volume ${T.volume}%`, style: { '--c': T.color } });
+      const fill = () => fader.style.setProperty('--pct', `${(Math.min(vmax, T.volume) / vmax) * 100}%`);
       fill();
       fader.addEventListener('input', () => { T.volume = +fader.value; fader.title = `Volume ${T.volume}%`; val.textContent = `${T.volume}%`; fill(); TFDaw.apply(T); renderHeads(); });
       const val = h('span', { class: 'mono dw-mv' }, `${T.volume}%`);
@@ -908,8 +920,8 @@ window.TFEdit = (() => {
   const FX_NAMES = { echo: 'Echo', slowed: 'Slowed + reverb', nightcore: 'Nightcore', bass: 'Bass boost', eightd: '8D', oned: '1D' };
   const FX_TIPS = { echo: 'Repeats the sound, like in a big hall', slowed: 'Slower and lower, with a soft room', nightcore: 'Faster and higher', bass: 'Stronger low sounds', eightd: 'Moves around your head (headphones)', oned: 'Every speaker the same; nothing moves' };
   const lastStr = { echo: 40, slowed: 50, nightcore: 50, bass: 50, eightd: 50, oned: 100 };
-  let fxTimer = null;
-  function fxChanged(T, rerender = true) { clearTimeout(fxTimer); fxTimer = setTimeout(() => TFDaw.fxChanged(T), rerender ? 30 : 220); renderHeads(); if (rerender) renderPanel(); drawAll(); }
+  const fxTimers = {};
+  function fxChanged(T, rerender = true) { clearTimeout(fxTimers[T.id]); fxTimers[T.id] = setTimeout(() => { delete fxTimers[T.id]; TFDaw.fxChanged(T); }, rerender ? 30 : 220); renderHeads(); if (rerender) renderPanel(); drawAll(); }
   function fxPanel() {
     const T = selT(), isSong = T.kind === 'song';
     const card = (k) => {
@@ -952,7 +964,7 @@ window.TFEdit = (() => {
       Space: playPause, Delete: cut, 'Ctrl+KeyZ': undo, 'Ctrl+KeyY': redo, 'Ctrl+Shift+KeyZ': redo, Home: () => seek(0), End: () => seek(dur()),
       ArrowLeft: () => seek(TFDaw.time() - 5), ArrowRight: () => seek(TFDaw.time() + 5), 'Ctrl+ArrowLeft': nothing, 'Ctrl+ArrowRight': nothing, ArrowUp: nothing, ArrowDown: nothing,
       KeyL: () => { if (E.sel) { E.loopOn = !E.loopOn; drawAll(); drawBar(); } }, KeyM: () => addMark(songTime()),
-      Escape: () => { if (E.preview) stopPreview(); else { E.sel = null; E.loopOn = false; drawAll(); drawBar(); } },
+      Escape: () => { if (E.preview) stopPreview(); else { E.sel = null; E.loopOn = false; E.markA = E.markB = null; renderBrowser(); drawAll(); drawBar(); } },
     }[k];
     if (run) { e.preventDefault(); e.stopImmediatePropagation(); run(); return; }
     // every other plain key (with or without Shift / Alt) belongs to the Library player: on the Edit page it does nothing
@@ -968,11 +980,11 @@ window.TFEdit = (() => {
     get paused() { return !TFDaw.playing; }, play: () => playPause(), pause: () => { if (E.preview) stopPreview(); else TFDaw.pause(); drawBar(); },
   };
   const api = {
-    get session() { return E.s; }, get sel() { return E.sel; }, set sel(v) { E.sel = v; drawAll(); drawBar(); },
+    get session() { return E.s; }, get isBusy() { return E.busy; }, get sel() { return E.sel; }, set sel(v) { E.sel = v; drawAll(); drawBar(); },
     get previewing() { return !!E.preview; }, player, fmt, track,
     draw: () => { drawAll(); drawBar(); }, render, change, preview, stopPreview, busy, timeAt: (x) => timeAt(x),
     seek, xAt: (t) => xAt(t), view: () => view(), playRange, get tracks() { return E.tracks; }, get panel() { return E.panel; },
     smartLoop, get marks() { return E.marks; }, addMark, setAB, selectTrack,
   };
-  return { open, render, pick, stop, api, closeSong, get session() { return E.s; } };
+  return { open, render, pick, stop, api, closeSong, forget, get session() { return E.s; } };
 })();

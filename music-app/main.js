@@ -66,13 +66,12 @@ function serveFile(req, res, file) {
 function startServer() {
   return new Promise((resolve) => {
     server = http.createServer((req, res) => {
-      const url = new URL(req.url, 'http://x');
       let parts;
-      try { parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent); } catch (_) { res.writeHead(400); res.end(); return; }
+      try { parts = new URL(req.url, 'http://x').pathname.split('/').filter(Boolean).map(decodeURIComponent); } catch (_) { res.writeHead(400); res.end(); return; } // (found in the bug hunt)
       if (parts[0] !== TOKEN) { res.writeHead(403); res.end(); return; }
       if (parts[1] === 'app') {
         const file = path.normalize(path.join(RENDERER, ...parts.slice(2)));
-        if (!file.startsWith(RENDERER)) { res.writeHead(403); res.end(); return; }
+        if (!file.startsWith(RENDERER + path.sep)) { res.writeHead(403); res.end(); return; }
         return serveFile(req, res, file);
       }
       const t = lib.byId(parts[2]);
@@ -357,7 +356,7 @@ async function exportMany(ids, opts) {
         });
       } catch (e) { skipped.push(t.title); log('warn', `Save: "${t.title}" skipped: ${e.message}`); }
     }
-    if (coverPath) fs.copyFileSync(coverPath, path.join(dir, 'cover.jpg'));
+    if (coverPath && fs.existsSync(coverPath)) { try { fs.copyFileSync(coverPath, path.join(dir, 'cover.jpg')); } catch (e) { log('warn', `Album picture not copied: ${e.message}`); } }
     send('export-progress', { p: 1, label: title });
     remember();
     log('ok', `Saved album to ${dir}`);
@@ -476,11 +475,12 @@ async function importMap(file) {
 }
 
 // ---------- IPC ----------
+const PROGRESS_JOBS = /^(export|save|edit-save|edit-split-save|batch-edit|loudness|import|convert|map-export|map-import|playlist-save)/;
 function handle(name, fn) {
   ipcMain.handle(name, async (_e, ...args) => {
     try { return { ok: true, value: await fn(...args) }; } catch (e) {
       log('error', e.message);
-      send('export-progress', { p: 1, label: '' }); // a job that failed must not leave the progress bar stuck
+      if (PROGRESS_JOBS.test(name)) send('export-progress', { p: 1, label: '' }); // a job that failed must not leave its progress bar stuck
       return { ok: false, error: e.message };
     }
   });
@@ -729,12 +729,26 @@ function registerIpc() {
     const st = fs.statSync(file);
     const name = `${crypto.createHash('sha1').update(`${file}|${st.size}|${st.mtimeMs}|${tempo}`).digest('hex').slice(0, 20)}.flac`;
     const dest = path.join(stretchDir(), name);
-    if (!fs.existsSync(dest)) await ff.run(['-y', '-i', file, '-map', '0:a:0', '-af', `aresample=44100,rubberband=tempo=${tempo.toFixed(5)}:pitchq=quality:channels=together`, '-ac', '2', '-c:a', 'flac', dest]);
+    if (!fs.existsSync(dest)) { // written whole under another name first; asked twice at once = made once (found in the bug hunt)
+      if (!variantJobs.has(dest)) {
+        const tmp = `${dest}.${process.pid}-${++variantN}.part.flac`;
+        variantJobs.set(dest, ff.run(['-y', '-i', file, '-map', '0:a:0', '-af', `aresample=44100,rubberband=tempo=${tempo.toFixed(5)}:pitchq=quality:channels=together`, '-ac', '2', '-c:a', 'flac', tmp])
+          .then(() => fs.renameSync(tmp, dest)).catch((e) => { fs.rmSync(tmp, { force: true }); throw e; }).finally(() => variantJobs.delete(dest)));
+      }
+      await variantJobs.get(dest);
+    }
     return { tempo, url: `${baseUrl}/editsrc/stretch/${name}`, songBpm: song.bpm, layerBpm: layer.bpm };
   });
   // Sound for the live player: a copy of the song (src = null) or a track at another speed / pitch.
   // tempo = Match beat x speed. Made once per setting (kept in the stretch folder until Tonix restarts).
   const variantJobs = new Map();
+  function pruneStretch(keep = 40) { // only the newest copies are kept (they are made again when needed)
+    try {
+      const d = stretchDir();
+      const files = fs.readdirSync(d).filter((f) => /^[\w-]+\.flac$/.test(f)).map((f) => ({ f, t: fs.statSync(path.join(d, f)).mtimeMs })).sort((a, b) => b.t - a.t);
+      for (const x of files.slice(keep)) fs.rmSync(path.join(d, x.f), { force: true });
+    } catch (_) { /* tidying can wait */ }
+  }
   let variantN = 0;
   handle('edit-variant', async (sid, src, opts = {}) => {
     const file = src ? (await sourceFile(src)).file : editor.current(editor.get(sid));
@@ -750,6 +764,7 @@ function registerIpc() {
           .then(() => fs.renameSync(tmp, dest)).catch((e) => { fs.rmSync(tmp, { force: true }); throw e; }).finally(() => variantJobs.delete(dest)));
       }
       await variantJobs.get(dest);
+      pruneStretch();
     }
     return { url: `${baseUrl}/editsrc/stretch/${name}`, tempo };
   });
@@ -770,16 +785,20 @@ function registerIpc() {
     const dir = !isInternal(t.srcPath) && fs.existsSync(path.dirname(t.srcPath)) ? path.dirname(t.srcPath) : exportDir(); // never into Tonix's own folder
     const ext = path.extname(t.srcPath).slice(1).toLowerCase();
     const format = ff.FORMATS[ext] ? ext : 'mp3';
-    const out = [];
+    const out = [], failed = [];
+    if (!Array.isArray(parts) || !parts.length) throw new Error('Add at least one cut first.');
+    for (const p of parts) if (!(Number.isFinite(+p.a) && Number.isFinite(+p.b) && +p.b - +p.a >= 0.05)) throw new Error('A part is too short or has a wrong time. Check the cuts.'); // (found in the bug hunt)
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i];
       const title = String(p.name || `${t.title} - Part ${i + 1}`).trim().slice(0, 300) || `${t.title} - Part ${i + 1}`;
       const name = safeName(title); // the file name; the title keeps every character
       const dest = uniquePath(path.join(dir, `${name}.${format}`));
       const { filter } = ff.buildFilter(p.fx || {}, p.b - p.a);
-      const tags = { ...tagsOf(t), title, track: `${i + 1}/${parts.length}` };
-      await ff.run(['-y', '-ss', p.a.toFixed(4), '-to', p.b.toFixed(4), '-i', cur, '-map', '0:a:0', '-af', filter, '-map_metadata', '-1', ...ff.tagArgs(tags, format), ...ff.FORMATS[format].codec(lib.settings.bitrate), dest],
-        { duration: p.b - p.a, onProgress: (x) => send('export-progress', { p: (i + x) / parts.length, label: name }) });
+      const tags = { ...songTags(t), title, track: `${i + 1}/${parts.length}` };
+      try {
+        await ff.writeSafely(dest, [cur], (tmp) => ff.run(['-y', '-ss', (+p.a).toFixed(4), '-to', (+p.b).toFixed(4), '-i', cur, '-map', '0:a:0', '-af', filter, '-map_metadata', '-1', ...ff.tagArgs(tags, format), ...ff.FORMATS[format].codec(lib.settings.bitrate), tmp],
+          { duration: p.b - p.a, onProgress: (x) => send('export-progress', { p: (i + x) / parts.length, label: name }) }));
+      } catch (e) { releaseName(dest); failed.push(title); log('warn', `Split: "${title}" not saved: ${e.message}`); continue; }
       const info = (await ff.probe(dest)).info;
       const id = lib.newId();
       let cover = null;
@@ -788,7 +807,8 @@ function registerIpc() {
     }
     send('export-progress', { p: 1, label: 'Split' });
     log('ok', `Split "${t.title}" into ${out.length} songs in ${dir}`);
-    return { dir, added: out };
+    if (!out.length) throw new Error(`No part could be saved (${failed.join(', ')}).`);
+    return { dir, added: out, failed };
   });
   handle('edit-save', (sid, mode) => saveSession(sid, mode));
   async function saveSession(sid, mode) {
@@ -796,7 +816,8 @@ function registerIpc() {
     const t = lib.byId(s.trackId);
     if (!t) throw new Error('This song is not in the library any more.');
     let note = '';
-    if (mode === 'replace' && t.isVideo) { mode = 'both'; note = 'Videos are never replaced: the edited song was saved next to the video.'; } // (found in the bug hunt)
+    const srcExt = path.extname(t.srcPath).slice(1).toLowerCase();
+    if (mode === 'replace' && (t.isVideo || !ff.FORMATS[srcExt])) { mode = 'both'; note = `Your ${t.isVideo ? 'video' : `.${srcExt} file`} was kept: the edited song was saved next to it as MP3.`; } // (found in the bug hunt)
     const ext = path.extname(t.srcPath).slice(1).toLowerCase();
     const format = ff.FORMATS[ext] ? ext : 'mp3'; // videos and other types are saved as MP3
     const cover = ff.FORMATS[format].cover && lib.coverPath(t) && fs.existsSync(lib.coverPath(t)) ? lib.coverPath(t) : null;
@@ -927,7 +948,7 @@ function registerIpc() {
     if (!/^[a-f0-9]{12}$/.test(mapId)) throw new Error('Bad map id');
     const name = `${mapId}-${crypto.randomBytes(4).toString('hex')}.png`;
     const dest = path.join(maps.assetDir, name);
-    await ff.run(['-y', '-i', imagePath, '-frames:v', '1', '-vf', "scale='min(1024,iw)':-2", dest]);
+    await ff.run(['-y', ...ff.imageInput(imagePath), '-frames:v', '1', '-update', '1', '-vf', "scale='min(1024,iw)':-2", dest]);
     const { stdout, stderr } = await ff.run(['-i', dest, '-f', 'null', '-']).catch((e) => ({ stderr: e.stderr || '' }));
     const m = (stderr || '').match(/, (\d+)x(\d+)/);
     return { file: name, w: m ? +m[1] : 512, h: m ? +m[2] : 512, label: path.basename(imagePath) };

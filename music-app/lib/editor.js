@@ -31,7 +31,7 @@ class Editor {
     fs.mkdirSync(folder, { recursive: true });
     const v0 = path.join(folder, 'v0.flac'); // a clean copy of the sound only, the same for every file type
     try {
-      await this.ff.run(['-y', '-i', src, '-map', '0:a:0', '-vn', '-ar', '44100', '-ac', '2', '-c:a', 'flac', '-compression_level', '0', v0]);
+      await this.ff.run(['-y', '-i', src, '-map', '0:a:0', '-vn', '-map_metadata', '-1', '-ar', '44100', '-ac', '2', '-c:a', 'flac', '-compression_level', '0', v0]);
     } catch (e) { rm(folder); throw e; }
     const s = { id, trackId, src, folder, versions: [{ file: v0, label: 'Original' }], at: 0 };
     this.sessions.set(id, s);
@@ -130,11 +130,15 @@ class Editor {
     const base = internal ? String(title || 'Edited song') : path.basename(orig, ext);
     fs.mkdirSync(dir, { recursive: true });
     // 1. the whole new file is written next to where it will live (same drive), under a temporary name
-    const tmp = path.join(dir, `.${base}.tonix-saving-${Date.now()}.${format}`);
+    const tmp = path.join(dir, `.tonix-saving-${process.pid}-${Date.now()}.${format}`); // short: long song names stay under Windows' limit
+    if (this.ff.partFiles) this.ff.partFiles.add(tmp);
     try {
       await this.ff.run(['-y', '-i', this.current(s), ...extraInputs.flatMap((f) => ['-i', f]), '-map', '0:a:0', ...encodeArgs, tmp]);
-    } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
-    const finish = (to) => { fs.renameSync(tmp, to); return to; };
+    } catch (e) { fs.rmSync(tmp, { force: true }); if (this.ff.partFiles) this.ff.partFiles.delete(tmp); throw e; }
+    if (this.ff.partFiles) this.ff.partFiles.delete(tmp);
+    const rename = this.ff.renameRetry || ((a, b) => fs.renameSync(a, b));
+    const finish = (to) => rename(tmp, to);
+    let keepTmp = false;
     try {
       if (internal) return { dest: finish(uniquePath(path.join(dir, `${base}${mode === 'both' ? ' New' : ''}.${format}`))), old: orig };
       if (mode === 'both') return { dest: finish(uniquePath(path.join(dir, `${base} New.${format}`))), old: orig };
@@ -144,9 +148,13 @@ class Editor {
         try { return { dest: finish(uniquePath(path.join(dir, `${base}.${format}`))), old }; } catch (e) { fs.renameSync(old, orig); throw e; } // put it back
       }
       if (typeof trash !== 'function') throw new Error('Cannot reach the Recycle Bin.');
-      await trash(orig);
-      return { dest: finish(uniquePath(path.join(dir, `${base}.${format}`))), old: null };
-    } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+      await trash(orig); // the original goes to the Recycle Bin with its own name (you can restore it from there)
+      keepTmp = true; // from here on the new file is the only copy of your edit: never delete it (found in the bug hunt)
+      try { return { dest: finish(uniquePath(path.join(dir, `${base}.${format}`))), old: null }; } catch (e) {
+        const keep = uniquePath(path.join(dir, `${base} New.${format}`));
+        try { return { dest: rename(tmp, keep), old: null }; } catch (_) { throw new Error(`Saved, but Windows would not let Tonix rename it. Your edited song is here: ${tmp}`); }
+      }
+    } catch (e) { if (!keepTmp) fs.rmSync(tmp, { force: true }); throw e; }
   }
 }
 

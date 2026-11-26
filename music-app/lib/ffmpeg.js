@@ -100,10 +100,10 @@ function parseFfmetadata(text) {
 }
 function parseInfo(stderr) {
   const info = { duration: 0, audioCodec: null, hasAudio: false, coverStream: null, hasVideo: false, sampleRate: 0 };
-  const d = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+  const d = stderr.match(/^\s*Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/m); // only the real "Duration:" line, not a tag that says it (found in the bug hunt)
   if (d) info.duration = +d[1] * 3600 + +d[2] * 60 + +d[3];
   for (const line of stderr.split(/\r?\n/)) {
-    const m = line.match(/Stream #(\d+):(\d+)[^:]*:\s*(Audio|Video):\s*([a-z0-9_]+)/i);
+    const m = line.match(/^\s*Stream #(\d+):(\d+)[^:]*:\s*(Audio|Video):\s*([a-z0-9_]+)/i);
     if (!m) continue;
     if (m[3] === 'Audio' && !info.hasAudio) {
       info.hasAudio = true;
@@ -150,7 +150,28 @@ function pickTags(tags, filePath) {
 
 // ---- running ffmpeg ----
 const running = new Set(); // every ffmpeg job, so they can all be stopped when Tonix closes
-function stopAll() { for (const p of running) { try { p.kill(); } catch (_) { /* gone */ } } }
+const partFiles = new Set(); // files being written right now (removed if Tonix closes halfway)
+function stopAll() {
+  for (const p of running) { try { p.kill(); } catch (_) { /* gone */ } }
+  for (const f of partFiles) { try { fs.rmSync(f, { force: true }); } catch (_) { /* still locked */ } } // no half-written files left (found in the bug hunt)
+}
+const sameFile = (a, b) => !!a && !!b && path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+// rename, trying again for a moment when Windows (antivirus, search indexer) still holds the file
+function renameRetry(from, to, tries = 12) {
+  for (let i = 0; ; i++) {
+    try { fs.renameSync(from, to); return to; } catch (e) { if (i >= tries || !['EBUSY', 'EPERM', 'EACCES'].includes(e.code)) throw e; pause(150); }
+  }
+}
+let partN = 0;
+// write a file safely: first under a temporary name next to it, renamed only when complete. Never over a file it reads from.
+async function writeSafely(dest, reads, write) {
+  if (reads.some((r) => sameFile(r, dest))) throw new Error("A song can't be saved over its own file. Choose another name or folder.");
+  const p = path.parse(dest);
+  const tmp = path.join(p.dir, `.tonix-part-${process.pid}-${++partN}${p.ext}`);
+  partFiles.add(tmp);
+  try { await write(tmp); renameRetry(tmp, dest); return dest; } catch (e) { fs.rmSync(tmp, { force: true }); throw e; } finally { partFiles.delete(tmp); }
+}
 function run(args, { onProgress, duration, onLine, onSpawn } = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn(resolveFfmpeg(), ['-hide_banner', ...args], { windowsHide: true });
@@ -284,8 +305,7 @@ function exportOne({ src, dest, fx, duration, tags, coverPath, format = 'mp3', b
   args.push('-map', '0:a:0', '-af', filter);
   if (withCover) args.push(...coverOutArgs(1));
   args.push('-map_metadata', '-1', ...tagArgs(tags, format), ...FORMATS[format].codec(bitrate));
-  args.push(dest);
-  return run(args, { duration: outDuration, onProgress }).catch((e) => { fs.rmSync(dest, { force: true }); throw e; }); // no broken file left
+  return writeSafely(dest, [src, coverPath], (tmp) => run([...args, tmp], { duration: outDuration, onProgress })); // no broken file left, never the source
 }
 
 function escapeMeta(v) { return String(v).replace(/([=;#\\\n])/g, '\\$1'); }
@@ -317,10 +337,10 @@ async function exportCombined({ items, dest, tags, coverPath, bitrate = 320, for
   fs.writeFileSync(graphFile, graph);
   args.push('-filter_complex_script', graphFile, '-map', '[out]');
   if (withCover) args.push(...coverOutArgs(metaIdx + 1));
-  args.push('-map_metadata', '-1', '-map_chapters', String(metaIdx), ...tagArgs(tags, format), ...FORMATS[format].codec(bitrate), dest);
+  args.push('-map_metadata', '-1', '-map_chapters', String(metaIdx), ...tagArgs(tags, format), ...FORMATS[format].codec(bitrate));
   try {
-    await run(args, { duration: t, onProgress });
-  } catch (e) { fs.rmSync(dest, { force: true }); throw e; } finally {
+    await writeSafely(dest, [...items.map((it) => it.src), coverPath], (tmp) => run([...args, tmp], { duration: t, onProgress }));
+  } finally {
     fs.rmSync(metaFile, { force: true });
     fs.rmSync(graphFile, { force: true });
   }
@@ -331,5 +351,5 @@ module.exports = {
   AUDIO_EXT, VIDEO_EXT, LIMITS, DEFAULT_FX, FORMATS, formatOf,
   resolveFfmpeg, isSupported, extOf, normalizeFx, buildFilter, renderPitched, rubberband,
   parseFfmetadata, parseInfo, pickTags,
-  run, stopAll, imageInput, probe, toMp3, extractCover, imageToJpg, peaks, exportOne, exportCombined, tagArgs, coverOutArgs,
+  run, stopAll, imageInput, writeSafely, renameRetry, sameFile, partFiles, probe, toMp3, extractCover, imageToJpg, peaks, exportOne, exportCombined, tagArgs, coverOutArgs,
 };

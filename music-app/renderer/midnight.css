@@ -953,3 +953,9 @@ body.on-edit #toasts { bottom: 60px; }
 /* map: the hint never hides under the map-name card; the toolbar wraps with Big text (found in the bug hunt) */
 #view-map #map-hint { top: 62px; max-width: calc(100% - 40px); overflow: hidden; text-overflow: ellipsis; }
 #map-toolbar { flex-wrap: wrap; row-gap: 6px; }
+/* Edit page fixes from the bug hunt */
+#view-edit.dw { position: relative; }
+#view-edit.dw .dw-busy { position: absolute; inset: 0; z-index: 20; font-size: 15px; } /* while Tonix works, nothing can be changed */
+@media (max-width: 1280px) { .dw-trk { display: flex !important; } .dw-secs { flex-wrap: wrap !important; height: auto !important; } .dw-sound, .dw-fades { flex: 1 1 360px !important; } .dw-trk { flex: 1 1 100% !important; } }
+@media (max-width: 1440px) { .dw-transport .dw-bt { display: none; } .dw-transport .dw-savebtn .dw-bt { display: inline; } }
+@media (max-width: 1300px) { .dw-transport { gap: 3px; padding: 5px 6px; } .dw-b { padding: 0 6px; min-width: 30px; } .dw-mode { width: 100px; } .dw-lcd { padding: 2px 6px 3px; } .dw-lcd.big div { font-size: 16px; min-width: 78px; } .dw-lcd div { font-size: 13px; min-width: 46px; } .dw-transport .dw-sep { margin: 0; } .dw-play { width: 38px; } }

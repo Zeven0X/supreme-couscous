@@ -55,8 +55,10 @@ class Library {
     for (const d of [dataDir, this.mediaDir, this.coverDir, this.peakDir]) fs.mkdirSync(d, { recursive: true });
     this.data = { tracks: [], settings: { ...DEFAULT_SETTINGS }, playlists: [], playClock: 0 };
     if (fs.existsSync(this.file)) {
+      const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
       try {
-        const loaded = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+        let loaded;
+        try { loaded = read(this.file); } catch (e) { if (!fs.existsSync(`${this.file}.bak`)) throw e; fs.copyFileSync(this.file, `${this.file}.broken-${Date.now()}`); loaded = read(`${this.file}.bak`); } // the last good copy (found in the bug hunt)
         this.data.tracks = Array.isArray(loaded.tracks) ? loaded.tracks : [];
         this.data.settings = { ...DEFAULT_SETTINGS, ...(loaded.settings || {}) };
         this.data.playlists = Array.isArray(loaded.playlists) ? loaded.playlists : [];
@@ -201,15 +203,17 @@ class Library {
   flush() {
     clearTimeout(this._timer);
     const tmp = `${this.file}.tmp`;
-    for (let attempt = 1; attempt <= 5; attempt++) { // antivirus / indexer can lock the file for a moment on Windows
+    for (let attempt = 1; attempt <= 3; attempt++) { // antivirus / indexer can lock the file for a moment on Windows
       try {
-        fs.writeFileSync(tmp, JSON.stringify(this.data, null, 1));
+        const fd = fs.openSync(tmp, 'w');
+        try { fs.writeSync(fd, JSON.stringify(this.data, null, 1)); fs.fsyncSync(fd); } finally { fs.closeSync(fd); } // really on the disk (power cut)
+        if (fs.existsSync(this.file)) { try { fs.copyFileSync(this.file, `${this.file}.bak`); } catch (_) { /* the last good copy can wait */ } }
         fs.renameSync(tmp, this.file);
         this.saveError = null;
         return true;
       } catch (e) {
         this.saveError = e;
-        const until = Date.now() + 60 * attempt; while (Date.now() < until) { /* short wait before trying again */ }
+        if (attempt < 3) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 40); // a very short wait (no long freeze)
       }
     }
     console.error(`Tonix: could not save the library (${this.saveError.message}); trying again with the next change.`);

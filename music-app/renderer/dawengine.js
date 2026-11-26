@@ -123,20 +123,36 @@ window.TFDaw = (() => {
     return playing.t0 + (audio().currentTime - playing.c0) * playing.rate;
   }
   function duration() { const s = songTrack(); return s ? s.duration : 0; }
-  async function play(from = time()) {
-    stop(true); stopPreview(true);
+  let loopAB = null; // { a, b } song seconds: Loop A–B, jumped back on time
+  function setLoop(l) {
+    const n = l ? { a: l.a, b: l.b } : null;
+    if ((n && loopAB && n.a === loopAB.a && n.b === loopAB.b) || (!n && !loopAB)) return;
+    loopAB = n;
+    if (playing) schedLoop(playing);
+  }
+  function schedLoop(p) {
+    clearTimeout(p.loopTimer);
+    if (!loopAB || p !== playing) return;
+    const at = p.c0 + (loopAB.b - p.t0) / p.rate; // audio time when B is reached
+    if (loopAB.b <= p.t0 || at <= audio().currentTime + 0.05) return;
+    p.loopTimer = setTimeout(() => { if (playing === p && loopAB) play(loopAB.a, { at }).catch(() => {}); }, Math.max(0, (at - audio().currentTime - 0.35) * 1000));
+  }
+  async function play(from = time(), opts = {}) {
+    const chain = opts.at !== undefined; // the next pass of a loop: starts exactly at audio time opts.at, the old one stops there
+    const prev = playing;
+    if (!chain) { stop(true); stopPreview(true); }
     const my = gen;
     loading = from;
     const c = audio();
     if (c.state === 'suspended') await c.resume();
     const all = await Promise.all(tracks.map((t) => load(t.playUrl || t.url).then((b) => [t, b]).catch(() => [t, null])));
-    if (my !== gen) return; // paused / stopped / played again while loading
+    if (my !== gen || (chain && playing !== prev)) return; // paused / stopped / played again while loading
     loading = null;
     const songBuf = (all.find(([t]) => t.kind === 'song') || [])[1];
     if (!songBuf) throw new Error('The song could not be loaded. Try opening it again.');
-    stop(true);
+    if (!chain) stop(true);
     const rate = songRate();
-    const c0 = c.currentTime + 0.06; // a moment to get everything started together
+    const c0 = chain ? opts.at : c.currentTime + 0.06; // a moment to get everything started together
     const p = { c0, t0: from, rate, sources: [] };
     for (const [t, buf] of all) {
       if (!buf) continue;
@@ -146,7 +162,7 @@ window.TFDaw = (() => {
         if (from / st >= buf.duration) continue;
         const src = c.createBufferSource(); src.buffer = buf; src.playbackRate.value = fxRate();
         src.connect(t.nodes.input); src.start(c0, from / st);
-        fades(t, c0, from / rate, duration() / rate);
+        fades(t, c0, from / rate, duration() / rate, chain);
         src.onended = () => { if (playing === p && time() >= duration() - 0.05) { stop(); pos = duration(); listeners.end.forEach((f) => f()); } };
         p.sources.push(src);
         continue;
@@ -160,7 +176,7 @@ window.TFDaw = (() => {
       const reps = t.repeat === 0 ? Math.ceil(Math.max(0, songDurReal - startReal) / lenReal) : Math.max(1, t.repeat || 1);
       const fromReal = from / rate;
       const total = Math.min(t.repeat === 0 ? songDurReal - startReal : lenReal * reps, songDurReal - startReal);
-      fades(t, c0 + Math.max(0, startReal - fromReal), Math.max(0, fromReal - startReal), total);
+      fades(t, c0 + Math.max(0, startReal - fromReal), Math.max(0, fromReal - startReal), total, chain);
       for (let k = 0; k < Math.min(reps, 999); k++) {
         const segStart = startReal + k * lenReal;
         let segEnd = segStart + lenReal;
@@ -174,14 +190,22 @@ window.TFDaw = (() => {
         p.sources.push(src);
       }
     }
+    if (chain && prev) { // hand over at exactly c0: the old pass stops there, the clock switches then
+      for (const s of prev.sources) { try { s.onended = null; s.stop(c0); } catch (_) { /* done */ } }
+      clearTimeout(prev.loopTimer);
+      p.handover = setTimeout(() => { if (playing === prev) { playing = p; schedLoop(p); } }, Math.max(0, (c0 - c.currentTime) * 1000));
+      prev.next = p;
+      return;
+    }
     playing = p;
+    schedLoop(p);
     duckLoop();
   }
   // Fade in / out on a track's own timeline (real seconds 0..len), playing from `from` at audio time `at`.
   // The same curves as the saved file (renderer/fxmath.js fadeGain = ffmpeg afade).
-  function fades(t, at, from, len) {
+  function fades(t, at, from, len, chain = false) {
     const g = t.nodes.fade.gain;
-    g.cancelScheduledValues(0);
+    g.cancelScheduledValues(chain ? Math.max(0, at - 0.011) : 0); // a loop's next pass keeps the current pass's fade until then
     const fi = Math.min(Math.max(0, +t.fadeIn || 0), len), fo = Math.min(Math.max(0, +t.fadeOut || 0), Math.max(0, len - fi));
     const f = (x) => TFFxMath.fadeGain(t.fadeShape, x);
     const curve = (x0, x1) => Float32Array.from({ length: 64 }, (_, i) => Math.max(1e-4, f(x0 + ((x1 - x0) * i) / 63)));
@@ -199,6 +223,7 @@ window.TFDaw = (() => {
   }
   function stop() {
     gen++; loading = null;
+    if (playing) { clearTimeout(playing.loopTimer); if (playing.next) { clearTimeout(playing.next.handover); for (const s of playing.next.sources) { try { s.stop(); } catch (_) { /* not started */ } } } }
     if (playing) { pos = time(); for (const s of playing.sources) { try { s.onended = null; s.stop(); } catch (_) { /* done */ } } }
     playing = null;
   }
@@ -255,7 +280,7 @@ window.TFDaw = (() => {
   return {
     load, play, pause, stop, seek, time, duration, setTracks, apply, fxChanged, meters, forget, playPreview, stopPreview,
     get playing() { return !!playing || !!preview; }, get previewing() { return !!preview; }, get previewDuration() { return preview ? preview.duration : 0; },
-    onEnd: (f) => listeners.end.push(f), songRate, fxRate,
+    onEnd: (f) => listeners.end.push(f), songRate, fxRate, setLoop,
     latency: () => (ctx ? (ctx.outputLatency || 0) + (ctx.baseLatency || 0) : 0), // how late the sound reaches the speakers
   };
 })();

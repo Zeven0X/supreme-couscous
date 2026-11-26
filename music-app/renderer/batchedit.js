@@ -87,10 +87,10 @@ window.TFBatch = (() => {
     renderGrid(); TFPlaylists.render();
     modal((box, done) => {
       box.style.width = 'min(560px, 94vw)';
-      box.append(h('h2', {}, `Done: ${r.done.length} saved${r.skipped.length ? `, ${r.skipped.length} skipped` : ''}`),
+      box.append(...[h('h2', {}, `Done: ${r.done.length} saved${r.skipped.length ? `, ${r.skipped.length} skipped` : ''}`),
         r.done.length ? h('p', { class: 'muted' }, `Saved next to the originals${B.mode === 'both' ? ' as "… New"' : ''}. They are in your library too.`) : null,
         r.skipped.length ? h('div', { class: 'bt-skipped' }, h('div', { class: 'sv-l' }, 'Skipped'), ...r.skipped.map((x) => h('div', {}, h('b', {}, x.title), ` — ${x.why}`))) : null,
-        h('div', { class: 'foot' }, h('span'), r.done.length ? h('button', { class: 'btn', onclick: () => tf.showItem(r.done[0].dest) }, 'Show the files') : null, h('button', { class: 'btn primary', onclick: () => done() }, 'OK')));
+        h('div', { class: 'foot' }, h('span'), r.done.length ? h('button', { class: 'btn', onclick: () => tf.showItem(r.done[0].dest) }, 'Show the files') : null, h('button', { class: 'btn primary', onclick: () => done() }, 'OK'))].filter(Boolean)); // (no "null" text: found in the bug hunt)
     });
   }
   return { open, pickMany };

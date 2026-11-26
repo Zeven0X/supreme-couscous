@@ -92,8 +92,11 @@ window.TFEditTabs = (() => {
         note('Drag the orange lines on the song track to move a cut.')),
       h('div', { class: 'ed-parts' }, ...rows),
       row(btn('🔊 Same loudness', async () => {
+        if (A().isBusy) return;
         const now = parts();
+        A().busy('Measuring how loud each part is…');
         const vols = await guard(() => tf.editLoudness(sid(), now.map((p) => [p.a, p.b])), 'Same loudness: ');
+        A().busy(null);
         if (!vols) return;
         vols.forEach((v, i) => { const key = now[i].a.toFixed(3); P.set[key] = { ...(P.set[key] || {}), volume: v }; });
         toast('Volumes set so every part sounds equally loud.', { type: 'ok' });
@@ -101,6 +104,7 @@ window.TFEditTabs = (() => {
       }, { title: 'Measure how loud each part is and set the volumes so they all sound the same', disabled: list.length < 2 }),
       h('span', { class: 'grow' }),
       btn(`💾 Save all ${list.length} parts as songs`, async () => {
+        if (A().isBusy) return; // a double click saves once (found in the bug hunt)
         const list = parts(); // what is typed now (names, speed, pitch, volume)
         if (list.length < 2) return toast('Add at least one cut first (Find the songs, or Add a cut).');
         A().busy('Saving the parts…');
@@ -110,6 +114,7 @@ window.TFEditTabs = (() => {
         for (const t of r.added) upsertTrack(t);
         renderGrid(); TFPlaylists.render();
         toast(`Saved ${r.added.length} songs next to the original. They are in your library too.`, { type: 'ok', action: () => tf.showItem(r.added[0].srcPath), actionLabel: 'Show', ms: 8000 });
+        if (r.failed && r.failed.length) toast(`Not saved: ${r.failed.join(', ')}`, { type: 'error', ms: 9000 });
       }, { cls: 'tb pri', disabled: list.length < 2 })));
   }
 
@@ -229,7 +234,10 @@ window.TFEditTabs = (() => {
         const others = T.split.cuts.filter((_, j) => j !== i);
         const lo = Math.max(0.2, ...others.filter((c) => c < T.split.cuts[i]).map((c) => c + 0.2));
         const hi = Math.min(dur() - 0.2, ...others.filter((c) => c > T.split.cuts[i]).map((c) => c - 0.2));
+        const oldKey = T.split.cuts[i].toFixed(3);
         T.split.cuts[i] = +Math.min(hi, Math.max(lo, t)).toFixed(3);
+        const newKey = T.split.cuts[i].toFixed(3);
+        if (newKey !== oldKey && T.split.set[oldKey]) { T.split.set[newKey] = T.split.set[oldKey]; delete T.split.set[oldKey]; } // (found in the bug hunt)
       },
       up: () => A().render(),
     };
@@ -241,7 +249,7 @@ window.TFEditTabs = (() => {
   }
   // the little round markers on the ruler (split cuts, the connect point)
   function markers({ mk, tab }) {
-    if (tab === 'split') T.split.cuts.forEach((c, i) => mk(c, String(i + 1), '#ffaa3c'));
+    if (tab === 'split') T.split.cuts.slice().sort((a, b) => a - b).forEach((c, i) => mk(c, String(i + 1), '#ffaa3c'));
     if (tab === 'connect' && T.connect.at !== null) mk(T.connect.at, 'C', '#5cf2a8');
   }
   // the selection changed: the Loop panel shows A and B
